@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find '/c/Users/dinos/Desktop/Code practice/React/Bettys Dashboard/bettys_dahboard' -type f \\\\\\(-name *.sql -o -name *schema* -o -name *migration* \\\\\\))",
+      "Bash(node -e \":*)",
+      "Bash(npx next:*)"
+    ]
+  }
+}
