@@ -15,7 +15,6 @@ const SLUG_TO_PATH = {
   products: "/products",
   payouts: "/platform-payouts",
   reviews: "/reviews",
-  economics: "/economics",
   calendar: "/calendar",
   "my-payroll": "/my-payroll",
   payroll: "/payroll",
@@ -47,7 +46,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     let timeoutId;
 
-    if (loading && pathname !== "/login") {
+    if (loading && pathname !== "/login" && !pathname.startsWith("/tv-display")) {
       timeoutId = setTimeout(() => {
         if (loading) {
           handleSignOut("Session timed out. Please log in again.");
@@ -79,7 +78,7 @@ export const AuthProvider = ({ children }) => {
           setProfile(null);
           setPermissions(null);
           setLoading(false);
-          if (pathname !== "/login") {
+          if (pathname !== "/login" && !pathname.startsWith("/tv-display")) {
             router.push("/login");
           }
         }
@@ -172,7 +171,7 @@ export const AuthProvider = ({ children }) => {
         // AuthProvider handles all post-login navigation — redirect
         // away from the login page once the profile is loaded.
         if (pathname === "/login") {
-          router.push("/");
+          router.push(data.role === "admin" ? "/" : "/calendar");
         }
       } catch (err) {
         console.error('Unexpected error:', err);
@@ -201,7 +200,7 @@ export const AuthProvider = ({ children }) => {
 
     if (ADMIN_ONLY_SLUGS.has(slug) || !permissions.includes(slug)) {
       setToast("You don't have access to this page");
-      router.push("/");
+      router.push("/calendar");
     }
   }, [pathname, profile, permissions, router]);
 

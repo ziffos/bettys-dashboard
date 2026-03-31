@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import Sidebar from "./Sidebar";
 import { Menu, X, Loader2 } from "lucide-react";
@@ -12,6 +12,11 @@ export default function ClientLayout({ children }) {
   const pathname = usePathname();
   const { loading, toast } = useAuth();
 
+  // Close sidebar on route change (mobile)
+  useEffect(() => {
+    setIsSidebarOpen(false);
+  }, [pathname]);
+
   if (loading) {
      return (
         <div className="min-h-screen bg-neutral-950 flex items-center justify-center text-emerald-500">
@@ -20,25 +25,28 @@ export default function ClientLayout({ children }) {
      );
   }
 
-  // If we are on the login page, don't show the sidebar or header
-  if (pathname === "/login") {
+  // If we are on the login or tv-display page, don't show the sidebar or header
+  if (pathname === "/login" || pathname.startsWith("/tv-display")) {
      return <>{children}</>;
   }
 
   return (
-    <div className="flex min-h-screen bg-neutral-950 text-neutral-200 selection:bg-emerald-500 selection:text-white">
+    <div className={`flex min-h-screen bg-neutral-950 text-neutral-200 selection:bg-emerald-500 selection:text-white ${isSidebarOpen ? "overflow-hidden h-screen" : ""}`}>
       
       {/* Mobile Header */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-neutral-900 border-b border-neutral-800 flex items-center justify-between px-4 z-50">
+      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-neutral-900 border-b border-neutral-800 flex items-center justify-between px-4 z-50 pt-[env(safe-area-inset-top)]">
           <div className="flex items-center gap-3">
              <div className="p-1 bg-white/5 rounded-lg border border-white/10">
                <Image src={logo} alt="Logo" className="w-6 h-6 object-contain" />
              </div>
-             <span className="font-bold text-white tracking-tight">Betty's</span>
+             <div className="flex flex-col">
+               <span className="font-bold text-white tracking-tight leading-none">Betty's</span>
+               <span className="text-[9px] uppercase tracking-wider text-emerald-500 font-bold mt-0.5">Dashboard</span>
+             </div>
           </div>
           <button 
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="p-2 text-neutral-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+            className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-neutral-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
           >
               {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
@@ -47,14 +55,14 @@ export default function ClientLayout({ children }) {
       {/* Sidebar Overlay (Mobile) */}
       {isSidebarOpen && (
         <div 
-            className="md:hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+            className="md:hidden fixed top-16 left-0 right-0 bottom-0 bg-black/50 backdrop-blur-sm z-40"
             onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <div className={`
-          fixed top-0 left-0 h-full w-64 z-50 transition-transform duration-300 ease-in-out
+          fixed top-16 md:top-0 left-0 h-[calc(100%-4rem)] md:h-full w-64 z-50 transition-transform duration-300 ease-in-out
           md:translate-x-0 bg-neutral-900 border-r border-neutral-800
           ${isSidebarOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"}
       `}>

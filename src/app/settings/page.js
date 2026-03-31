@@ -10,6 +10,7 @@ import {
   Loader2,
   Check,
   Pencil,
+  ArrowRight,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import SkeletonBlock from "@/components/SkeletonBlock";
@@ -28,6 +29,48 @@ const PAGE_OPTIONS = [
   { slug: "my-payroll", label: "My Payroll" },
 ];
 
+// ─── Rate helpers ────────────────────────────────────────────────────────────
+
+/** Get the effective rate for an employee at a given year/month.
+ *  rateChanges must be sorted by effective_year desc, effective_month desc. */
+function getEffectiveRate(employeeId, rateChanges, year, month) {
+  return (
+    rateChanges.find(
+      (r) =>
+        r.employee_id === employeeId &&
+        (r.effective_year < year ||
+          (r.effective_year === year && r.effective_month <= month))
+    ) || null
+  );
+}
+
+/** Get the nearest upcoming (future) rate change for an employee. */
+function getUpcomingRate(employeeId, rateChanges, year, month) {
+  const upcoming = rateChanges.filter(
+    (r) =>
+      r.employee_id === employeeId &&
+      (r.effective_year > year ||
+        (r.effective_year === year && r.effective_month > month))
+  );
+  // Return the earliest upcoming (last element since sorted desc)
+  return upcoming.length > 0 ? upcoming[upcoming.length - 1] : null;
+}
+
+/** Build month options from current month forward (12 months). */
+function getMonthOptions() {
+  const options = [];
+  const now = new Date();
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    options.push({
+      year: d.getFullYear(),
+      month: d.getMonth() + 1,
+      label: d.toLocaleDateString("en-GB", { month: "long", year: "numeric" }),
+    });
+  }
+  return options;
+}
+
 // ─── Main page ───────────────────────────────────────────────────────────────
 export default function SettingsPage() {
   const router = useRouter();
@@ -35,6 +78,7 @@ export default function SettingsPage() {
 
   const [tab, setTab] = useState("employees");
   const [employees, setEmployees] = useState([]);
+  const [rateChanges, setRateChanges] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
 
@@ -49,23 +93,31 @@ export default function SettingsPage() {
     }
   }, [profile, router]);
 
-  // Fetch employees
-  const fetchEmployees = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("*")
-      .order("full_name", { ascending: true });
+  // Fetch employees + rate changes
+  const fetchData = useCallback(async () => {
+    const [empRes, rateRes] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("*")
+        .order("full_name", { ascending: true }),
+      supabase
+        .from("rate_changes")
+        .select("*")
+        .order("effective_year", { ascending: false })
+        .order("effective_month", { ascending: false }),
+    ]);
 
-    if (error) {
-      console.error("Fetch employees error:", JSON.stringify(error));
-    }
-    setEmployees(data || []);
+    if (empRes.error) console.error("Fetch employees error:", JSON.stringify(empRes.error));
+    if (rateRes.error) console.error("Fetch rates error:", JSON.stringify(rateRes.error));
+
+    setEmployees(empRes.data || []);
+    setRateChanges(rateRes.data || []);
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    fetchEmployees();
-  }, [fetchEmployees]);
+    fetchData();
+  }, [fetchData]);
 
   // Toast auto‑dismiss
   useEffect(() => {
@@ -125,7 +177,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-neutral-900 p-1 rounded-xl w-fit border border-neutral-800">
+      <div className="flex flex-wrap gap-1 bg-neutral-900 p-1 rounded-xl w-fit border border-neutral-800">
         <TabButton
           active={tab === "employees"}
           onClick={() => setTab("employees")}
@@ -144,7 +196,7 @@ export default function SettingsPage() {
       {loading ? (
         <div className="space-y-6">
           {/* 2 tab skeletons */}
-          <div className="flex gap-1 bg-neutral-900 p-1 rounded-xl w-fit border border-neutral-800">
+          <div className="flex flex-wrap gap-1 bg-neutral-900 p-1 rounded-xl w-fit border border-neutral-800">
             <SkeletonBlock className="h-9 w-28 rounded-lg" />
             <SkeletonBlock className="h-9 w-28 rounded-lg" />
           </div>
@@ -170,6 +222,7 @@ export default function SettingsPage() {
       ) : tab === "employees" ? (
         <EmployeesTab
           employees={employees}
+          rateChanges={rateChanges}
           onEdit={(emp) => {
             setEditingEmployee(emp);
             setModalOpen(true);
@@ -184,10 +237,12 @@ export default function SettingsPage() {
       {modalOpen && (
         <EmployeeModal
           employee={editingEmployee}
+          rateChanges={rateChanges}
+          adminId={user?.id}
           onClose={() => setModalOpen(false)}
           onSaved={() => {
             setModalOpen(false);
-            fetchEmployees();
+            fetchData();
             setToast({
               type: "success",
               message: editingEmployee
@@ -195,10 +250,6 @@ export default function SettingsPage() {
                 : "Employee created",
             });
           }}
-          sessionRef={
-            /* We need the access token for the edge function */
-            null
-          }
         />
       )}
 
@@ -236,93 +287,116 @@ function TabButton({ active, onClick, icon: Icon, label }) {
 }
 
 // ─── Employees Tab ───────────────────────────────────────────────────────────
-function EmployeesTab({ employees, onEdit, onToggleActive }) {
+function EmployeesTab({ employees, rateChanges, onEdit, onToggleActive }) {
+  const now = new Date();
+  const curYear = now.getFullYear();
+  const curMonth = now.getMonth() + 1;
+
   return (
     <div className="grid gap-3">
-      {employees.map((emp) => (
-        <div
-          key={emp.id}
-          className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4"
-        >
-          {/* Left: name + meta */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 mb-1">
-              <h3 className="text-white font-semibold truncate">
-                {emp.full_name}
-              </h3>
-              <span
-                className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md ${
-                  emp.role === "admin"
-                    ? "bg-blue-500/15 text-blue-400"
-                    : "bg-neutral-700/50 text-neutral-400"
-                }`}
-              >
-                {emp.role}
-              </span>
-              <span
-                className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md ${
-                  emp.is_active
-                    ? "bg-emerald-500/15 text-emerald-400"
-                    : "bg-red-500/15 text-red-400"
-                }`}
-              >
-                {emp.is_active ? "Active" : "Inactive"}
-              </span>
-            </div>
-            <p className="text-sm text-neutral-500 truncate">{emp.email}</p>
-          </div>
+      {employees.map((emp) => {
+        const current = getEffectiveRate(emp.id, rateChanges, curYear, curMonth);
+        const upcoming = getUpcomingRate(emp.id, rateChanges, curYear, curMonth);
 
-          {/* Middle: pay info */}
-          <div className="flex items-center gap-6 text-sm">
-            <div>
-              <p className="text-neutral-500 text-xs uppercase tracking-wider">
-                Hourly
-              </p>
-              <p className="text-white font-medium">
-                &euro;{Number(emp.hourly_rate || 0).toFixed(2)}
-              </p>
-            </div>
-            <div>
-              <p className="text-neutral-500 text-xs uppercase tracking-wider">
-                Bonus
-              </p>
-              <p className="text-white font-medium">
-                &euro;{Number(emp.monthly_bonus || 0).toFixed(2)}
-              </p>
-            </div>
-            {emp.bonus_description && (
-              <div className="hidden lg:block max-w-[200px]">
-                <p className="text-neutral-500 text-xs uppercase tracking-wider">
-                  Bonus Note
-                </p>
-                <p className="text-neutral-300 text-xs truncate">
-                  {emp.bonus_description}
-                </p>
+        return (
+          <div
+            key={emp.id}
+            className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4"
+          >
+            {/* Left: name + meta */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-3 mb-1">
+                <h3 className="text-white font-semibold truncate">
+                  {emp.full_name}
+                </h3>
+                <span
+                  className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md ${
+                    emp.role === "admin"
+                      ? "bg-blue-500/15 text-blue-400"
+                      : "bg-neutral-700/50 text-neutral-400"
+                  }`}
+                >
+                  {emp.role}
+                </span>
+                <span
+                  className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md ${
+                    emp.is_active
+                      ? "bg-emerald-500/15 text-emerald-400"
+                      : "bg-red-500/15 text-red-400"
+                  }`}
+                >
+                  {emp.is_active ? "Active" : "Inactive"}
+                </span>
               </div>
-            )}
-          </div>
+              <p className="text-sm text-neutral-500 truncate">{emp.email}</p>
+            </div>
 
-          {/* Right: actions */}
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => onToggleActive(emp)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-                emp.is_active
-                  ? "border-red-500/30 text-red-400 hover:bg-red-500/10"
-                  : "border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
-              }`}
-            >
-              {emp.is_active ? "Deactivate" : "Activate"}
-            </button>
-            <button
-              onClick={() => onEdit(emp)}
-              className="p-2 text-neutral-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
-            >
-              <Pencil size={16} />
-            </button>
+            {/* Middle: pay info */}
+            <div className="flex items-center gap-6 text-sm">
+              <div>
+                <p className="text-neutral-500 text-xs uppercase tracking-wider">
+                  Hourly
+                </p>
+                <p className="text-white font-medium">
+                  &euro;{Number(current?.hourly_rate || 0).toFixed(2)}
+                </p>
+                {upcoming && Number(upcoming.hourly_rate) !== Number(current?.hourly_rate || 0) && (
+                  <p className="text-[10px] text-amber-400 mt-0.5 flex items-center gap-1">
+                    <ArrowRight size={10} />
+                    &euro;{Number(upcoming.hourly_rate).toFixed(2)} from{" "}
+                    {new Date(upcoming.effective_year, upcoming.effective_month - 1).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}
+                  </p>
+                )}
+              </div>
+              <div>
+                <p className="text-neutral-500 text-xs uppercase tracking-wider">
+                  Bonus
+                </p>
+                <p className="text-white font-medium">
+                  &euro;{Number(current?.monthly_bonus || 0).toFixed(2)}
+                </p>
+                {upcoming && Number(upcoming.monthly_bonus) !== Number(current?.monthly_bonus || 0) && (
+                  <p className="text-[10px] text-amber-400 mt-0.5 flex items-center gap-1">
+                    <ArrowRight size={10} />
+                    &euro;{Number(upcoming.monthly_bonus).toFixed(2)} from{" "}
+                    {new Date(upcoming.effective_year, upcoming.effective_month - 1).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}
+                  </p>
+                )}
+              </div>
+              {current?.bonus_description && (
+                <div className="hidden lg:block max-w-[200px]">
+                  <p className="text-neutral-500 text-xs uppercase tracking-wider">
+                    Bonus Note
+                  </p>
+                  <p className="text-neutral-300 text-xs truncate">
+                    {current.bonus_description}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Right: actions */}
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => onToggleActive(emp)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                  emp.is_active
+                    ? "border-red-500/30 text-red-400 hover:bg-red-500/10"
+                    : "border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                }`}
+              >
+                {emp.is_active ? "Deactivate" : "Activate"}
+              </button>
+              <button
+                onClick={() => onEdit(emp)}
+                className="p-2 text-neutral-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+              >
+                <Pencil size={16} />
+              </button>
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
 
       {employees.length === 0 && (
         <p className="text-neutral-500 text-sm text-center py-10">
@@ -334,24 +408,36 @@ function EmployeesTab({ employees, onEdit, onToggleActive }) {
 }
 
 // ─── Employee Modal ──────────────────────────────────────────────────────────
-function EmployeeModal({ employee, onClose, onSaved }) {
+function EmployeeModal({ employee, rateChanges, adminId, onClose, onSaved }) {
   const isEdit = !!employee;
+
+  const now = new Date();
+  const curYear = now.getFullYear();
+  const curMonth = now.getMonth() + 1;
+
+  // For edit mode, look up the current effective rate
+  const currentRate = isEdit
+    ? getEffectiveRate(employee.id, rateChanges, curYear, curMonth)
+    : null;
 
   const [fullName, setFullName] = useState(employee?.full_name || "");
   const [email, setEmail] = useState(employee?.email || "");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState(employee?.role || "employee");
   const [hourlyRate, setHourlyRate] = useState(
-    employee?.hourly_rate?.toString() || "0"
+    isEdit ? (currentRate?.hourly_rate?.toString() || "0") : "0"
   );
   const [monthlyBonus, setMonthlyBonus] = useState(
-    employee?.monthly_bonus?.toString() || "0"
+    isEdit ? (currentRate?.monthly_bonus?.toString() || "0") : "0"
   );
   const [bonusDesc, setBonusDesc] = useState(
-    employee?.bonus_description || ""
+    isEdit ? (currentRate?.bonus_description || "") : ""
   );
+  const [effectiveMonth, setEffectiveMonth] = useState(`${curYear}-${curMonth}`);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+
+  const monthOptions = getMonthOptions();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -360,19 +446,37 @@ function EmployeeModal({ employee, onClose, onSaved }) {
 
     try {
       if (isEdit) {
-        // PATCH profile
-        const { error: patchError } = await supabase
+        // 1. Update profile name
+        const { error: nameError } = await supabase
           .from("profiles")
-          .update({
-            full_name: fullName,
-            hourly_rate: parseFloat(hourlyRate) || 0,
-            monthly_bonus: parseFloat(monthlyBonus) || 0,
-            bonus_description: bonusDesc || null,
-          })
+          .update({ full_name: fullName })
           .eq("id", employee.id);
 
-        if (patchError) {
-          setError(patchError.message || "Failed to update employee");
+        if (nameError) {
+          setError(nameError.message || "Failed to update name");
+          setSaving(false);
+          return;
+        }
+
+        // 2. Upsert rate change
+        const [eYear, eMonth] = effectiveMonth.split("-").map(Number);
+        const { error: rateError } = await supabase
+          .from("rate_changes")
+          .upsert(
+            {
+              employee_id: employee.id,
+              hourly_rate: parseFloat(hourlyRate) || 0,
+              monthly_bonus: parseFloat(monthlyBonus) || 0,
+              bonus_description: bonusDesc || null,
+              effective_year: eYear,
+              effective_month: eMonth,
+              created_by: adminId,
+            },
+            { onConflict: "employee_id,effective_year,effective_month" }
+          );
+
+        if (rateError) {
+          setError(rateError.message || "Failed to save rate change");
           setSaving(false);
           return;
         }
@@ -485,6 +589,15 @@ function EmployeeModal({ employee, onClose, onSaved }) {
           </>
         )}
 
+        {/* Rate section */}
+        {isEdit && (
+          <div className="border-t border-neutral-800 pt-4">
+            <p className="text-xs text-neutral-500 uppercase tracking-wider font-semibold mb-3">
+              Rate change
+            </p>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-4">
           <Field
             label="Hourly Rate"
@@ -508,6 +621,26 @@ function EmployeeModal({ employee, onClose, onSaved }) {
           onChange={setBonusDesc}
           placeholder="Optional"
         />
+
+        {/* Effective from (edit mode only) */}
+        {isEdit && (
+          <div>
+            <label className="block text-sm font-medium text-neutral-300 mb-1.5">
+              Effective From
+            </label>
+            <select
+              value={effectiveMonth}
+              onChange={(e) => setEffectiveMonth(e.target.value)}
+              className="w-full px-4 py-2.5 bg-neutral-950 border border-neutral-700 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500"
+            >
+              {monthOptions.map((o) => (
+                <option key={`${o.year}-${o.month}`} value={`${o.year}-${o.month}`}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Error */}
         {error && (

@@ -1,16 +1,17 @@
 "use client";
 import { useState, useEffect } from "react";
-import { 
-  Star, 
-  Search, 
-  Calendar, 
-  RefreshCw, 
-  MessageSquareOff, 
-  TrendingUp, 
-  TrendingDown, 
+import {
+  Star,
+  Search,
+  Calendar,
+  RefreshCw,
+  MessageSquareOff,
+  TrendingUp,
+  TrendingDown,
   Minus,
   Utensils,
-  Filter
+  Filter,
+  ChevronDown
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import SkeletonBlock from "@/components/SkeletonBlock";
@@ -44,6 +45,8 @@ export default function ReviewsPage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [activePreset, setActivePreset] = useState("1M");
+  const [commentsOnly, setCommentsOnly] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [oldestAvailableDate, setOldestAvailableDate] = useState(null);
 
   // 1. Fetch Data
@@ -263,25 +266,33 @@ export default function ReviewsPage() {
           const weekEnd = addWeeks(weekStart, 1);
           const weekLabel = format(weekStart, "MMM dd");
 
-          const weekReviews = originalReviews.filter(r => {
+          let weekReviews = originalReviews.filter(r => {
               if (!r.review_date) return false;
               const rd = parseISO(r.review_date);
               return rd >= weekStart && rd < weekEnd;
           });
 
-          const dataPoint = { name: weekLabel };
+          if (platformFilter !== "all") {
+              weekReviews = weekReviews.filter(r => r.source_platform?.toLowerCase() === platformFilter);
+          }
 
-          ["google", "wolt", "foody", "bolt"].forEach(p => {
-               const pReviews = weekReviews.filter(r => r.source_platform?.toLowerCase() === p);
-               if (pReviews.length > 0) {
-                   dataPoint[p] = Number((pReviews.reduce((sum, r) => sum + r.rating, 0) / pReviews.length).toFixed(1));
-               }
-          });
+          const dataPoint = { name: weekLabel };
+          if (weekReviews.length > 0) {
+              dataPoint.rating = Number((weekReviews.reduce((sum, r) => sum + r.rating, 0) / weekReviews.length).toFixed(1));
+          }
 
           data.push(dataPoint);
           weekStart = weekEnd;
       }
       return data;
+  };
+
+  const getChartLineColor = () => {
+      if (platformFilter === "google") return "#ef4444";
+      if (platformFilter === "wolt") return "#3b82f6";
+      if (platformFilter === "foody") return "#f97316";
+      if (platformFilter === "bolt") return "#10b981";
+      return "#10b981"; // all — emerald
   };
 
   const getPlatformDetails = (pName) => {
@@ -313,9 +324,9 @@ export default function ReviewsPage() {
           <SkeletonBlock className="h-7 w-44 rounded-full" />
         </div>
         {/* 5 platform rating cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           {[...Array(5)].map((_, i) => (
-            <div key={i} className="bg-neutral-900 p-5 rounded-2xl border border-neutral-800">
+            <div key={i} className="bg-neutral-900 p-4 md:p-5 rounded-2xl border border-neutral-800">
               <div className="flex justify-between items-start mb-3">
                 <SkeletonBlock className="h-4 w-16" />
                 <SkeletonBlock className="h-8 w-8 rounded-lg" />
@@ -379,28 +390,35 @@ export default function ReviewsPage() {
       </div>
 
       {/* Top Platform Rating Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         {platformsConfig.map((p) => {
             const stats = calculateCardStats(p.id);
             return (
-                <div key={p.id} className="bg-neutral-900 p-5 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden group">
+                <div key={p.id} className="bg-neutral-900 p-4 md:p-5 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden group">
                     <div className="flex justify-between items-start mb-2">
-                        <span className="text-sm font-semibold text-neutral-400 uppercase tracking-wider">{p.name}</span>
-                        <div className={`p-2 rounded-lg ${p.bg}`}>
+                        <span className="text-xs md:text-sm font-semibold text-neutral-400 uppercase tracking-wider">{p.name}</span>
+                        <div className={`hidden md:block p-2 rounded-lg ${p.bg}`}>
                             <p.icon size={16} className={p.color} />
                         </div>
                     </div>
-                    <div className="flex items-end gap-3 mb-1">
-                        <h3 className="text-4xl font-black text-white">{stats.avg}</h3>
+                    <div className="flex items-end gap-2 md:gap-3 mb-1">
+                        <h3 className="text-2xl md:text-4xl font-black text-white">{stats.avg}</h3>
                         <div className="flex pb-1">
-                            {[1, 2, 3, 4, 5].map(star => (
-                                <Star 
-                                    key={star} 
-                                    size={14} 
-                                    className={star <= Math.round(stats.avg) ? p.color : "text-neutral-700"} 
-                                    fill={star <= Math.round(stats.avg) ? "currentColor" : "none"}
-                                />
-                            ))}
+                            {[1, 2, 3, 4, 5].map(star => {
+                                const avg = parseFloat(stats.avg);
+                                const fill = Math.max(0, Math.min(1, avg - (star - 1)));
+                                if (fill >= 1) return <Star key={star} size={14} className={p.color} fill="currentColor" />;
+                                if (fill <= 0) return <Star key={star} size={14} className="text-neutral-700" fill="none" />;
+                                const id = `star-clip-${p.id}-${star}`;
+                                const starPath = "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z";
+                                return (
+                                  <svg key={star} width={14} height={14} viewBox="0 0 24 24" fill="none" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                                    <defs><clipPath id={id}><rect x="0" y="0" width={24 * fill} height="24" /></clipPath></defs>
+                                    <path d={starPath} className="text-neutral-700" stroke="currentColor" />
+                                    <path d={starPath} className={p.color} fill="currentColor" stroke="currentColor" clipPath={`url(#${id})`} />
+                                  </svg>
+                                );
+                            })}
                         </div>
                     </div>
                     <div className="flex items-center justify-between text-xs mt-4">
@@ -423,80 +441,91 @@ export default function ReviewsPage() {
         })}
       </div>
 
-      {/* Filters Section */}
-      <div className="bg-neutral-900 p-4 rounded-2xl border border-neutral-800 shadow-lg flex flex-col xl:flex-row gap-4 xl:items-center justify-between">
-        
-        {/* Platform & Star Tabs */}
-        <div className="flex flex-wrap items-center gap-4">
-            <div className="flex p-1 bg-black/40 rounded-xl border border-white/5">
+      {/* Mobile Filter Bar */}
+      <div className="md:hidden">
+        <button onClick={() => setFiltersOpen(!filtersOpen)} className="w-full flex items-center justify-between px-4 py-3 bg-neutral-900 border border-neutral-800 rounded-lg filter-pattern">
+          <div className="flex items-center gap-2"><Filter size={16} className="text-emerald-500" /><span className="text-sm font-semibold text-white">Filters</span></div>
+          <ChevronDown size={16} className={`text-neutral-400 transition-transform duration-200 ${filtersOpen ? "rotate-180" : ""}`} />
+        </button>
+        {filtersOpen && (
+          <div className="mt-1 bg-neutral-900 border border-neutral-800 rounded-lg p-4 space-y-3 filter-pattern">
+            <div>
+              <p className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">Platform</p>
+              <div className="flex flex-wrap gap-1.5">
                 {platformsConfig.map(p => (
-                    <button
-                        key={p.id}
-                        onClick={() => setPlatformFilter(p.id)}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2 ${platformFilter === p.id ? "bg-neutral-800 text-white shadow-md" : "text-neutral-400 hover:text-neutral-200 hover:bg-white/5"}`}
-                    >
-                        {platformFilter === p.id && <p.icon size={14} className={p.color} />}
+                  <button key={p.id} onClick={() => setPlatformFilter(p.id)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${platformFilter === p.id ? "bg-neutral-800 text-white border-neutral-700 shadow-md" : "text-neutral-400 border-neutral-800 hover:text-neutral-200"}`}>{p.name}</button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">Stars</p>
+              <div className="flex flex-wrap gap-1.5">
+                {["all", "5", "4", "3", "2", "1"].map(star => (
+                  <button key={star} onClick={() => setStarFilter(star)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border flex items-center gap-1 ${starFilter === star ? "bg-neutral-800 text-white border-neutral-700 shadow-md" : "text-neutral-400 border-neutral-800 hover:text-neutral-200"}`}>
+                    {star === "all" ? "All" : <>{star} <Star size={10} className={starFilter === star ? "text-yellow-500" : ""} fill={starFilter === star ? "currentColor" : "none"}/></>}
+                  </button>
+                ))}
+                <button onClick={() => setCommentsOnly(!commentsOnly)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border flex items-center gap-1.5 ${commentsOnly ? "bg-neutral-800 text-white border-neutral-700 shadow-md" : "text-neutral-400 border-neutral-800 hover:text-neutral-200"}`}>
+                  <MessageSquareOff size={12} /> Comments
+                </button>
+              </div>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">Date Range</p>
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <div>
+                  <label className="text-[10px] text-neutral-500 mb-1 block">From</label>
+                  <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setActivePreset(null); }} min={oldestAvailableDate ? getFormattedDate(oldestAvailableDate) : undefined} className="w-full bg-neutral-950 border border-neutral-800 rounded-lg text-neutral-200 text-xs px-3 py-2 focus:outline-none focus:border-emerald-500/50" />
+                </div>
+                <div>
+                  <label className="text-[10px] text-neutral-500 mb-1 block">To</label>
+                  <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setActivePreset(null); }} max={getFormattedDate(new Date())} className="w-full bg-neutral-950 border border-neutral-800 rounded-lg text-neutral-200 text-xs px-3 py-2 focus:outline-none focus:border-emerald-500/50" />
+                </div>
+              </div>
+              <div className="flex bg-neutral-950 rounded-lg p-1 border border-neutral-800 w-fit">
+                {["1M", "3M", "6M", "1Y"].map(preset => (
+                  <button key={preset} onClick={() => handleDatePreset(preset)} className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all ${activePreset === preset ? "bg-emerald-500 text-white" : "text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800"}`}>{preset}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Desktop Filter Bar */}
+      <div className="hidden md:flex bg-neutral-900 p-4 rounded-2xl border border-neutral-800 shadow-lg flex-row items-center justify-between gap-3 filter-pattern">
+        <div className="flex items-center gap-3">
+            <div className="flex p-1 bg-neutral-950 rounded-lg border border-neutral-800">
+                {platformsConfig.map(p => (
+                    <button key={p.id} onClick={() => setPlatformFilter(p.id)} className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all duration-200 flex items-center gap-1.5 ${platformFilter === p.id ? "bg-neutral-800 text-white shadow-sm" : "text-neutral-400 hover:text-neutral-200 hover:bg-white/5"}`}>
+                        {platformFilter === p.id && <p.icon size={12} className={p.color} />}
                         {p.name}
                     </button>
                 ))}
             </div>
-
-            <div className="h-8 w-px bg-neutral-800 hidden xl:block"></div>
-
-            <div className="flex p-1 bg-black/40 rounded-xl border border-white/5">
+            <div className="h-6 w-px bg-neutral-800"></div>
+            <div className="flex p-1 bg-neutral-950 rounded-lg border border-neutral-800">
                 {["all", "5", "4", "3", "2", "1"].map(star => (
-                    <button
-                        key={star}
-                        onClick={() => setStarFilter(star)}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1 ${starFilter === star ? "bg-neutral-800 text-white shadow-md" : "text-neutral-400 hover:text-neutral-200 hover:bg-white/5"}`}
-                    >
-                        {star === "all" ? "All Stars" : <>{star} <Star size={12} className={starFilter === star ? "text-yellow-500" : ""} fill={starFilter === star ? "currentColor" : "none"}/></>}
+                    <button key={star} onClick={() => setStarFilter(star)} className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all duration-200 flex items-center gap-1 ${starFilter === star ? "bg-neutral-800 text-white shadow-sm" : "text-neutral-400 hover:text-neutral-200 hover:bg-white/5"}`}>
+                        {star === "all" ? "All Stars" : <>{star} <Star size={10} className={starFilter === star ? "text-yellow-500" : ""} fill={starFilter === star ? "currentColor" : "none"}/></>}
                     </button>
                 ))}
             </div>
+            <button onClick={() => setCommentsOnly(!commentsOnly)} className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all duration-200 flex items-center gap-1.5 border ${commentsOnly ? "bg-neutral-800 text-white border-neutral-700 shadow-sm" : "text-neutral-400 hover:text-neutral-200 hover:bg-white/5 border-neutral-800"}`}>
+                <MessageSquareOff size={12} /> Comments
+            </button>
         </div>
-
-        {/* Date & Search */}
-        <div className="flex flex-wrap items-center gap-4">
-            <div className="relative">
-                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
-                <input 
-                    type="text" 
-                    placeholder="Search reviews..." 
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="bg-black/40 border border-white/5 rounded-xl pl-9 pr-4 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 w-full sm:w-64"
-                />
-            </div>
-
-            <div className="flex items-center bg-black/40 rounded-xl border border-white/5 p-1">
-                 <div className="flex items-center px-3 border-r border-white/10">
-                    <Calendar size={14} className="text-neutral-400 mr-2" />
-                    <input 
-                        type="date"
-                        value={startDate}
-                        onChange={(e) => { setStartDate(e.target.value); setActivePreset(null); }}
-                        min={oldestAvailableDate ? getFormattedDate(oldestAvailableDate) : undefined}
-                        className="bg-transparent text-sm text-neutral-300 focus:outline-none cursor-pointer [&::-webkit-calendar-picker-indicator]:invert-[0.8]"
-                    />
-                    <span className="text-neutral-600 mx-2">to</span>
-                    <input 
-                        type="date"
-                        value={endDate}
-                        onChange={(e) => { setEndDate(e.target.value); setActivePreset(null); }}
-                        max={getFormattedDate(new Date())}
-                        className="bg-transparent text-sm text-neutral-300 focus:outline-none cursor-pointer [&::-webkit-calendar-picker-indicator]:invert-[0.8]"
-                    />
+        <div className="flex items-center gap-2">
+            <div className="flex items-center bg-neutral-950 rounded-lg border border-neutral-800 p-1">
+                 <div className="flex items-center px-2 border-r border-white/10">
+                    <Calendar size={12} className="text-neutral-400 mr-1.5" />
+                    <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setActivePreset(null); }} min={oldestAvailableDate ? getFormattedDate(oldestAvailableDate) : undefined} className="bg-transparent text-xs text-neutral-300 focus:outline-none cursor-pointer [&::-webkit-calendar-picker-indicator]:invert-[0.8]" />
+                    <span className="text-neutral-600 text-xs mx-1.5">to</span>
+                    <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setActivePreset(null); }} max={getFormattedDate(new Date())} className="bg-transparent text-xs text-neutral-300 focus:outline-none cursor-pointer [&::-webkit-calendar-picker-indicator]:invert-[0.8]" />
                 </div>
                 <div className="flex px-1 gap-1">
                     {["1M", "3M", "6M", "1Y"].map(preset => (
-                        <button
-                            key={preset}
-                            onClick={() => handleDatePreset(preset)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${activePreset === preset ? "bg-emerald-500 text-white" : "text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800"}`}
-                        >
-                            {preset}
-                        </button>
+                        <button key={preset} onClick={() => handleDatePreset(preset)} className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all ${activePreset === preset ? "bg-emerald-500 text-white shadow-sm" : "text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800"}`}>{preset}</button>
                     ))}
                 </div>
             </div>
@@ -505,10 +534,44 @@ export default function ReviewsPage() {
 
       {/* Main Area: Feed & Stats */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column: Feed */}
+          {/* Rating Breakdown — appears first on mobile, right column on desktop */}
+          <div className="order-first lg:order-last space-y-6">
+            <div className="bg-neutral-900 p-4 md:p-6 rounded-2xl border border-neutral-800 shadow-lg">
+                <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                     <Filter size={16} className="text-emerald-500" />
+                     Rating Breakdown
+                </h3>
+                {filteredReviews.length === 0 ? (
+                     <p className="text-sm text-neutral-500 italic">No data to breakdown</p>
+                ) : (
+                    <div className="space-y-3">
+                        {ratingBreakdown.map((row) => (
+                            <div key={row.star} className="flex items-center gap-3">
+                                <div className="flex items-center gap-1 w-10 shrink-0 text-sm font-medium text-neutral-400">
+                                    {row.star} <Star size={12} className={row.star >= 4 ? "text-emerald-500" : row.star === 3 ? "text-yellow-500" : "text-red-500"} fill="currentColor" />
+                                </div>
+                                <div className="flex-1 h-2 bg-neutral-800 rounded-full overflow-hidden">
+                                     <div
+                                        className={`h-full rounded-full ${row.star >= 4 ? "bg-emerald-500" : row.star === 3 ? "bg-yellow-500" : "bg-red-500"}`}
+                                        style={{ width: `${row.percentage}%` }}
+                                     ></div>
+                                </div>
+                                <div className="shrink-0 text-right text-xs font-semibold text-white whitespace-nowrap">
+                                    {row.count} <span className="text-neutral-500 font-medium">· {Math.round(row.percentage)}%</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+          </div>
+
+          {/* Feed Column */}
           <div className="lg:col-span-2 space-y-4">
-               {filteredReviews.length === 0 ? (
-                    <div className="bg-neutral-900 p-10 rounded-2xl border border-neutral-800 shadow-lg flex flex-col items-center justify-center text-center">
+               {(() => {
+                 const displayedReviews = commentsOnly ? filteredReviews.filter(r => r.review_text && r.review_text.trim() !== "") : filteredReviews;
+                 return displayedReviews.length === 0 ? (
+                    <div className="bg-neutral-900 p-6 md:p-10 rounded-2xl border border-neutral-800 shadow-lg flex flex-col items-center justify-center text-center">
                         <MessageSquareOff size={48} className="text-neutral-700 mb-4" />
                         <h3 className="text-lg font-bold text-white mb-2">No Reviews Found</h3>
                         <p className="text-sm text-neutral-400 max-w-sm">
@@ -516,12 +579,12 @@ export default function ReviewsPage() {
                         </p>
                     </div>
                ) : (
-                    <div className="space-y-4 h-[800px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent">
-                        {filteredReviews.map((review) => {
+                    <div className="space-y-4 h-[300px] md:h-[800px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent">
+                        {displayedReviews.map((review) => {
                             const pData = getPlatformDetails(review.source_platform);
                             return (
                                 <div key={review.id} className={`bg-neutral-900 rounded-2xl border border-neutral-800 shadow-md overflow-hidden flex flex-col border-l-4 ${pData.border}`}>
-                                    <div className="p-5 flex-1">
+                                    <div className="p-4 md:p-5 flex-1">
                                         <div className="flex justify-between items-start mb-3">
                                             <div>
                                                 {review.source_platform?.toLowerCase() === "google" && review.reviewer_name && (
@@ -591,61 +654,28 @@ export default function ReviewsPage() {
                             );
                         })}
                     </div>
-               )}
+               );
+               })()}
           </div>
 
-          {/* Right Column: Stats Sidebar */}
-          <div className="space-y-6">
-            
-            {/* Rating Breakdown */}
-            <div className="bg-neutral-900 p-6 rounded-2xl border border-neutral-800 shadow-lg">
-                <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
-                     <Filter size={16} className="text-emerald-500" />
-                     Rating Breakdown
-                </h3>
-                {filteredReviews.length === 0 ? (
-                     <p className="text-sm text-neutral-500 italic">No data to breakdown</p>
-                ) : (
-                    <div className="space-y-3">
-                        {ratingBreakdown.map((row) => (
-                            <div key={row.star} className="flex items-center gap-3">
-                                <div className="flex items-center gap-1 w-10 shrink-0 text-sm font-medium text-neutral-400">
-                                    {row.star} <Star size={12} className={row.star >= 4 ? "text-emerald-500" : row.star === 3 ? "text-yellow-500" : "text-red-500"} fill="currentColor" />
-                                </div>
-                                <div className="flex-1 h-2 bg-neutral-800 rounded-full overflow-hidden">
-                                     <div 
-                                        className={`h-full rounded-full ${row.star >= 4 ? "bg-emerald-500" : row.star === 3 ? "bg-yellow-500" : "bg-red-500"}`}
-                                        style={{ width: `${row.percentage}%` }}
-                                     ></div>
-                                </div>
-                                <div className="shrink-0 text-right text-xs font-semibold text-white whitespace-nowrap">
-                                    {row.count} <span className="text-neutral-500 font-medium">· {Math.round(row.percentage)}%</span>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-
-          </div>
       </div>
 
       {/* Bottom Chart */}
-      <div className="bg-neutral-900 p-6 rounded-2xl border border-neutral-800 shadow-lg relative">
+      <div className="bg-neutral-900 p-4 md:p-6 rounded-2xl border border-neutral-800 shadow-lg relative">
           <div className="mb-6">
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
                    <TrendingUp size={18} className="text-emerald-500" />
                    Rating Timeline
               </h3>
-              <p className="text-xs text-neutral-500 mt-1">Weekly average rating per platform for the selected date range.</p>
+              <p className="text-xs text-neutral-500 mt-1">Weekly average rating for the selected date range{platformFilter !== "all" ? ` (${platformFilter})` : ""}.</p>
           </div>
           
           {originalReviews.length === 0 || getChartData().length === 0 ? (
-              <div className="h-[300px] flex flex-col items-center justify-center text-center text-neutral-500">
+              <div className="h-[200px] md:h-[300px] flex flex-col items-center justify-center text-center text-neutral-500">
                   <p className="text-sm font-semibold text-white">{originalReviews.length === 0 ? "No data available" : "Select a date range of at least 1 week"}</p>
               </div>
           ) : (
-              <div className="h-[300px]">
+              <div className="h-[200px] md:h-[300px]">
                   <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={getChartData()} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#262626" />
@@ -666,23 +696,20 @@ export default function ReviewsPage() {
                           />
                           <RechartsTooltip content={({ active, payload, label }) => {
                               if (!active || !payload?.length) return null;
+                              const lineColor = getChartLineColor();
+                              const labelText = platformFilter === "all" ? "Avg Rating" : platformFilter.charAt(0).toUpperCase() + platformFilter.slice(1);
                               return (
                                   <div style={{ backgroundColor: "#171717", border: "1px solid #404040", borderRadius: "12px", padding: "12px 14px", color: "#f5f5f5" }}>
                                       <p style={{ color: "#a3a3a3", marginBottom: "8px", fontSize: "12px" }}>{label}</p>
-                                      {payload.map((entry, idx) => (
-                                          <p key={idx} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", margin: "4px 0" }}>
-                                              <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: entry.color, display: "inline-block" }}></span>
-                                              <span style={{ color: "#a3a3a3" }}>{entry.name}:</span>
-                                              <span style={{ fontWeight: "600" }}>{Number(entry.value).toFixed(1)}</span>
-                                          </p>
-                                      ))}
+                                      <p style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px" }}>
+                                          <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: lineColor, display: "inline-block" }}></span>
+                                          <span style={{ color: "#a3a3a3" }}>{labelText}:</span>
+                                          <span style={{ fontWeight: "600" }}>{Number(payload[0].value).toFixed(1)}</span>
+                                      </p>
                                   </div>
                               );
                           }} />
-                          {getChartData().some(d => d.google) && <Line type="monotone" dataKey="google" name="Google" stroke="#ef4444" strokeWidth={3} dot={{ r: 4, fill: "#ef4444", strokeWidth: 0 }} activeDot={{ r: 6 }} connectNulls />}
-                          {getChartData().some(d => d.wolt) && <Line type="monotone" dataKey="wolt" name="Wolt" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4, fill: "#3b82f6", strokeWidth: 0 }} activeDot={{ r: 6 }} connectNulls />}
-                          {getChartData().some(d => d.foody) && <Line type="monotone" dataKey="foody" name="Foody" stroke="#f97316" strokeWidth={3} dot={{ r: 4, fill: "#f97316", strokeWidth: 0 }} activeDot={{ r: 6 }} connectNulls />}
-                          {getChartData().some(d => d.bolt) && <Line type="monotone" dataKey="bolt" name="Bolt" stroke="#10b981" strokeWidth={3} dot={{ r: 4, fill: "#10b981", strokeWidth: 0 }} activeDot={{ r: 6 }} connectNulls />}
+                          <Line type="monotone" dataKey="rating" name={platformFilter === "all" ? "Avg Rating" : platformFilter} stroke={getChartLineColor()} strokeWidth={3} dot={{ r: 4, fill: getChartLineColor(), strokeWidth: 0 }} activeDot={{ r: 6 }} connectNulls />
                       </LineChart>
                   </ResponsiveContainer>
               </div>

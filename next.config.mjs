@@ -2,6 +2,7 @@
 const nextConfig = {
   /* config options here */
   reactCompiler: true,
+allowedDevOrigins: ['*.trycloudfare.com']	
 };
 
 export default nextConfig;

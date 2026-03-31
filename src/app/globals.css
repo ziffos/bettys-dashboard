@@ -6,6 +6,10 @@
     color-scheme: dark;
   }
   
+  html, body {
+    @apply overflow-x-hidden;
+  }
+
   body {
     @apply bg-neutral-950 text-neutral-200 antialiased;
   }
@@ -21,6 +25,16 @@
   [type="reset"],
   label[for] {
     cursor: pointer;
+  }
+
+  .filter-pattern {
+    background-image: repeating-linear-gradient(
+      45deg,
+      rgba(29, 158, 117, 0.05) 0px,
+      rgba(29, 158, 117, 0.05) 1px,
+      transparent 1px,
+      transparent 9px
+    );
   }
 
   input[type="text"],

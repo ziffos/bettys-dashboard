@@ -60,6 +60,7 @@ export default function MyPayrollPage() {
   const [shifts, setShifts] = useState([]);
   const [records, setRecords] = useState([]);
   const [payments, setPayments] = useState([]);
+  const [rateChanges, setRateChanges] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [expandedMonth, setExpandedMonth] = useState(null);
@@ -70,7 +71,7 @@ export default function MyPayrollPage() {
     if (!user) return;
     setLoading(true);
 
-    const [shiftRes, recRes, payRes] = await Promise.all([
+    const [shiftRes, recRes, payRes, rateRes] = await Promise.all([
       supabase
         .from("shifts")
         .select("*")
@@ -88,15 +89,23 @@ export default function MyPayrollPage() {
         .select("*, payroll_records!inner(employee_id)")
         .eq("payroll_records.employee_id", user.id)
         .limit(1000),
+      supabase
+        .from("rate_changes")
+        .select("*")
+        .eq("employee_id", user.id)
+        .order("effective_year", { ascending: false })
+        .order("effective_month", { ascending: false }),
     ]);
 
     if (shiftRes.error) console.error("Shifts fetch error:", JSON.stringify(shiftRes.error));
     if (recRes.error) console.error("Records fetch error:", JSON.stringify(recRes.error));
     if (payRes.error) console.error("Payments fetch error:", JSON.stringify(payRes.error));
+    if (rateRes.error) console.error("Rate changes fetch error:", JSON.stringify(rateRes.error));
 
     setShifts(shiftRes.data || []);
     setRecords(recRes.data || []);
     setPayments(payRes.data || []);
+    setRateChanges(rateRes.data || []);
     setLoading(false);
   }, [user]);
 
@@ -128,19 +137,25 @@ export default function MyPayrollPage() {
         (r) => r.year === m.year && r.month === m.month
       );
 
-      const hourlyRate = record?.hourly_rate ?? profile?.hourly_rate ?? 0;
-      const monthlyBonus = record?.monthly_bonus ?? profile?.monthly_bonus ?? 0;
-      const bonusDescription = record?.bonus_description ?? profile?.bonus_description ?? "";
-      const grossExpected = r2(totalHours * hourlyRate + monthlyBonus);
+      // Get effective rate from rate_changes for this month
+      const effectiveRate = rateChanges.find(
+        (rc) =>
+          rc.effective_year < m.year ||
+          (rc.effective_year === m.year && rc.effective_month <= m.month)
+      );
+      const fallbackRate = record?.hourly_rate ?? effectiveRate?.hourly_rate ?? 0;
+      const grossFromShifts = r2(m.shifts.reduce((sum, s) => {
+        return sum + shiftHours(s) * fallbackRate;
+      }, 0));
+      const hourlyRate = fallbackRate; // for display purposes
+      const monthlyBonus = record?.monthly_bonus ?? effectiveRate?.monthly_bonus ?? 0;
+      const bonusDescription = record?.bonus_description ?? effectiveRate?.bonus_description ?? "";
+      const grossExpected = r2(grossFromShifts + monthlyBonus);
       const amountPaid = record?.amount_paid ?? 0;
       const amountRemaining = r2(grossExpected - amountPaid);
 
-      let status = "unpaid";
-      if (amountPaid > 0 && amountPaid >= grossExpected && grossExpected > 0) {
-        status = "paid";
-      } else if (amountPaid > 0) {
-        status = "partial";
-      }
+      // Use the database status (set by trigger) instead of recalculating in JS
+      const status = record?.status ?? "unpaid";
 
       const monthLabel = new Date(m.year, m.month - 1, 1).toLocaleDateString(
         "en-GB",
@@ -172,11 +187,12 @@ export default function MyPayrollPage() {
         amountRemaining,
         status,
         bonusDescription,
+        firstPaidAt: record?.first_paid_at ?? null,
         shifts: sortedShifts,
         payments: recordPayments,
       };
     });
-  }, [shifts, records, payments, profile]);
+  }, [shifts, records, payments, rateChanges]);
 
   // ── Payslip PDF generation ───────────────────────────────────────────────
   const generatePayslip = async (row) => {
@@ -366,30 +382,61 @@ export default function MyPayrollPage() {
         <p className="text-neutral-400 text-sm mt-1">View your pay and shift history.</p>
       </div>
 
-      {/* Info card */}
-      <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-          <div className="flex items-center gap-2">
-            <DollarSign size={16} className="text-emerald-400" />
-            <span className="text-sm text-white font-semibold">
-              &euro;{profile.hourly_rate ?? 0} / hour
-            </span>
-          </div>
-          {(profile.monthly_bonus ?? 0) > 0 && (
-            <div className="flex items-center gap-2">
-              <Banknote size={16} className="text-emerald-400" />
-              <span className="text-sm text-white font-semibold">
-                + &euro;{profile.monthly_bonus} / month
-              </span>
+      {/* Salary info from rate_changes */}
+      {(() => {
+        const now = new Date();
+        const curYear = now.getFullYear();
+        const curMonth = now.getMonth() + 1;
+        // Current effective rate (rateChanges already sorted desc)
+        const currentRate = rateChanges.find(
+          (rc) =>
+            rc.effective_year < curYear ||
+            (rc.effective_year === curYear && rc.effective_month <= curMonth)
+        );
+        // Upcoming rate change (future month)
+        const upcomingRate = rateChanges.find(
+          (rc) =>
+            rc.effective_year > curYear ||
+            (rc.effective_year === curYear && rc.effective_month > curMonth)
+        );
+        const hourly = Number(currentRate?.hourly_rate ?? 0);
+        const bonus = Number(currentRate?.monthly_bonus ?? 0);
+
+        return (
+          <div className="pb-4 border-b border-neutral-800 space-y-3">
+            <div className="flex items-start gap-8">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs text-neutral-500">Current salary</span>
+                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">Active</span>
+                </div>
+                <p className="text-lg font-semibold text-white">&euro;{hourly.toFixed(2)} / hour</p>
+              </div>
+              {bonus > 0 && (
+                <div>
+                  <span className="text-xs text-neutral-500 block mb-1">Monthly bonus</span>
+                  <p className="text-lg font-semibold text-white">+ &euro;{bonus.toFixed(2)}</p>
+                  {currentRate?.bonus_description && (
+                    <p className="text-[11px] text-neutral-500 italic mt-0.5">{currentRate.bonus_description}</p>
+                  )}
+                </div>
+              )}
             </div>
-          )}
-          {profile.bonus_description && (
-            <span className="text-xs text-neutral-400 italic">
-              {profile.bonus_description}
-            </span>
-          )}
-        </div>
-      </div>
+            {upcomingRate && (
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-sm text-amber-300">
+                Upcoming change from{" "}
+                <span className="font-semibold">
+                  {new Date(upcomingRate.effective_year, upcomingRate.effective_month - 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" })}
+                </span>
+                : &euro;{Number(upcomingRate.hourly_rate).toFixed(2)}/h
+                {Number(upcomingRate.monthly_bonus) > 0 && (
+                  <span> + &euro;{Number(upcomingRate.monthly_bonus).toFixed(2)} bonus</span>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Month list */}
       {loading ? (
@@ -439,56 +486,69 @@ export default function MyPayrollPage() {
                 className="bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden"
               >
                 {/* Accordion header */}
-                <div className="flex items-center">
-                  <button
-                    onClick={() => {
-                      setExpandedMonth(isOpen ? null : row.key);
-                      setExpandedSection(null);
-                    }}
-                    className="flex-1 flex items-center justify-between p-5 text-left hover:bg-white/[0.02] transition-colors min-w-0"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-white font-semibold">{row.label}</p>
-                      <p className="text-neutral-500 text-xs mt-0.5">
-                        {row.shifts.length} shift{row.shifts.length !== 1 ? "s" : ""} &middot; {row.totalHours}h
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      {row.status === "partial" && (
-                        <span className="text-xs font-semibold text-amber-400">
-                          &euro;{row.amountPaid}/&euro;{row.grossExpected}
-                        </span>
-                      )}
-                      <span
-                        className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md ${STATUS_STYLES[row.status]}`}
-                      >
-                        {row.status === "partial" ? "partially paid" : row.status}
+                <button
+                  onClick={() => {
+                    setExpandedMonth(isOpen ? null : row.key);
+                    setExpandedSection(null);
+                  }}
+                  className="w-full flex items-center justify-between p-4 md:p-5 text-left hover:bg-white/[0.02] transition-colors"
+                >
+                  <div className="min-w-0">
+                    <p className="text-white font-semibold text-sm md:text-base">{row.label}</p>
+                    <p className="text-neutral-500 text-xs mt-0.5">
+                      {row.shifts.length} shift{row.shifts.length !== 1 ? "s" : ""} &middot; {row.totalHours}h
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 md:gap-3 shrink-0">
+                    {row.status === "partial" && (
+                      <span className="text-[10px] md:text-xs font-semibold text-amber-400">
+                        &euro;{row.amountPaid}/&euro;{row.grossExpected}
                       </span>
-                      <ChevronDown
-                        size={16}
-                        className={`text-neutral-500 transition-transform ${isOpen ? "rotate-180" : ""}`}
-                      />
-                    </div>
-                  </button>
-                  {canDownload && (
+                    )}
+                    <span
+                      className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md ${STATUS_STYLES[row.status]}`}
+                    >
+                      {row.status === "partial" ? "partial" : row.status}
+                    </span>
+                    {canDownload && (
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          generatePayslip(row);
+                        }}
+                        className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl transition-colors"
+                      >
+                        <Download size={14} />
+                        Download Payslip
+                      </span>
+                    )}
+                    <ChevronDown
+                      size={16}
+                      className={`text-neutral-500 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                    />
+                  </div>
+                </button>
+                {/* Mobile download button — shown below header when card is paid */}
+                {canDownload && (
+                  <div className="md:hidden px-4 pb-3 -mt-1">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         generatePayslip(row);
                       }}
-                      className="flex items-center gap-2 px-4 py-2 mr-4 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl transition-colors shrink-0"
+                      className="w-full flex items-center justify-center gap-2 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl transition-colors"
                     >
                       <Download size={14} />
                       Download Payslip
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
 
                 {/* Expanded content */}
                 {isOpen && (
-                  <div className="border-t border-neutral-800 p-5 space-y-5">
+                  <div className="border-t border-neutral-800 p-4 md:p-5 space-y-4 md:space-y-5">
                     {/* Summary grid */}
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 md:gap-3">
                       <StatCell icon={<Clock size={14} />} label="Total Hours" value={`${row.totalHours}h`} />
                       <StatCell icon={<CreditCard size={14} />} label="Gross Expected" value={`\u20AC${row.grossExpected}`} highlight />
                       <StatCell icon={<Check size={14} />} label="Amount Paid" value={`\u20AC${row.amountPaid}`} success={row.amountPaid > 0} />
@@ -500,6 +560,12 @@ export default function MyPayrollPage() {
                       />
                       <StatCell icon={<Banknote size={14} />} label="Bonus" value={`\u20AC${row.monthlyBonus}`} />
                     </div>
+
+                    {row.firstPaidAt && (
+                      <p className="text-xs text-neutral-500">
+                        First payment: {new Date(row.firstPaidAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                      </p>
+                    )}
 
                     {/* Shifts list */}
                     <div>

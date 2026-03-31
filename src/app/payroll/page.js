@@ -63,6 +63,7 @@ export default function PayrollPage() {
   const [shifts, setShifts] = useState([]);
   const [records, setRecords] = useState([]);
   const [payments, setPayments] = useState([]);
+  const [rateChanges, setRateChanges] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
 
@@ -76,22 +77,25 @@ export default function PayrollPage() {
   // ── Fetch all data ────────────────────────────────────────────────────────
   const fetchAll = useCallback(async () => {
     setLoading(true);
-    const [empRes, shiftRes, recRes, payRes] = await Promise.all([
+    const [empRes, shiftRes, recRes, payRes, rateRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("is_active", true).order("full_name", { ascending: true }),
       supabase.from("shifts").select("*").limit(1000),
       supabase.from("payroll_records").select("*").limit(1000),
       supabase.from("payroll_payments").select("*, profiles!payroll_payments_created_by_fkey(full_name)").limit(1000),
+      supabase.from("rate_changes").select("*").order("effective_year", { ascending: false }).order("effective_month", { ascending: false }),
     ]);
 
     if (empRes.error) console.error("Employees fetch error:", JSON.stringify(empRes.error));
     if (shiftRes.error) console.error("Shifts fetch error:", JSON.stringify(shiftRes.error));
     if (recRes.error) console.error("Records fetch error:", JSON.stringify(recRes.error));
     if (payRes.error) console.error("Payments fetch error:", JSON.stringify(payRes.error));
+    if (rateRes.error) console.error("Rate changes fetch error:", JSON.stringify(rateRes.error));
 
     setEmployees(empRes.data || []);
     setShifts(shiftRes.data || []);
     setRecords(recRes.data || []);
     setPayments(payRes.data || []);
+    setRateChanges(rateRes.data || []);
     setLoading(false);
   }, []);
 
@@ -161,19 +165,25 @@ export default function PayrollPage() {
         (r) => r.employee_id === emp.id && r.year === year && r.month === month
       );
 
-      const hourlyRate = record?.hourly_rate ?? emp.hourly_rate ?? 0;
-      const monthlyBonus = record?.monthly_bonus ?? emp.monthly_bonus ?? 0;
-      const grossExpected = r2(totalHours * hourlyRate + monthlyBonus);
+      // Get effective rate from rate_changes for this month
+      const effectiveRate = rateChanges.find(
+        (rc) =>
+          rc.employee_id === emp.id &&
+          (rc.effective_year < year ||
+            (rc.effective_year === year && rc.effective_month <= month))
+      );
+      const fallbackRate = record?.hourly_rate ?? effectiveRate?.hourly_rate ?? 0;
+      const grossFromShifts = r2(empShifts.reduce((sum, s) => {
+        return sum + shiftHours(s) * fallbackRate;
+      }, 0));
+      const hourlyRate = fallbackRate;
+      const monthlyBonus = record?.monthly_bonus ?? effectiveRate?.monthly_bonus ?? 0;
+      const grossExpected = r2(grossFromShifts + monthlyBonus);
       const amountPaid = record?.amount_paid ?? 0;
       const amountRemaining = r2(grossExpected - amountPaid);
 
-      // Compute status from live amounts (not the DB value, which can be stale)
-      let status = "unpaid";
-      if (amountPaid > 0 && amountPaid >= grossExpected && grossExpected > 0) {
-        status = "paid";
-      } else if (amountPaid > 0) {
-        status = "partial";
-      }
+      // Use the database status (set by trigger) instead of recalculating in JS
+      const status = record?.status ?? "unpaid";
 
       // Payments for this record
       const recordPayments = record
@@ -192,11 +202,12 @@ export default function PayrollPage() {
         amountRemaining,
         status,
         record,
+        firstPaidAt: record?.first_paid_at ?? null,
         payments: recordPayments,
         shiftCount: empShifts.length,
       };
     });
-  }, [employees, shifts, records, payments, selectedMonth]);
+  }, [employees, shifts, records, payments, rateChanges, selectedMonth]);
 
   // ── Check if selected month has fully passed ─────────────────────────────
   const monthHasPassed = useMemo(() => {
@@ -229,6 +240,14 @@ export default function PayrollPage() {
 
     // 1. Create payroll_records row if needed
     if (!existingRecord) {
+      // Get effective rate from rate_changes for this month
+      const effectiveRate = rateChanges.find(
+        (rc) =>
+          rc.employee_id === employeeId &&
+          (rc.effective_year < year ||
+            (rc.effective_year === year && rc.effective_month <= month))
+      );
+
       const { data, error } = await supabase
         .from("payroll_records")
         .insert({
@@ -236,9 +255,9 @@ export default function PayrollPage() {
           year,
           month,
           total_hours: row?.totalHours || 0,
-          hourly_rate: emp?.hourly_rate || 0,
-          monthly_bonus: emp?.monthly_bonus || 0,
-          bonus_description: emp?.bonus_description || null,
+          hourly_rate: effectiveRate?.hourly_rate || 0,
+          monthly_bonus: effectiveRate?.monthly_bonus || 0,
+          bonus_description: effectiveRate?.bonus_description || null,
           gross_expected: row?.grossExpected || 0,
           amount_paid: 0,
           status: "unpaid",
@@ -254,6 +273,18 @@ export default function PayrollPage() {
       payrollId = data.id;
     } else {
       payrollId = existingRecord.id;
+
+      // Sync gross_expected with current shift data so the trigger calculates status correctly
+      if (row && existingRecord.gross_expected !== row.grossExpected) {
+        await supabase
+          .from("payroll_records")
+          .update({
+            total_hours: row.totalHours,
+            gross_expected: row.grossExpected,
+            updated_by: user.id,
+          })
+          .eq("id", payrollId);
+      }
     }
 
     // 2. Insert payment
@@ -270,34 +301,10 @@ export default function PayrollPage() {
       return { error: payErr.message || "Failed to log payment" };
     }
 
-    // 3. Update payroll_record with new totals
-    const newAmountPaid = r2((existingRecord?.amount_paid || 0) + parseFloat(amount));
-    const grossExpected = row?.grossExpected || 0;
-    let newStatus;
-    if (newAmountPaid >= grossExpected && grossExpected > 0) {
-      newStatus = "paid";
-    } else if (newAmountPaid > 0) {
-      newStatus = "partial";
-    } else {
-      newStatus = "unpaid";
-    }
+    // The database trigger (sync_payroll_record) automatically updates
+    // amount_paid, status, and paid_at on payroll_records — no JS recalculation needed.
 
-    const { error: updateErr } = await supabase
-      .from("payroll_records")
-      .update({
-        amount_paid: newAmountPaid,
-        total_hours: row?.totalHours || 0,
-        gross_expected: grossExpected,
-        status: newStatus,
-        updated_by: user.id,
-      })
-      .eq("id", payrollId);
-
-    if (updateErr) {
-      console.error("Update payroll record error:", JSON.stringify(updateErr));
-    }
-
-    // 4. Refresh data
+    // Refresh data to pick up trigger's updates
     await fetchAll();
     return { error: null };
   };
@@ -314,28 +321,8 @@ export default function PayrollPage() {
       return;
     }
 
-    // Update payroll_record with recalculated totals
-    if (row.record) {
-      const newAmountPaid = r2(Math.max((row.record.amount_paid || 0) - parseFloat(payment.amount), 0));
-      const grossExpected = row.grossExpected || 0;
-      let newStatus;
-      if (newAmountPaid >= grossExpected && grossExpected > 0) {
-        newStatus = "paid";
-      } else if (newAmountPaid > 0) {
-        newStatus = "partial";
-      } else {
-        newStatus = "unpaid";
-      }
-
-      await supabase
-        .from("payroll_records")
-        .update({
-          amount_paid: newAmountPaid,
-          status: newStatus,
-          updated_by: user.id,
-        })
-        .eq("id", row.record.id);
-    }
+    // The database trigger (sync_payroll_record) automatically recalculates
+    // amount_paid and status on payroll_records — no JS recalculation needed.
 
     await fetchAll();
     setToast({ type: "success", message: "Payment deleted" });
@@ -354,7 +341,7 @@ export default function PayrollPage() {
       </div>
 
       {/* Month selector */}
-      <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 flex items-center gap-4">
+      <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 flex flex-wrap items-center gap-4">
         <Calendar size={18} className="text-neutral-500 shrink-0" />
         {monthOptions.length === 0 ? (
           <p className="text-neutral-500 text-sm">No shifts logged yet</p>
@@ -466,6 +453,12 @@ export default function PayrollPage() {
                         danger={row.amountRemaining > 0}
                       />
                     </div>
+
+                    {row.firstPaidAt && (
+                      <p className="text-xs text-neutral-500">
+                        First payment: {new Date(row.firstPaidAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                      </p>
+                    )}
 
                     {/* Actions */}
                     <div className="flex flex-wrap gap-2">

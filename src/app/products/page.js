@@ -108,6 +108,8 @@ export default function ProductsPage() {
   // Chart local state
   const [trendGranularity, setTrendGranularity] = useState("daily"); // "daily" or "weekly"
   const [hoveredLine, setHoveredLine] = useState(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [activeProductChart, setActiveProductChart] = useState("items");
 
   // Raw data state
   const [menuItems, setMenuItems] = useState([]);
@@ -634,7 +636,7 @@ export default function ProductsPage() {
     return (
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-end justify-between">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
             <SkeletonBlock className="h-7 w-52 mb-2" />
             <SkeletonBlock className="h-4 w-72" />
@@ -644,9 +646,9 @@ export default function ProductsPage() {
         {/* Filter bar */}
         <SkeletonBlock className="h-16 w-full rounded-2xl" />
         {/* 3 KPI cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="bg-neutral-900 p-5 rounded-2xl border border-neutral-800">
+            <div key={i} className="bg-neutral-900 p-4 md:p-5 rounded-2xl border border-neutral-800">
               <SkeletonBlock className="h-3 w-28 mb-3" />
               <SkeletonBlock className="h-8 w-36 mb-3" />
               <SkeletonBlock className="h-4 w-24" />
@@ -655,11 +657,11 @@ export default function ProductsPage() {
         </div>
         {/* 2 charts side by side */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-6 h-[500px]">
+          <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-4 md:p-6 h-[280px] md:h-[450px]">
             <SkeletonBlock className="h-5 w-40 mb-4" />
             <SkeletonBlock className="h-full w-full rounded-xl" />
           </div>
-          <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-6 h-[500px]">
+          <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-4 md:p-6 h-[250px] md:h-[400px]">
             <SkeletonBlock className="h-5 w-36 mb-4" />
             <SkeletonBlock className="h-full w-full rounded-xl" />
           </div>
@@ -690,7 +692,7 @@ export default function ProductsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-end justify-between">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
             <h1 className="text-2xl font-bold text-white tracking-tight">Products Overview</h1>
             <p className="text-sm text-neutral-400 mt-1">Item-level performance analysis, best sellers, and sales breakdown.</p>
@@ -701,74 +703,58 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      {/* Filter Bar */}
-      <div className="bg-neutral-900 p-4 rounded-2xl border border-neutral-800 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-6">
-        
-        {/* Left: Date Range */}
-        <div className="flex flex-col xl:flex-row items-start xl:items-center gap-4">
-            <div className="flex items-center gap-2 text-emerald-500 shrink-0"><Calendar size={18} /><span className="font-semibold text-white text-sm">Range</span></div>
-            <div className="flex items-center gap-2">
-                 <div className="flex items-center gap-2 bg-neutral-950 p-1 rounded-xl border border-neutral-800 hover:border-emerald-500/50 transition-colors group">
-                    <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setActiveDatePreset(null); }} className="bg-transparent text-neutral-200 text-xs px-2 py-1 focus:outline-none focus:text-white cursor-pointer" />
-                    <span className="text-neutral-600 text-xs">to</span>
-                    <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setActiveDatePreset(null); }} className="bg-transparent text-neutral-200 text-xs px-2 py-1 focus:outline-none focus:text-white cursor-pointer" />
+      {/* Mobile Filter Bar */}
+      <div className="md:hidden">
+        <button onClick={() => setFiltersOpen(!filtersOpen)} className="w-full flex items-center justify-between px-4 py-3 bg-neutral-900 border border-neutral-800 rounded-lg filter-pattern">
+          <div className="flex items-center gap-2"><Filter size={16} className="text-emerald-500" /><span className="text-sm font-semibold text-white">Filters</span></div>
+          <ChevronDown size={16} className={`text-neutral-400 transition-transform duration-200 ${filtersOpen ? "rotate-180" : ""}`} />
+        </button>
+        {filtersOpen && (
+          <div className="mt-1 bg-neutral-900 border border-neutral-800 rounded-lg p-4 space-y-3 filter-pattern">
+            <div>
+              <p className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">Date Range</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-neutral-500 mb-1 block">From</label>
+                  <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setActiveDatePreset(null); }} className="w-full bg-neutral-950 border border-neutral-800 rounded-lg text-neutral-200 text-xs px-3 py-2 focus:outline-none focus:border-emerald-500/50" />
                 </div>
-                <div className="flex bg-neutral-950 rounded-lg p-1 border border-neutral-800">
-                    {["1M", "3M", "6M", "1Y"].map((preset) => {
-                        const targetStart = lastUpdatedDate ? parseISO(lastUpdatedDate) : new Date();
-                        switch (preset) {
-                            case "1M": targetStart.setMonth(targetStart.getMonth() - 1); break;
-                            case "3M": targetStart.setMonth(targetStart.getMonth() - 3); break;
-                            case "6M": targetStart.setMonth(targetStart.getMonth() - 6); break;
-                            case "1Y": targetStart.setFullYear(targetStart.getFullYear() - 1); break;
-                        }
-                        const isPresetDisabled = oldestAvailableDate ? (targetStart < oldestAvailableDate) : false;
-                        return (
-                            <button key={preset} onClick={() => !isPresetDisabled && handleDatePreset(preset)} disabled={isPresetDisabled}
-                                className={`px-2 py-1 text-[10px] font-medium rounded-md transition-colors ${isPresetDisabled ? "text-neutral-700 cursor-not-allowed bg-transparent" : activeDatePreset === preset ? "bg-emerald-500 text-white shadow-sm" : "text-neutral-400 hover:text-white hover:bg-neutral-800 cursor-pointer"}`}
-                            >{preset}</button>
-                        );
-                    })}
+                <div>
+                  <label className="text-[10px] text-neutral-500 mb-1 block">To</label>
+                  <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setActiveDatePreset(null); }} className="w-full bg-neutral-950 border border-neutral-800 rounded-lg text-neutral-200 text-xs px-3 py-2 focus:outline-none focus:border-emerald-500/50" />
                 </div>
+              </div>
             </div>
-        </div>
-
-        <div className="hidden xl:block h-8 w-px bg-neutral-800"></div>
-        
-        {/* Right: Dimension Filters */}
-        <div className="flex flex-wrap lg:flex-nowrap items-center gap-4">
-            <div className="flex items-center gap-2 text-emerald-500 shrink-0"><Filter size={18} /><span className="font-semibold text-white text-sm">Filters</span></div>
-            
-            {/* Platform Filter (Toggle) */}
-            <div className="flex bg-neutral-950 rounded-lg p-1 border border-neutral-800 shrink-0">
+            <div>
+              <p className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">Quick Range</p>
+              <div className="flex bg-neutral-950 rounded-lg p-1 border border-neutral-800 w-fit">
+                {["1M", "3M", "6M", "1Y"].map((preset) => {
+                  const targetStart = lastUpdatedDate ? parseISO(lastUpdatedDate) : new Date();
+                  switch (preset) { case "1M": targetStart.setMonth(targetStart.getMonth() - 1); break; case "3M": targetStart.setMonth(targetStart.getMonth() - 3); break; case "6M": targetStart.setMonth(targetStart.getMonth() - 6); break; case "1Y": targetStart.setFullYear(targetStart.getFullYear() - 1); break; }
+                  const isPresetDisabled = oldestAvailableDate ? (targetStart < oldestAvailableDate) : false;
+                  return (<button key={preset} onClick={() => !isPresetDisabled && handleDatePreset(preset)} disabled={isPresetDisabled} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${isPresetDisabled ? "text-neutral-700 cursor-not-allowed bg-transparent" : activeDatePreset === preset ? "bg-emerald-500 text-white shadow-sm" : "text-neutral-400 hover:text-white hover:bg-neutral-800 cursor-pointer"}`}>{preset}</button>);
+                })}
+              </div>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">Platform</p>
+              <div className="flex flex-wrap gap-1.5">
                 {["All", "wolt", "foody", "bolt", "pos"].map((p) => (
-                    <button key={p} onClick={() => setPlatformFilter(p)}
-                        className={`capitalize px-3 py-1 text-[11px] font-medium rounded-md transition-colors ${platformFilter === p ? "bg-emerald-500 text-white shadow-sm" : "text-neutral-400 hover:text-white hover:bg-neutral-800 cursor-pointer"}`}
-                    >{p === "pos" ? "POS" : p}</button>
+                  <button key={p} onClick={() => setPlatformFilter(p)} className={`capitalize px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors border ${platformFilter === p ? "bg-emerald-500 text-white border-emerald-500 shadow-sm" : "text-neutral-400 border-neutral-800 hover:text-white hover:bg-neutral-800"}`}>{p === "pos" ? "POS" : p}</button>
                 ))}
+              </div>
             </div>
-
-            {/* Category Multi-select Dropdown */}
-            <div className="relative shrink-0" ref={categoryRef}>
-                <button 
-                  onClick={() => setIsCategoryOpen(!isCategoryOpen)}
-                  className="flex items-center justify-between gap-2 bg-neutral-950 border border-neutral-800 hover:border-neutral-700 px-3 py-1.5 rounded-lg text-xs font-medium text-neutral-300 w-44 transition-colors"
-                >
-                  <span className="truncate">
-                    {selectedCategories.length === CATEGORIES.length 
-                        ? "All categories" 
-                        : `${selectedCategories.length} categories`}
-                  </span>
+            <div>
+              <p className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">Categories</p>
+              <div className="relative" ref={categoryRef}>
+                <button onClick={() => setIsCategoryOpen(!isCategoryOpen)} className="flex items-center justify-between gap-2 w-full bg-neutral-950 border border-neutral-800 px-3 py-2 rounded-lg text-xs font-medium text-neutral-300">
+                  <span>{selectedCategories.length === CATEGORIES.length ? "All categories" : `${selectedCategories.length} categories`}</span>
                   <ChevronDown size={14} className="text-neutral-500" />
                 </button>
-                
                 {isCategoryOpen && (
-                  <div className="absolute top-10 right-0 z-50 w-56 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl overflow-hidden">
+                  <div className="absolute top-10 left-0 right-0 z-50 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl overflow-hidden">
                     <div className="p-2 border-b border-neutral-800 flex justify-between items-center">
                         <span className="text-xs font-semibold text-neutral-400">Categories</span>
-                        <button onClick={toggleAllCategories} className="text-xs text-emerald-500 hover:text-emerald-400 font-medium">
-                            {selectedCategories.length === CATEGORIES.length ? "Deselect All" : "Select All"}
-                        </button>
+                        <button onClick={toggleAllCategories} className="text-xs text-emerald-500 hover:text-emerald-400 font-medium">{selectedCategories.length === CATEGORIES.length ? "Deselect All" : "Select All"}</button>
                     </div>
                     <div className="max-h-60 overflow-y-auto p-1">
                         {CATEGORIES.map(cat => (
@@ -783,28 +769,20 @@ export default function ProductsPage() {
                     </div>
                   </div>
                 )}
+              </div>
             </div>
-
-            {/* Items Multi-select Dropdown */}
-            <div className="relative shrink-0" ref={itemsRef}>
-                <button 
-                  onClick={() => setIsItemsOpen(!isItemsOpen)}
-                  disabled={activeCategoryItemsCount === 0}
-                  className={`flex items-center justify-between gap-2 bg-neutral-950 border border-neutral-800 px-3 py-1.5 rounded-lg text-xs font-medium w-36 transition-colors ${activeCategoryItemsCount === 0 ? "opacity-50 cursor-not-allowed text-neutral-500" : "text-neutral-300 hover:border-neutral-700"}`}
-                >
-                  <span className="truncate">
-                    Items ({currentSelectedItemsInActiveCats})
-                  </span>
+            <div>
+              <p className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">Items</p>
+              <div className="relative" ref={itemsRef}>
+                <button onClick={() => setIsItemsOpen(!isItemsOpen)} disabled={activeCategoryItemsCount === 0} className={`flex items-center justify-between gap-2 w-full bg-neutral-950 border border-neutral-800 px-3 py-2 rounded-lg text-xs font-medium ${activeCategoryItemsCount === 0 ? "opacity-50 cursor-not-allowed text-neutral-500" : "text-neutral-300"}`}>
+                  <span>Items ({currentSelectedItemsInActiveCats})</span>
                   <ChevronDown size={14} className="text-neutral-500" />
                 </button>
-                
                 {isItemsOpen && activeCategoryItemsCount > 0 && (
-                  <div className="absolute top-10 right-0 z-50 w-64 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl overflow-hidden">
+                  <div className="absolute top-10 left-0 right-0 z-50 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl overflow-hidden">
                     <div className="p-2 border-b border-neutral-800 flex justify-between items-center">
                         <span className="text-xs font-semibold text-neutral-400">Menu Items</span>
-                        <button onClick={toggleAllItems} className="text-xs text-emerald-500 hover:text-emerald-400 font-medium">
-                            {currentSelectedItemsInActiveCats === activeCategoryItemsCount ? "Deselect All" : "Select All"}
-                        </button>
+                        <button onClick={toggleAllItems} className="text-xs text-emerald-500 hover:text-emerald-400 font-medium">{currentSelectedItemsInActiveCats === activeCategoryItemsCount ? "Deselect All" : "Select All"}</button>
                     </div>
                     <div className="max-h-72 overflow-y-auto p-1">
                         {CATEGORIES.filter(cat => parsedItemsGrouped[cat]).map(cat => (
@@ -826,17 +804,99 @@ export default function ProductsPage() {
                     </div>
                   </div>
                 )}
+              </div>
             </div>
+          </div>
+        )}
+      </div>
 
+      {/* Desktop Filter Bar (unchanged) */}
+      <div className="hidden md:flex bg-neutral-900 p-4 rounded-2xl border border-neutral-800 shadow-lg flex-row items-center justify-between gap-6 filter-pattern">
+        <div className="flex flex-col xl:flex-row items-start xl:items-center gap-4">
+            <div className="flex items-center gap-2 text-emerald-500 shrink-0"><Calendar size={18} /><span className="font-semibold text-white text-sm">Range</span></div>
+            <div className="flex items-center gap-2">
+                 <div className="flex items-center gap-2 bg-neutral-950 p-1 rounded-xl border border-neutral-800 hover:border-emerald-500/50 transition-colors group">
+                    <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setActiveDatePreset(null); }} className="bg-transparent text-neutral-200 text-xs px-2 py-1 focus:outline-none focus:text-white cursor-pointer" />
+                    <span className="text-neutral-600 text-xs">to</span>
+                    <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setActiveDatePreset(null); }} className="bg-transparent text-neutral-200 text-xs px-2 py-1 focus:outline-none focus:text-white cursor-pointer" />
+                </div>
+                <div className="flex bg-neutral-950 rounded-lg p-1 border border-neutral-800">
+                    {["1M", "3M", "6M", "1Y"].map((preset) => {
+                        const targetStart = lastUpdatedDate ? parseISO(lastUpdatedDate) : new Date();
+                        switch (preset) { case "1M": targetStart.setMonth(targetStart.getMonth() - 1); break; case "3M": targetStart.setMonth(targetStart.getMonth() - 3); break; case "6M": targetStart.setMonth(targetStart.getMonth() - 6); break; case "1Y": targetStart.setFullYear(targetStart.getFullYear() - 1); break; }
+                        const isPresetDisabled = oldestAvailableDate ? (targetStart < oldestAvailableDate) : false;
+                        return (<button key={preset} onClick={() => !isPresetDisabled && handleDatePreset(preset)} disabled={isPresetDisabled} className={`px-2 py-1 text-[10px] font-medium rounded-md transition-colors ${isPresetDisabled ? "text-neutral-700 cursor-not-allowed bg-transparent" : activeDatePreset === preset ? "bg-emerald-500 text-white shadow-sm" : "text-neutral-400 hover:text-white hover:bg-neutral-800 cursor-pointer"}`}>{preset}</button>);
+                    })}
+                </div>
+            </div>
+        </div>
+        <div className="h-8 w-px bg-neutral-800"></div>
+        <div className="flex flex-wrap lg:flex-nowrap items-center gap-4">
+            <div className="flex items-center gap-2 text-emerald-500 shrink-0"><Filter size={18} /><span className="font-semibold text-white text-sm">Filters</span></div>
+            <div className="flex bg-neutral-950 rounded-lg p-1 border border-neutral-800 shrink-0">
+                {["All", "wolt", "foody", "bolt", "pos"].map((p) => (
+                    <button key={p} onClick={() => setPlatformFilter(p)} className={`capitalize px-3 py-1 text-[11px] font-medium rounded-md transition-colors ${platformFilter === p ? "bg-emerald-500 text-white shadow-sm" : "text-neutral-400 hover:text-white hover:bg-neutral-800 cursor-pointer"}`}>{p === "pos" ? "POS" : p}</button>
+                ))}
+            </div>
+            <div className="relative shrink-0" ref={categoryRef}>
+                <button onClick={() => setIsCategoryOpen(!isCategoryOpen)} className="flex items-center justify-between gap-2 bg-neutral-950 border border-neutral-800 hover:border-neutral-700 px-3 py-1.5 rounded-lg text-xs font-medium text-neutral-300 w-44 transition-colors">
+                  <span className="truncate">{selectedCategories.length === CATEGORIES.length ? "All categories" : `${selectedCategories.length} categories`}</span>
+                  <ChevronDown size={14} className="text-neutral-500" />
+                </button>
+                {isCategoryOpen && (
+                  <div className="absolute top-10 right-0 z-50 w-56 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl overflow-hidden">
+                    <div className="p-2 border-b border-neutral-800 flex justify-between items-center">
+                        <span className="text-xs font-semibold text-neutral-400">Categories</span>
+                        <button onClick={toggleAllCategories} className="text-xs text-emerald-500 hover:text-emerald-400 font-medium">{selectedCategories.length === CATEGORIES.length ? "Deselect All" : "Select All"}</button>
+                    </div>
+                    <div className="max-h-60 overflow-y-auto p-1">
+                        {CATEGORIES.map(cat => (
+                           <label key={cat} onClick={() => toggleCategory(cat)} className="flex items-center gap-3 px-2 py-2 hover:bg-neutral-800 rounded-lg cursor-pointer transition-colors group text-sm">
+                             <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-colors ${selectedCategories.includes(cat) ? "bg-emerald-500 border-emerald-500" : "bg-neutral-950 border-neutral-700 flex-shrink-0"}`}>{selectedCategories.includes(cat) && <Check size={12} className="text-white" strokeWidth={3} />}</div>
+                             <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{backgroundColor: CATEGORY_COLORS[cat]}}></div>
+                             <span className="text-neutral-300 group-hover:text-white flex-1 truncate">{cat}</span>
+                           </label>
+                        ))}
+                    </div>
+                  </div>
+                )}
+            </div>
+            <div className="relative shrink-0" ref={itemsRef}>
+                <button onClick={() => setIsItemsOpen(!isItemsOpen)} disabled={activeCategoryItemsCount === 0} className={`flex items-center justify-between gap-2 bg-neutral-950 border border-neutral-800 px-3 py-1.5 rounded-lg text-xs font-medium w-36 transition-colors ${activeCategoryItemsCount === 0 ? "opacity-50 cursor-not-allowed text-neutral-500" : "text-neutral-300 hover:border-neutral-700"}`}>
+                  <span className="truncate">Items ({currentSelectedItemsInActiveCats})</span>
+                  <ChevronDown size={14} className="text-neutral-500" />
+                </button>
+                {isItemsOpen && activeCategoryItemsCount > 0 && (
+                  <div className="absolute top-10 right-0 z-50 w-64 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl overflow-hidden">
+                    <div className="p-2 border-b border-neutral-800 flex justify-between items-center">
+                        <span className="text-xs font-semibold text-neutral-400">Menu Items</span>
+                        <button onClick={toggleAllItems} className="text-xs text-emerald-500 hover:text-emerald-400 font-medium">{currentSelectedItemsInActiveCats === activeCategoryItemsCount ? "Deselect All" : "Select All"}</button>
+                    </div>
+                    <div className="max-h-72 overflow-y-auto p-1">
+                        {CATEGORIES.filter(cat => parsedItemsGrouped[cat]).map(cat => (
+                            <div key={cat} className="mb-2 last:mb-0">
+                                <div className="px-2 py-1.5 text-xs font-bold text-neutral-500 uppercase tracking-wider flex items-center gap-2 sticky top-0 bg-neutral-900/90 backdrop-blur-sm z-10"><div className="w-1.5 h-1.5 rounded-full" style={{backgroundColor: CATEGORY_COLORS[cat]}}></div>{cat}</div>
+                                {parsedItemsGrouped[cat].map(item => (
+                                   <label key={item.canonical_name} onClick={() => toggleItem(item.canonical_name)} className="flex items-center gap-3 px-2 py-1.5 hover:bg-neutral-800 rounded-lg cursor-pointer transition-colors group text-sm ml-2">
+                                     <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-colors ${selectedItems.includes(item.canonical_name) ? "bg-emerald-500 border-emerald-500" : "bg-neutral-950 border-neutral-700 mx-0 flex-shrink-0"}`}>{selectedItems.includes(item.canonical_name) && <Check size={12} className="text-white" strokeWidth={3} />}</div>
+                                     <span className="text-neutral-300 group-hover:text-white flex-1 truncate">{item.canonical_name}</span>
+                                   </label>
+                                ))}
+                            </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+            </div>
         </div>
       </div>
 
       {/* KPI Row */}
       {pd.kpis && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-neutral-900 p-5 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden">
+            <div className="bg-neutral-900 p-4 md:p-5 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden">
                 <p className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-1">Total items sold</p>
-                <h3 className="text-3xl font-bold text-white mb-2">{pd.kpis.totalSold.val.toLocaleString()}</h3>
+                <h3 className="text-xl md:text-3xl font-bold text-white mb-2">{pd.kpis.totalSold.val.toLocaleString()}</h3>
                 {pd.kpis.hasValidPrevPeriod ? (
                     <div className="flex items-center justify-between">
                         {renderTrend(pd.kpis.totalSold.change)}
@@ -849,11 +909,11 @@ export default function ProductsPage() {
                 )}
             </div>
             
-            <div className="bg-neutral-900 p-5 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden">
+            <div className="bg-neutral-900 p-4 md:p-5 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden">
                 <p className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-1">Best seller</p>
                 {pd.kpis.bestSeller ? (
                     <>
-                        <h3 className="text-xl font-bold text-white mb-1 truncate" title={pd.kpis.bestSeller.name}>{pd.kpis.bestSeller.name}</h3>
+                        <h3 className="text-xl font-bold text-white mb-1 md:truncate line-clamp-2 md:line-clamp-1" title={pd.kpis.bestSeller.name}>{pd.kpis.bestSeller.name}</h3>
                         <div className="flex items-center justify-between mt-auto">
                             <span className="text-sm font-medium text-emerald-400">€{pd.kpis.bestSeller.val.toFixed(2)}</span>
                             <span className="text-[10px] text-neutral-500">Excl. sides/drinks</span>
@@ -864,11 +924,11 @@ export default function ProductsPage() {
                 )}
             </div>
 
-            <div className="bg-neutral-900 p-5 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden">
+            <div className="bg-neutral-900 p-4 md:p-5 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden">
                 <p className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-1">Slowest mover</p>
                 {pd.kpis.slowestMover ? (
                     <>
-                        <h3 className="text-xl font-bold text-white mb-1 truncate" title={pd.kpis.slowestMover.name}>{pd.kpis.slowestMover.name}</h3>
+                        <h3 className="text-xl font-bold text-white mb-1 md:truncate line-clamp-2 md:line-clamp-1" title={pd.kpis.slowestMover.name}>{pd.kpis.slowestMover.name}</h3>
                         <div className="flex items-center justify-between mt-auto">
                             <span className="text-sm font-medium text-red-400">€{pd.kpis.slowestMover.val.toFixed(2)}</span>
                             <span className="text-[10px] text-neutral-500">Excl. sides/drinks</span>
@@ -881,33 +941,52 @@ export default function ProductsPage() {
           </div>
       )}
 
+      {/* Mobile: Tabbed charts */}
+      <div className="md:hidden flex justify-center mb-4">
+          <div className="flex bg-neutral-900 rounded-xl p-1 border border-neutral-800 w-fit">
+              <button onClick={() => setActiveProductChart("items")} className={`px-4 py-1.5 text-[13px] font-medium rounded-lg transition-colors ${activeProductChart === "items" ? "bg-emerald-500 text-white" : "text-neutral-400"}`}>Top Items</button>
+              <button onClick={() => setActiveProductChart("trend")} className={`px-4 py-1.5 text-[13px] font-medium rounded-lg transition-colors ${activeProductChart === "trend" ? "bg-emerald-500 text-white" : "text-neutral-400"}`}>Revenue Trend</button>
+          </div>
+      </div>
+
       {/* Top Items Chart (Horizontal Bar Code) */}
-      <div className="bg-neutral-900 p-6 rounded-2xl border border-neutral-800 shadow-lg flex flex-col h-[450px]">
-         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 shrink-0 gap-4">
-             <h3 className="text-lg font-bold text-white">Revenue by item <span className="text-sm font-medium text-neutral-500 ml-2">(Top 10)</span></h3>
-             
-             {/* Legend */}
-             <div className="flex flex-wrap items-center gap-3">
+      {(() => {
+        const CATEGORY_ABBR = { "Fried Chicken Combos": "FC Combos", "Burger & Wrap Combos": "BW Combos", "Products": "Products", "Sides": "Sides", "Dips": "Dips", "Drinks": "Drinks" };
+        const mobileBarHeight = pd.chartData.length > 0 ? (pd.chartData.length * 44) + 60 : 280;
+        const wrapLabel = (str, max) => {
+          if (str.length <= max) return [str];
+          const idx = str.lastIndexOf(' ', max);
+          if (idx <= 0) return [str.slice(0, max), str.slice(max)];
+          return [str.slice(0, idx), str.slice(idx + 1)];
+        };
+        return (
+      <div className={`bg-neutral-900 p-4 md:p-6 rounded-2xl border border-neutral-800 shadow-lg flex flex-col md:h-[450px] ${activeProductChart !== "items" ? "hidden md:flex" : ""}`} style={{ minHeight: typeof window !== 'undefined' && window.innerWidth < 768 ? undefined : undefined }}>
+         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 md:mb-6 shrink-0 gap-3 md:gap-4">
+             <h3 className="text-sm md:text-lg font-bold text-white">Revenue by item <span className="text-xs md:text-sm font-medium text-neutral-500 ml-1 md:ml-2">(Top 10)</span></h3>
+
+             {/* Legend — abbreviated on mobile */}
+             <div className="flex flex-wrap items-center gap-2 md:gap-3">
                  {CATEGORIES.filter(c => selectedCategories.includes(c)).map(cat => (
-                     <div key={cat} className="flex items-center gap-1.5 opacity-80">
-                         <div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: CATEGORY_COLORS[cat]}}></div>
-                         <span className="text-[10px] font-medium text-neutral-400">{cat}</span>
+                     <div key={cat} className="flex items-center gap-1 md:gap-1.5 opacity-80">
+                         <div className="w-2 md:w-2.5 h-2 md:h-2.5 rounded-full" style={{backgroundColor: CATEGORY_COLORS[cat]}}></div>
+                         <span className="hidden md:inline text-[10px] font-medium text-neutral-400">{cat}</span>
+                         <span className="md:hidden text-[10px] font-medium text-neutral-400">{CATEGORY_ABBR[cat] || cat}</span>
                      </div>
                  ))}
              </div>
          </div>
-         <div className="flex-1 min-h-0">
+         <div className="min-h-0" style={{ height: `${mobileBarHeight}px` }}>
              {pd.chartData.length === 0 ? (
                  <div className="w-full h-full flex flex-col items-center justify-center text-neutral-500">
                      <p>No orders found for the selected filters</p>
                  </div>
              ) : (
                  <ResponsiveContainer width="100%" height="100%">
-                     <BarChart data={pd.chartData} layout="vertical" margin={{ top: 0, right: 30, left: 100, bottom: 0 }}>
+                     <BarChart data={pd.chartData} layout="vertical" margin={{ top: 0, right: 10, left: 0, bottom: 0 }}>
                          <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#262626" />
                          <XAxis type="number" fontSize={10} axisLine={false} tickLine={false} stroke="#a3a3a3" tickFormatter={(val) => `€${val}`} />
-                         <YAxis dataKey="canonical_name" type="category" width={120} fontSize={11} axisLine={false} tickLine={false} stroke="#d4d4d4" tick={{ fill: '#d4d4d4' }} />
-                         <RechartsTooltip cursor={{ fill: '#ffffff', opacity: 0.05 }} content={({ active, payload, label }) => {
+                         <YAxis dataKey="canonical_name" type="category" width={110} axisLine={false} tickLine={false} stroke="#d4d4d4" tick={({ x, y, payload }) => { const lines = wrapLabel(payload.value, 16); return (<text x={x} y={y} textAnchor="end" fill="#d4d4d4" fontSize={11}>{lines.length === 1 ? <tspan dy={4}>{lines[0]}</tspan> : <>{lines.map((line, i) => <tspan key={i} x={x} dy={i === 0 ? -2 : 14}>{line}</tspan>)}</>}</text>); }} />
+                         <RechartsTooltip cursor={{ fill: '#ffffff', opacity: 0.05 }} wrapperStyle={{ zIndex: 20 }} content={({ active, payload, label }) => {
                              if (!active || !payload?.length) return null;
                              return (
                                  <div style={{ backgroundColor: "#171717", border: "1px solid #404040", borderRadius: "12px", padding: "12px 14px", color: "#f5f5f5" }}>
@@ -930,15 +1009,21 @@ export default function ProductsPage() {
              )}
          </div>
       </div>
+        );
+      })()}
 
       {/* Revenue Trend Line Chart */}
-      <div className="bg-neutral-900 p-6 rounded-2xl border border-neutral-800 shadow-lg flex flex-col h-[400px]">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 shrink-0 gap-4">
+      {(() => {
+        const isMobileTrend = typeof window !== 'undefined' && window.innerWidth < 768;
+        const trendItems = pd.trend?.topItems || [];
+        const mobileTrendItems = trendItems.slice(0, 3);
+        return (
+      <div className={`bg-neutral-900 p-4 md:p-6 rounded-2xl border border-neutral-800 shadow-lg flex flex-col h-[320px] md:h-[400px] ${activeProductChart !== "trend" ? "hidden md:flex" : ""}`}>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-3 md:mb-6 shrink-0 gap-2 md:gap-4">
               <div>
-                  <h3 className="text-lg font-bold text-white flex items-center gap-2"><TrendingUp size={20} className="text-emerald-500"/> Revenue trend</h3>
-                  <p className="text-xs text-neutral-500 mt-1">Total revenue over time for selected filters</p>
+                  <h3 className="text-sm md:text-lg font-bold text-white flex items-center gap-2"><TrendingUp size={16} className="text-emerald-500 md:w-5 md:h-5"/> Revenue trend</h3>
+                  <p className="text-xs text-neutral-500 mt-0.5 md:mt-1">Top items revenue over time</p>
               </div>
-              
               <div className="flex bg-neutral-950 rounded-lg p-1 border border-neutral-800">
                   {["daily", "weekly"].map((g) => (
                       <button key={g} onClick={() => setTrendGranularity(g)}
@@ -948,7 +1033,17 @@ export default function ProductsPage() {
               </div>
           </div>
 
-          <div className="flex-1 min-h-0 relative">
+          {/* Mobile legend above chart */}
+          <div className="md:hidden flex flex-wrap gap-2 mb-2 shrink-0">
+              {mobileTrendItems.map((item) => (
+                  <div key={item} className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: getAssignedColor(item) }}></div>
+                      <span className="text-[11px] text-neutral-400">{item}</span>
+                  </div>
+              ))}
+          </div>
+
+          <div className="flex-1 min-h-[150px] relative">
               {pd.trend?.isTooShort ? (
                   <div className="w-full h-full flex flex-col items-center justify-center text-neutral-500">
                       <p>Select a wider date range to see weekly data</p>
@@ -959,37 +1054,46 @@ export default function ProductsPage() {
                   </div>
               ) : (
                   <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={pd.trend.data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }} onMouseLeave={() => setHoveredLine(null)}>
+                      <LineChart data={pd.trend.data} margin={{ top: 5, right: 10, left: -20, bottom: 0 }} onMouseLeave={() => setHoveredLine(null)}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#262626" />
                           <XAxis dataKey="label" fontSize={10} axisLine={false} tickLine={false} stroke="#a3a3a3" />
                           <YAxis fontSize={10} axisLine={false} tickLine={false} stroke="#737373" tickFormatter={(val) => `€${val}`} />
-                          <RechartsTooltip 
-                              cursor={{ stroke: '#525252', strokeWidth: 1, strokeDasharray: '3 3' }} 
+                          <RechartsTooltip
+                              cursor={{ stroke: '#525252', strokeWidth: 1, strokeDasharray: '3 3' }}
                               content={<CustomTrendTooltip setHoveredLine={setHoveredLine} />}
                           />
-                          <Legend 
-                              verticalAlign="bottom" 
-                              height={36} 
+                          <Legend
+                              verticalAlign="bottom"
                               iconType="circle"
-                              wrapperStyle={{ fontSize: '11px', color: '#a3a3a3', paddingTop: '10px' }}
                               onMouseEnter={(e) => setHoveredLine(e.dataKey)}
                               onMouseLeave={() => setHoveredLine(null)}
+                              content={({ payload }) => (
+                                  <div className="hidden md:flex justify-center gap-4 pt-2.5">
+                                      {payload.map((entry, idx) => (
+                                          <div key={idx} className="flex items-center gap-1.5 cursor-pointer" onMouseEnter={() => setHoveredLine(entry.dataKey)} onMouseLeave={() => setHoveredLine(null)}>
+                                              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry.color }}></div>
+                                              <span className="text-[11px] text-neutral-400">{entry.value}</span>
+                                          </div>
+                                      ))}
+                                  </div>
+                              )}
                           />
-                          {pd.trend.topItems.map((item) => {
+                          {trendItems.map((item, idx) => {
                                const color = getAssignedColor(item);
                                const opacity = hoveredLine && hoveredLine !== item ? 0.2 : 1;
                                return (
-                                   <Line 
-                                      key={item} 
-                                      type="monotone" 
-                                      dataKey={item} 
+                                   <Line
+                                      key={item}
+                                      type="natural"
+                                      dataKey={item}
                                       name={item}
-                                      stroke={color} 
-                                      strokeWidth={Math.max(2, opacity * 3)} 
+                                      stroke={color}
+                                      strokeWidth={Math.max(2, opacity * 3)}
                                       strokeOpacity={opacity}
                                       dot={false}
                                       activeDot={{ r: 4, fill: color, strokeOpacity: 1 }}
                                       onMouseEnter={() => setHoveredLine(item)}
+                                      hide={false}
                                    />
                                );
                           })}
@@ -998,9 +1102,34 @@ export default function ProductsPage() {
              )}
           </div>
       </div>
+        );
+      })()}
 
-      {/* Platform Breakdown Table */}
-      <div className="bg-neutral-900 rounded-2xl border border-neutral-800 shadow-lg overflow-hidden flex flex-col">
+      {/* Mobile: Platform Breakdown compact list */}
+      <div className="md:hidden bg-neutral-900 rounded-2xl border border-neutral-800 shadow-lg p-4">
+          <h3 className="text-sm font-bold text-white mb-3">Items Breakdown</h3>
+          {sortedTableData.length === 0 ? (
+              <p className="text-sm text-neutral-500 text-center py-4">No orders found for the selected filters</p>
+          ) : (
+              <div className="space-y-0">
+                  {sortedTableData.map((row, idx) => (
+                      <div key={`${row.canonical_name}-${idx}`} className={`flex items-center justify-between py-2.5 ${idx > 0 ? "border-t border-neutral-800/50" : ""}`}>
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: CATEGORY_COLORS[row.category] || CATEGORY_COLORS.Unknown }}></div>
+                              <span className="text-sm text-neutral-300 truncate">{row.canonical_name}</span>
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0 ml-2">
+                              <span className="text-xs text-neutral-500">{row.totalOrders} sold</span>
+                              <span className="text-sm font-semibold text-emerald-400">€{row.revenue.toFixed(2)}</span>
+                          </div>
+                      </div>
+                  ))}
+              </div>
+          )}
+      </div>
+
+      {/* Desktop: Platform Breakdown Table */}
+      <div className="hidden md:flex bg-neutral-900 rounded-2xl border border-neutral-800 shadow-lg overflow-hidden flex-col">
           <div className="p-6 border-b border-neutral-800 flex justify-between items-center">
               <h3 className="text-lg font-bold text-white">Items Platform Breakdown</h3>
           </div>

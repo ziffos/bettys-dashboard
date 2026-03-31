@@ -14,6 +14,7 @@ import {
   Coffee,
   FileText,
   AlertTriangle,
+  Calendar as CalendarLucide,
 } from "lucide-react";
 import {
   format,
@@ -23,6 +24,9 @@ import {
   endOfWeek,
   addMonths,
   subMonths,
+  addWeeks,
+  subWeeks,
+  addDays,
   eachDayOfInterval,
   isSameMonth,
   isSameDay,
@@ -87,6 +91,11 @@ export default function CalendarPage() {
   const [detailShift, setDetailShift] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
+  // Mobile view state
+  const [mobileView, setMobileView] = useState("week"); // "week" | "day"
+  const [mobileWeekStart, setMobileWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
+  const [selectedDay, setSelectedDay] = useState(new Date());
+
   // Paid-month cache: "empId-YYYY-MM" → boolean
   const [paidCache, setPaidCache] = useState({});
 
@@ -136,7 +145,7 @@ export default function CalendarPage() {
         .eq("month", month)
         .maybeSingle();
 
-      const paid = data?.amount_paid > 0;
+      const paid = data?.status === "paid";
       setPaidCache((prev) => ({ ...prev, [key]: paid }));
       return paid;
     },
@@ -162,6 +171,25 @@ export default function CalendarPage() {
   const gridStart = startOfWeek(monthStart, { weekStartsOn: 1 }); // Monday
   const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
   const days = eachDayOfInterval({ start: gridStart, end: gridEnd });
+
+  // Mobile week days
+  const mobileWeekDays = eachDayOfInterval({
+    start: mobileWeekStart,
+    end: addDays(mobileWeekStart, 6),
+  });
+
+  const goToToday = () => {
+    const today = new Date();
+    setCurrentMonth(today);
+    setMobileWeekStart(startOfWeek(today, { weekStartsOn: 1 }));
+    setSelectedDay(today);
+  };
+
+  const today = new Date();
+  const isViewingTodayMobile = mobileView === "week"
+    ? isSameDay(mobileWeekStart, startOfWeek(today, { weekStartsOn: 1 }))
+    : isSameDay(selectedDay, today);
+  const isViewingTodayDesktop = isSameMonth(currentMonth, today);
 
   // Group shifts by date string
   const shiftsByDate = useMemo(() => {
@@ -193,8 +221,8 @@ export default function CalendarPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      {/* Desktop Header */}
+      <div className="hidden md:flex flex-row items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white tracking-tight">Calendar</h1>
           <p className="text-neutral-400 text-sm mt-1">View and manage work shifts.</p>
@@ -208,17 +236,33 @@ export default function CalendarPage() {
         </button>
       </div>
 
-      {/* Month navigation */}
-      <div className="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-2xl p-4">
+      {/* Mobile Header */}
+      <div className="md:hidden">
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-xl font-bold text-white tracking-tight">Calendar</h1>
+          <button onClick={goToToday} className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${isViewingTodayMobile ? "text-emerald-400 bg-emerald-500/10 border border-emerald-500/20" : "text-neutral-400 bg-neutral-800 border border-neutral-700"}`}>
+            Today
+          </button>
+        </div>
+        {/* Week/Day toggle */}
+        <div className="flex bg-neutral-900 rounded-xl p-1 border border-neutral-800 w-fit mx-auto mb-4">
+          <button onClick={() => setMobileView("week")} className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-colors ${mobileView === "week" ? "bg-emerald-500 text-white" : "text-neutral-400"}`}>Week</button>
+          <button onClick={() => setMobileView("day")} className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-colors ${mobileView === "day" ? "bg-emerald-500 text-white" : "text-neutral-400"}`}>Day</button>
+        </div>
+      </div>
+
+      {/* Desktop Month navigation */}
+      <div className="hidden md:flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-2xl p-4">
         <button
           onClick={() => setCurrentMonth((m) => subMonths(m, 1))}
           className="p-2 text-neutral-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
         >
           <ChevronLeft size={20} />
         </button>
-        <h2 className="text-lg font-bold text-white">
-          {format(currentMonth, "MMMM yyyy")}
-        </h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-lg font-bold text-white">{format(currentMonth, "MMMM yyyy")}</h2>
+          <button onClick={goToToday} className={`px-2.5 py-1 text-[10px] font-semibold rounded-md transition-colors ${isViewingTodayDesktop ? "text-emerald-400 bg-emerald-500/10 border border-emerald-500/20" : "text-neutral-400 bg-neutral-800 border border-neutral-700 hover:bg-neutral-700"}`}>Today</button>
+        </div>
         <button
           onClick={() => setCurrentMonth((m) => addMonths(m, 1))}
           className="p-2 text-neutral-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
@@ -227,11 +271,122 @@ export default function CalendarPage() {
         </button>
       </div>
 
-      {/* Calendar grid */}
+      {/* Mobile Week/Day navigation */}
+      <div className="md:hidden">
+        {mobileView === "week" ? (
+          <div className="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl p-3">
+            <button onClick={() => setMobileWeekStart(w => subWeeks(w, 1))} className="p-2 text-neutral-400 hover:text-white rounded-lg"><ChevronLeft size={18} /></button>
+            <span className="text-sm font-semibold text-white">{format(mobileWeekStart, "MMM d")} – {format(addDays(mobileWeekStart, 6), "MMM d, yyyy")}</span>
+            <button onClick={() => setMobileWeekStart(w => addWeeks(w, 1))} className="p-2 text-neutral-400 hover:text-white rounded-lg"><ChevronRight size={18} /></button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded-xl p-3">
+            <button onClick={() => setSelectedDay(d => addDays(d, -1))} className="p-2 text-neutral-400 hover:text-white rounded-lg"><ChevronLeft size={18} /></button>
+            <span className="text-sm font-semibold text-white">{format(selectedDay, "EEEE, MMM d")}</span>
+            <button onClick={() => setSelectedDay(d => addDays(d, 1))} className="p-2 text-neutral-400 hover:text-white rounded-lg"><ChevronRight size={18} /></button>
+          </div>
+        )}
+      </div>
+
+      {/* ── Mobile Calendar Views ── */}
+      <div className="md:hidden">
+        {loading ? (
+          <div className="space-y-3">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="bg-neutral-900 rounded-xl border border-neutral-800 p-4">
+                <SkeletonBlock className="h-4 w-24 mb-3" />
+                <SkeletonBlock className="h-12 w-full rounded-lg" />
+              </div>
+            ))}
+          </div>
+        ) : mobileView === "week" ? (
+          /* Week list view */
+          <div className="space-y-2">
+            {mobileWeekDays.map((day) => {
+              const dateStr = format(day, "yyyy-MM-dd");
+              const isToday = isSameDay(day, new Date());
+              const dayShifts = shiftsByDate[dateStr] || [];
+              return (
+                <div key={dateStr} className={`bg-neutral-900 rounded-xl border p-4 ${isToday ? "border-emerald-500/50" : "border-neutral-800"}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      {isToday && <div className="w-2 h-2 rounded-full bg-emerald-500"></div>}
+                      <span className={`text-sm font-semibold ${isToday ? "text-emerald-400" : "text-white"}`}>{format(day, "EEE")}</span>
+                      <span className="text-sm text-neutral-400">{format(day, "d MMM")}</span>
+                    </div>
+                    <button onClick={() => setShiftModal({ mode: "add", date: dateStr })} className="p-1 text-neutral-600 hover:text-emerald-400 transition-colors"><Plus size={16} /></button>
+                  </div>
+                  {dayShifts.length === 0 ? (
+                    <p className="text-xs text-neutral-600 italic">No shifts</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {dayShifts.map((shift) => {
+                        const c = getColour(shift.employee_id, colourMap);
+                        const fullName = shift.profiles?.full_name || "?";
+                        return (
+                          <button key={shift.id} onClick={() => setDetailShift(shift)} className={`w-full text-left px-3 py-2 rounded-lg border flex items-center justify-between ${c.bg} ${c.border} ${c.text} hover:brightness-125 transition-all`}>
+                            <span className="text-[13px] font-medium">{fullName}</span>
+                            <span className="text-xs opacity-75">{formatTime(shift.shift_date, shift.start_time)} – {formatTime(shift.shift_date, shift.end_time)}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* Day view */
+          (() => {
+            const dateStr = format(selectedDay, "yyyy-MM-dd");
+            const dayShifts = shiftsByDate[dateStr] || [];
+            const isToday = isSameDay(selectedDay, new Date());
+            return (
+              <div className="space-y-3">
+                {dayShifts.length === 0 ? (
+                  <div className="bg-neutral-900 rounded-xl border border-neutral-800 p-8 text-center">
+                    <CalendarLucide size={32} className="text-neutral-700 mx-auto mb-3" />
+                    <p className="text-sm text-neutral-500">No shifts scheduled</p>
+                    <button onClick={() => setShiftModal({ mode: "add", date: dateStr })} className="mt-3 px-4 py-2 text-xs font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">Add Shift</button>
+                  </div>
+                ) : dayShifts.map((shift) => {
+                  const c = getColour(shift.employee_id, colourMap);
+                  const fullName = shift.profiles?.full_name || "?";
+                  return (
+                    <button key={shift.id} onClick={() => setDetailShift(shift)} className={`w-full text-left bg-neutral-900 rounded-xl border p-4 ${c.border} hover:brightness-110 transition-all`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className={`text-base font-semibold ${c.text}`}>{fullName}</span>
+                        {canModify(shift) && <span className="text-[10px] text-neutral-500">Tap to edit</span>}
+                      </div>
+                      <div className="flex items-center gap-4 text-sm text-neutral-400">
+                        <div className="flex items-center gap-1.5"><Clock size={14} /> {formatTime(shift.shift_date, shift.start_time)} – {formatTime(shift.shift_date, shift.end_time)}</div>
+                        <div className="flex items-center gap-1.5"><Coffee size={14} /> {shift.break_minutes ?? 0}min</div>
+                      </div>
+                      {shift.notes && <p className="text-xs text-neutral-500 mt-2">{shift.notes}</p>}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()
+        )}
+      </div>
+
+      {/* ── Mobile FAB (Floating Action Button) ── */}
+      <button
+        onClick={() => setShiftModal({ mode: "add", date: format(mobileView === "day" ? selectedDay : new Date(), "yyyy-MM-dd") })}
+        className="md:hidden fixed bottom-6 right-6 z-[80] w-14 h-14 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full shadow-lg shadow-emerald-500/25 flex items-center justify-center transition-colors"
+      >
+        <Plus size={24} />
+      </button>
+
+      {/* ── Desktop Calendar grid ── */}
+      <div className="hidden md:block">
       {loading ? (
-        <div className="bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
+        <div className="bg-neutral-900 border border-neutral-800 rounded-2xl overflow-x-auto">
           {/* Day-of-week headers */}
-          <div className="grid grid-cols-7 border-b border-neutral-800">
+          <div className="grid grid-cols-7 border-b border-neutral-800 min-w-[640px]">
             {[...Array(7)].map((_, i) => (
               <div key={i} className="p-3 flex justify-center">
                 <SkeletonBlock className="h-3 w-8" />
@@ -240,7 +395,7 @@ export default function CalendarPage() {
           </div>
           {/* 5 rows x 7 cols */}
           {[...Array(5)].map((_, row) => (
-            <div key={row} className="grid grid-cols-7 border-b border-neutral-800 last:border-b-0">
+            <div key={row} className="grid grid-cols-7 border-b border-neutral-800 last:border-b-0 min-w-[640px]">
               {[...Array(7)].map((_, col) => (
                 <div key={col} className="p-3 min-h-[100px] border-r border-neutral-800 last:border-r-0">
                   <SkeletonBlock className="h-4 w-6 mb-2" />
@@ -251,9 +406,9 @@ export default function CalendarPage() {
           ))}
         </div>
       ) : (
-        <div className="bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden">
+        <div className="bg-neutral-900 border border-neutral-800 rounded-2xl overflow-x-auto">
           {/* Day-of-week headers */}
-          <div className="grid grid-cols-7 border-b border-neutral-800">
+          <div className="grid grid-cols-7 border-b border-neutral-800 min-w-[640px]">
             {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
               <div key={d} className="p-3 text-center text-xs font-semibold text-neutral-500 uppercase tracking-wider">
                 {d}
@@ -262,7 +417,7 @@ export default function CalendarPage() {
           </div>
 
           {/* Day cells */}
-          <div className="grid grid-cols-7">
+          <div className="grid grid-cols-7 min-w-[640px]">
             {days.map((day) => {
               const dateStr = format(day, "yyyy-MM-dd");
               const inMonth = isSameMonth(day, currentMonth);
@@ -323,6 +478,7 @@ export default function CalendarPage() {
           </div>
         </div>
       )}
+      </div>
 
       {/* ── Detail popup ─────────────────────────────────────────────────── */}
       {detailShift && (
@@ -385,9 +541,10 @@ export default function CalendarPage() {
 // ─── Detail popup ────────────────────────────────────────────────────────────
 function DetailPopup({ shift, canModify, isAdmin, onClose, onEdit, onDelete }) {
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center">
+    <div className="fixed inset-0 z-[90] flex items-end md:items-center justify-center">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 space-y-4">
+      <div className="relative bg-neutral-900 border border-neutral-800 rounded-t-2xl md:rounded-2xl shadow-2xl w-full md:max-w-sm md:mx-4 p-6 space-y-4">
+        <div className="w-10 h-1 bg-neutral-700 rounded-full mx-auto mb-2 md:hidden"></div>
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-white">Shift Details</h2>
           <button onClick={onClose} className="p-1.5 text-neutral-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
@@ -564,9 +721,8 @@ function ShiftModal({ mode, shift, defaultDate, isAdmin, userId, onClose, onSave
           console.log("Payroll lock check: no record found for", empId, year, month);
           setLocked(false);
         } else {
-          const hasPayment = data?.amount_paid > 0;
-          console.log("Payroll lock check:", empId, year, month, "amount_paid =", data?.amount_paid, "locked =", hasPayment);
-          setLocked(hasPayment);
+          const isPaid = data?.status === "paid";
+          setLocked(isPaid);
         }
       } catch (err) {
         console.error("Payroll lock check failed:", err);
@@ -632,15 +788,56 @@ function ShiftModal({ mode, shift, defaultDate, isAdmin, userId, onClose, onSave
       return;
     }
 
+    // Validate times
+    if (startTime === endTime) {
+      setError("Start time and end time cannot be the same");
+      return;
+    }
+
+    if (startTime > endTime) {
+      setError("Overnight shifts (crossing midnight) are not supported. Please split into two shifts: one ending at 23:59 and another starting at 00:00 the next day.");
+      return;
+    }
+
+    const [sh, sm] = startTime.split(":").map(Number);
+    const [eh, em] = endTime.split(":").map(Number);
+    const shiftDurationMins = (eh * 60 + em) - (sh * 60 + sm);
+    const breakVal = parseInt(breakMins) || 0;
+
+    if (breakVal >= shiftDurationMins) {
+      setError(`Break (${breakVal} min) cannot be longer than the shift (${shiftDurationMins} min)`);
+      return;
+    }
+
+    if (shiftDurationMins > 960) {
+      setError("Shift exceeds 16 hours — please verify the times are correct");
+      return;
+    }
+
     setSaving(true);
 
+    const empId = employeeId || userId;
+
+    // Look up the effective rate from rate_changes for this shift's month
+    const [sYear, sMonth] = date.split("-").map(Number);
+    const { data: rateRow } = await supabase
+      .from("rate_changes")
+      .select("hourly_rate")
+      .eq("employee_id", empId)
+      .or(`effective_year.lt.${sYear},and(effective_year.eq.${sYear},effective_month.lte.${sMonth})`)
+      .order("effective_year", { ascending: false })
+      .order("effective_month", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
     const payload = {
-      employee_id: employeeId || userId,
+      employee_id: empId,
       shift_date: date,
       start_time: startTime,
       end_time: endTime,
-      break_minutes: parseInt(breakMins) || 0,
+      break_minutes: breakVal,
       notes: notes || null,
+      hourly_rate: rateRow?.hourly_rate ?? 0,
     };
 
     try {
@@ -657,7 +854,16 @@ function ShiftModal({ mode, shift, defaultDate, isAdmin, userId, onClose, onSave
       }
       onSaved();
     } catch (err) {
-      setError(err.message || "Failed to save shift");
+      const msg = err.message || "Failed to save shift";
+      if (msg.includes("shifts_employee_date_start_unique") || msg.includes("duplicate key")) {
+        setError("A shift with this start time already exists for this employee on this date");
+      } else if (msg.includes("shifts_end_after_start") || msg.includes("end_time")) {
+        setError("End time must be after start time. For overnight shifts, please split into two entries.");
+      } else if (msg.includes("shifts_break_within_duration") || msg.includes("break")) {
+        setError("Break duration cannot exceed the shift duration");
+      } else {
+        setError(msg);
+      }
     } finally {
       setSaving(false);
     }
@@ -665,10 +871,10 @@ function ShiftModal({ mode, shift, defaultDate, isAdmin, userId, onClose, onSave
 
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm hidden md:block" onClick={onClose} />
       <form
         onSubmit={handleSubmit}
-        className="relative bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl w-full max-w-lg mx-4 p-6 space-y-5 max-h-[90vh] overflow-y-auto"
+        className="relative bg-neutral-900 md:border md:border-neutral-800 md:rounded-2xl shadow-2xl w-full md:max-w-lg md:mx-4 p-6 space-y-5 h-full md:h-auto md:max-h-[90vh] overflow-y-auto"
       >
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-white">

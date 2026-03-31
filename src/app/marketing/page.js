@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
-import { Megaphone, Globe, TrendingUp, Facebook, Instagram, Calendar, Users, DollarSign, Layers, RefreshCw, Filter } from "lucide-react";
+import { Megaphone, Globe, TrendingUp, Facebook, Instagram, Calendar, Users, DollarSign, Layers, RefreshCw, Filter, ChevronDown } from "lucide-react";
 import {
   AreaChart,
   Area,
@@ -38,8 +38,11 @@ export default function MarketingPage() {
   const [chartView, setChartView] = useState("daily"); // "daily" or "weekly"
   const [platformFilter, setPlatformFilter] = useState("both"); // "both", "facebook", "instagram"
 
+  // Mobile UI state
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [activeMarketingChart, setActiveMarketingChart] = useState("reach");
+
   // Reach vs Revenue chart
-  const [showRollingAvg, setShowRollingAvg] = useState(false);
   const [salesData, setSalesData] = useState([]);
 
   // Metrics state
@@ -337,14 +340,14 @@ export default function MarketingPage() {
       entry.smoothedTotalReach = Math.round(sumReach / count);
     });
 
-    return entries.filter((e) => e.revenue > 0 || e.totalReach > 0);
+    return entries.filter((e) => e.revenue > 0);
   }, [stats, salesData, startDate, endDate]);
 
   if (loading && !stats.length && !startDate) {
     return (
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-end justify-between">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
             <SkeletonBlock className="h-7 w-56 mb-2" />
             <SkeletonBlock className="h-4 w-72" />
@@ -354,43 +357,27 @@ export default function MarketingPage() {
         {/* Filter bar */}
         <SkeletonBlock className="h-16 w-full rounded-2xl" />
         {/* 4 KPI cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[...Array(4)].map((_, i) => (
-            <div key={i} className="bg-neutral-900 p-5 rounded-2xl border border-neutral-800">
+            <div key={i} className="bg-neutral-900 p-4 md:p-5 rounded-2xl border border-neutral-800">
               <SkeletonBlock className="h-3 w-24 mb-3" />
               <SkeletonBlock className="h-8 w-32 mb-2" />
               <SkeletonBlock className="h-3 w-28" />
             </div>
           ))}
         </div>
-        {/* Wide chart */}
-        <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-6 h-[350px]">
-          <SkeletonBlock className="h-5 w-36 mb-4" />
-          <SkeletonBlock className="h-full w-full rounded-xl" />
-        </div>
-        {/* 2 charts side by side */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-6 h-[350px]">
-            <SkeletonBlock className="h-5 w-40 mb-4" />
-            <SkeletonBlock className="h-full w-full rounded-xl" />
-          </div>
-          <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-6 h-[350px]">
-            <SkeletonBlock className="h-5 w-44 mb-4" />
-            <SkeletonBlock className="h-full w-full rounded-xl" />
-          </div>
-        </div>
+        {/* Charts */}
+        <SkeletonBlock className="h-[250px] md:h-[300px] w-full rounded-2xl" />
+        <SkeletonBlock className="h-[250px] md:h-[300px] w-full rounded-2xl" />
         {/* Bottom chart */}
-        <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-6 h-[350px]">
-          <SkeletonBlock className="h-5 w-52 mb-4" />
-          <SkeletonBlock className="h-full w-full rounded-xl" />
-        </div>
+        <SkeletonBlock className="h-[250px] md:h-[400px] w-full rounded-2xl" />
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-end justify-between">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
             <h1 className="text-2xl font-bold text-white tracking-tight">Marketing</h1>
             <p className="text-sm text-neutral-400">
@@ -403,201 +390,197 @@ export default function MarketingPage() {
         </div>
       </div>
       
-      {/* Compact Controls Section (Matches Sales Page) */}
-      <div className="bg-neutral-900 p-4 rounded-2xl border border-neutral-800 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-6">
-        
-        {/* Date Range - Compact with Presets */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            <div className="flex items-center gap-2 text-emerald-500 shrink-0">
-                <Calendar size={18} />
-                <span className="font-semibold text-white text-sm">Range</span>
+      {/* Mobile Filter Bar */}
+      <div className="md:hidden">
+        <button onClick={() => setFiltersOpen(!filtersOpen)} className="w-full flex items-center justify-between px-4 py-3 bg-neutral-900 border border-neutral-800 rounded-lg filter-pattern">
+          <div className="flex items-center gap-2"><Filter size={16} className="text-emerald-500" /><span className="text-sm font-semibold text-white">Filters</span></div>
+          <ChevronDown size={16} className={`text-neutral-400 transition-transform duration-200 ${filtersOpen ? "rotate-180" : ""}`} />
+        </button>
+        {filtersOpen && (
+          <div className="mt-1 bg-neutral-900 border border-neutral-800 rounded-lg p-4 space-y-3 filter-pattern">
+            <div>
+              <p className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">Date Range</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-neutral-500 mb-1 block">From</label>
+                  <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setActivePreset(null); }} className="w-full bg-neutral-950 border border-neutral-800 rounded-lg text-neutral-200 text-xs px-3 py-2 focus:outline-none focus:border-emerald-500/50" />
+                </div>
+                <div>
+                  <label className="text-[10px] text-neutral-500 mb-1 block">To</label>
+                  <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setActivePreset(null); }} className="w-full bg-neutral-950 border border-neutral-800 rounded-lg text-neutral-200 text-xs px-3 py-2 focus:outline-none focus:border-emerald-500/50" />
+                </div>
+              </div>
             </div>
-            
+            <div>
+              <p className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">Quick Range</p>
+              <div className="flex bg-neutral-950 rounded-lg p-1 border border-neutral-800 w-fit">
+                {["1M", "3M", "6M", "1Y"].map((preset) => {
+                  const targetStart = new Date();
+                  switch (preset) { case "1M": targetStart.setMonth(targetStart.getMonth() - 1); break; case "3M": targetStart.setMonth(targetStart.getMonth() - 3); break; case "6M": targetStart.setMonth(targetStart.getMonth() - 6); break; case "1Y": targetStart.setFullYear(targetStart.getFullYear() - 1); break; }
+                  const isPresetDisabled = oldestAvailableDate ? (targetStart < oldestAvailableDate) : false;
+                  return (<button key={preset} onClick={() => !isPresetDisabled && handleDatePreset(preset)} disabled={isPresetDisabled} className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${isPresetDisabled ? "text-neutral-700 cursor-not-allowed bg-transparent" : activePreset === preset ? "bg-emerald-500 text-white shadow-sm" : "text-neutral-400 hover:text-white hover:bg-neutral-800 cursor-pointer"}`}>{preset}</button>);
+                })}
+              </div>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">Platform</p>
+              <div className="flex flex-wrap gap-1.5">
+                {[{id:"both",label:"Both",active:"bg-neutral-800 text-white border-neutral-700",inactive:"text-neutral-500 border-neutral-800"},{id:"facebook",label:"Facebook",active:"bg-blue-900/40 text-blue-400 border-blue-800/50",inactive:"text-neutral-500 border-neutral-800"},{id:"instagram",label:"Instagram",active:"bg-pink-900/40 text-pink-400 border-pink-800/50",inactive:"text-neutral-500 border-neutral-800"}].map(p => (
+                  <button key={p.id} onClick={() => setPlatformFilter(p.id)} className={`text-xs px-2.5 py-1.5 rounded-md font-medium border transition-colors ${platformFilter === p.id ? p.active : p.inactive}`}>{p.label}</button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">View</p>
+              <div className="flex bg-neutral-950 rounded-lg p-1 border border-neutral-800 w-fit">
+                <button onClick={() => setChartView("daily")} className={`text-xs px-2.5 py-1 rounded-md font-medium transition-colors ${chartView === "daily" ? "bg-neutral-800 text-white border-neutral-700 shadow-sm" : "text-neutral-500"}`}>Daily</button>
+                <button onClick={() => setChartView("weekly")} className={`text-xs px-2.5 py-1 rounded-md font-medium transition-colors ${chartView === "weekly" ? "bg-neutral-800 text-white border-neutral-700 shadow-sm" : "text-neutral-500"}`}>Weekly</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Desktop Filter Bar (unchanged) */}
+      <div className="hidden md:flex bg-neutral-900 p-4 rounded-2xl border border-neutral-800 shadow-lg flex-row items-center justify-between gap-6 filter-pattern">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            <div className="flex items-center gap-2 text-emerald-500 shrink-0"><Calendar size={18} /><span className="font-semibold text-white text-sm">Range</span></div>
             <div className="flex items-center gap-2">
                  <div className="flex items-center gap-2 bg-neutral-950 p-1 rounded-xl border border-neutral-800 hover:border-emerald-500/50 transition-colors group cursor-pointer">
-                    <input
-                        type="date"
-                        value={startDate}
-                        onChange={(e) => { setStartDate(e.target.value); setActivePreset(null); }}
-                        className="bg-transparent text-neutral-200 text-xs px-2 py-1 focus:outline-none focus:text-white cursor-pointer [color-scheme:dark]"
-                    />
+                    <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setActivePreset(null); }} className="bg-transparent text-neutral-200 text-xs px-2 py-1 focus:outline-none focus:text-white cursor-pointer [color-scheme:dark]" />
                     <span className="text-neutral-600 text-xs">to</span>
-                    <input
-                        type="date"
-                        value={endDate}
-                        onChange={(e) => { setEndDate(e.target.value); setActivePreset(null); }}
-                        className="bg-transparent text-neutral-200 text-xs px-2 py-1 focus:outline-none focus:text-white cursor-pointer [color-scheme:dark]"
-                    />
+                    <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setActivePreset(null); }} className="bg-transparent text-neutral-200 text-xs px-2 py-1 focus:outline-none focus:text-white cursor-pointer [color-scheme:dark]" />
                 </div>
-
-                {/* Date Presets */}
-                <div className="flex bg-neutral-950 rounded-lg p-1 border border-neutral-800 hidden sm:flex">
+                <div className="flex bg-neutral-950 rounded-lg p-1 border border-neutral-800">
                     {["1M", "3M", "6M", "1Y"].map((preset) => {
                         const targetStart = new Date();
-                        switch (preset) {
-                            case "1M": targetStart.setMonth(targetStart.getMonth() - 1); break;
-                            case "3M": targetStart.setMonth(targetStart.getMonth() - 3); break;
-                            case "6M": targetStart.setMonth(targetStart.getMonth() - 6); break;
-                            case "1Y": targetStart.setFullYear(targetStart.getFullYear() - 1); break;
-                        }
-                        
+                        switch (preset) { case "1M": targetStart.setMonth(targetStart.getMonth() - 1); break; case "3M": targetStart.setMonth(targetStart.getMonth() - 3); break; case "6M": targetStart.setMonth(targetStart.getMonth() - 6); break; case "1Y": targetStart.setFullYear(targetStart.getFullYear() - 1); break; }
                         const isPresetDisabled = oldestAvailableDate ? (targetStart < oldestAvailableDate) : false;
-
-                        return (
-                            <button
-                                key={preset}
-                                onClick={() => !isPresetDisabled && handleDatePreset(preset)}
-                                disabled={isPresetDisabled}
-                                title={isPresetDisabled ? "No data available for this range" : `View past ${preset}`}
-                                className={`px-2 py-1 text-[10px] font-medium rounded-md transition-colors ${
-                                    isPresetDisabled
-                                    ? "text-neutral-700 cursor-not-allowed bg-transparent"
-                                    : activePreset === preset 
-                                      ? "bg-emerald-500 text-white shadow-sm" 
-                                      : "text-neutral-400 hover:text-white hover:bg-neutral-800 cursor-pointer"
-                                }`}
-                            >
-                                {preset}
-                            </button>
-                        );
+                        return (<button key={preset} onClick={() => !isPresetDisabled && handleDatePreset(preset)} disabled={isPresetDisabled} className={`px-2 py-1 text-[10px] font-medium rounded-md transition-colors ${isPresetDisabled ? "text-neutral-700 cursor-not-allowed bg-transparent" : activePreset === preset ? "bg-emerald-500 text-white shadow-sm" : "text-neutral-400 hover:text-white hover:bg-neutral-800 cursor-pointer"}`}>{preset}</button>);
                     })}
                 </div>
             </div>
         </div>
-
-        {/* Separator */}
-        <div className="hidden md:block h-8 w-px bg-neutral-800"></div>
-
-        {/* Toggle Controls: View and Platform */}
-        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4">
-            
-            {/* Platform Filter */}
+        <div className="h-8 w-px bg-neutral-800"></div>
+        <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-                <div className="flex items-center gap-2 text-blue-400 shrink-0">
-                    <Filter size={18} />
-                    <span className="font-semibold text-white text-sm">Platform</span>
-                </div>
+                <div className="flex items-center gap-2 text-blue-400 shrink-0"><Filter size={18} /><span className="font-semibold text-white text-sm">Platform</span></div>
                 <div className="flex bg-neutral-950 rounded-lg p-1 border border-neutral-800">
-                    <button
-                        onClick={() => setPlatformFilter("both")}
-                        className={`text-xs px-3 py-1.5 rounded-md transition-colors font-medium border border-transparent ${
-                            platformFilter === "both" 
-                            ? "bg-neutral-800 text-white border-neutral-700 shadow-sm" 
-                            : "text-neutral-500 hover:text-neutral-300 hover:bg-neutral-900/50"
-                        }`}
-                    >
-                        Both
-                    </button>
-                    <button
-                        onClick={() => setPlatformFilter("facebook")}
-                        className={`text-xs px-3 py-1.5 rounded-md transition-colors font-medium border border-transparent ${
-                            platformFilter === "facebook" 
-                            ? "bg-blue-900/40 text-blue-400 border-blue-800/50 shadow-sm" 
-                            : "text-neutral-500 hover:text-blue-400/70 hover:bg-neutral-900/50"
-                        }`}
-                    >
-                        Facebook
-                    </button>
-                    <button
-                        onClick={() => setPlatformFilter("instagram")}
-                        className={`text-xs px-3 py-1.5 rounded-md transition-colors font-medium border border-transparent ${
-                            platformFilter === "instagram" 
-                            ? "bg-pink-900/40 text-pink-400 border-pink-800/50 shadow-sm" 
-                            : "text-neutral-500 hover:text-pink-400/70 hover:bg-neutral-900/50"
-                        }`}
-                    >
-                        Instagram
-                    </button>
+                    <button onClick={() => setPlatformFilter("both")} className={`text-xs px-3 py-1.5 rounded-md transition-colors font-medium border border-transparent ${platformFilter === "both" ? "bg-neutral-800 text-white border-neutral-700 shadow-sm" : "text-neutral-500 hover:text-neutral-300 hover:bg-neutral-900/50"}`}>Both</button>
+                    <button onClick={() => setPlatformFilter("facebook")} className={`text-xs px-3 py-1.5 rounded-md transition-colors font-medium border border-transparent ${platformFilter === "facebook" ? "bg-blue-900/40 text-blue-400 border-blue-800/50 shadow-sm" : "text-neutral-500 hover:text-blue-400/70 hover:bg-neutral-900/50"}`}>Facebook</button>
+                    <button onClick={() => setPlatformFilter("instagram")} className={`text-xs px-3 py-1.5 rounded-md transition-colors font-medium border border-transparent ${platformFilter === "instagram" ? "bg-pink-900/40 text-pink-400 border-pink-800/50 shadow-sm" : "text-neutral-500 hover:text-pink-400/70 hover:bg-neutral-900/50"}`}>Instagram</button>
                 </div>
             </div>
-
-            {/* View Toggle */}
             <div className="flex items-center gap-2">
-                <div className="flex items-center gap-2 text-purple-400 shrink-0">
-                    <Layers size={18} />
-                    <span className="font-semibold text-white text-sm">View</span>
-                </div>
+                <div className="flex items-center gap-2 text-purple-400 shrink-0"><Layers size={18} /><span className="font-semibold text-white text-sm">View</span></div>
                 <div className="flex bg-neutral-950 rounded-lg p-1 border border-neutral-800">
-                    <button
-                        onClick={() => setChartView("daily")}
-                        className={`text-xs px-3 py-1.5 rounded-md transition-colors font-medium border border-transparent ${
-                            chartView === "daily" 
-                            ? "bg-neutral-800 text-white border-neutral-700 shadow-sm" 
-                            : "text-neutral-500 hover:text-neutral-300 hover:bg-neutral-900/50"
-                        }`}
-                    >
-                        Daily
-                    </button>
-                    <button
-                        onClick={() => setChartView("weekly")}
-                        className={`text-xs px-3 py-1.5 rounded-md transition-colors font-medium border border-transparent ${
-                            chartView === "weekly" 
-                            ? "bg-neutral-800 text-white border-neutral-700 shadow-sm" 
-                            : "text-neutral-500 hover:text-neutral-300 hover:bg-neutral-900/50"
-                        }`}
-                    >
-                        Weekly
-                    </button>
+                    <button onClick={() => setChartView("daily")} className={`text-xs px-3 py-1.5 rounded-md transition-colors font-medium border border-transparent ${chartView === "daily" ? "bg-neutral-800 text-white border-neutral-700 shadow-sm" : "text-neutral-500 hover:text-neutral-300 hover:bg-neutral-900/50"}`}>Daily</button>
+                    <button onClick={() => setChartView("weekly")} className={`text-xs px-3 py-1.5 rounded-md transition-colors font-medium border border-transparent ${chartView === "weekly" ? "bg-neutral-800 text-white border-neutral-700 shadow-sm" : "text-neutral-500 hover:text-neutral-300 hover:bg-neutral-900/50"}`}>Weekly</button>
                 </div>
             </div>
         </div>
       </div>
       
       {/* Top Metrics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           
           {/* Total Reach */}
-          <div className="bg-neutral-900 p-6 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden group hover:border-emerald-500/30 transition-colors">
-              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+          <div className="bg-neutral-900 p-4 md:p-6 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden group hover:border-emerald-500/30 transition-colors">
+              <div className="hidden md:block absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                   <Users size={48} className="text-emerald-500" />
               </div>
               <p className="text-sm font-medium text-neutral-500 uppercase tracking-wider">Total Reach</p>
-              <p className="text-3xl font-bold text-white mt-1">
+              <p className="text-xl md:text-3xl font-bold text-white mt-1">
                   {loading ? "..." : totalReach.toLocaleString("en-US")}
               </p>
               <p className="text-xs text-neutral-500 mt-2">Combined platforms</p>
           </div>
 
           {/* Total Ad Spend */}
-          <div className="bg-neutral-900 p-6 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden group hover:border-blue-600/30 transition-colors">
-              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+          <div className="bg-neutral-900 p-4 md:p-6 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden group hover:border-blue-600/30 transition-colors">
+              <div className="hidden md:block absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                   <DollarSign size={48} className="text-blue-600" />
               </div>
               <p className="text-sm font-medium text-neutral-500 uppercase tracking-wider">Ad Spend</p>
-              <p className="text-3xl font-bold text-white mt-1">
+              <p className="text-xl md:text-3xl font-bold text-white mt-1">
                   {loading ? "..." : `€${totalAdSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
               </p>
               <p className="text-xs text-neutral-500 mt-2">Total budget spent</p>
           </div>
 
           {/* Facebook Followers */}
-          <div className="bg-neutral-900 p-6 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden group hover:border-blue-600/30 transition-colors">
-              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+          <div className="bg-neutral-900 p-4 md:p-6 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden group hover:border-blue-600/30 transition-colors">
+              <div className="hidden md:block absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                   <Facebook size={48} className="text-blue-600" />
               </div>
               <p className="text-sm font-medium text-neutral-500 uppercase tracking-wider">Facebook</p>
-              <p className="text-3xl font-bold text-white mt-1">
+              <p className="text-xl md:text-3xl font-bold text-white mt-1">
                   {loading ? "..." : latestFbFollowers.toLocaleString("en-US")}
               </p>
               <p className="text-xs text-neutral-500 mt-2">Current Page Likes</p>
           </div>
 
            {/* Instagram Followers */}
-           <div className="bg-neutral-900 p-6 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden group hover:border-pink-500/30 transition-colors">
-              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+           <div className="bg-neutral-900 p-4 md:p-6 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden group hover:border-pink-500/30 transition-colors">
+              <div className="hidden md:block absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                   <Instagram size={48} className="text-pink-500" />
               </div>
               <p className="text-sm font-medium text-neutral-500 uppercase tracking-wider">Instagram</p>
-              <p className="text-3xl font-bold text-white mt-1">
+              <p className="text-xl md:text-3xl font-bold text-white mt-1">
                   {loading ? "..." : latestIgFollowers.toLocaleString("en-US")}
               </p>
               <p className="text-xs text-neutral-500 mt-2">Current Followers</p>
           </div>
       </div>
 
-       {/* Reach Graphs */}
-       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            
+       {/* Mobile: Tabbed charts */}
+       <div className="md:hidden">
+           <div className="flex bg-neutral-900 rounded-xl p-1 border border-neutral-800 mb-4">
+               <button onClick={() => setActiveMarketingChart("reach")} className={`flex-1 px-2 py-2 text-xs font-medium rounded-lg transition-colors ${activeMarketingChart === "reach" ? "bg-emerald-500 text-white" : "text-neutral-400"}`}>Reach</button>
+               <button onClick={() => setActiveMarketingChart("adspend")} className={`flex-1 px-2 py-2 text-xs font-medium rounded-lg transition-colors ${activeMarketingChart === "adspend" ? "bg-emerald-500 text-white" : "text-neutral-400"}`}>Ad Spend</button>
+               <button onClick={() => setActiveMarketingChart("followers")} className={`flex-1 px-2 py-2 text-xs font-medium rounded-lg transition-colors ${activeMarketingChart === "followers" ? "bg-emerald-500 text-white" : "text-neutral-400"}`}>Followers</button>
+           </div>
+           <div className="bg-neutral-900 p-4 rounded-2xl border border-neutral-800 shadow-lg relative">
+               <div className="mb-3">
+                   <h3 className="text-sm font-bold text-white">{activeMarketingChart === "reach" ? "Reach History" : activeMarketingChart === "adspend" ? "Ad Spend History" : "Follower History"}</h3>
+               </div>
+               {loading && <div className="absolute inset-0 bg-neutral-900/80 backdrop-blur-sm flex items-center justify-center z-10 rounded-2xl"><p className="animate-pulse font-semibold text-emerald-500 flex items-center gap-2"><RefreshCw className="animate-spin"/> Updating...</p></div>}
+               {chartData.length === 0 && !loading ? (
+                   <div className="h-[200px] flex flex-col items-center justify-center text-center text-neutral-500">
+                       <Layers size={32} className="mb-2 opacity-50" />
+                       <p className="text-sm font-semibold text-white">No data available</p>
+                   </div>
+               ) : (
+                   <div className="h-[200px]">
+                       <ResponsiveContainer width="100%" height="100%">
+                           <AreaChart data={chartData}>
+                               <defs>
+                                   <linearGradient id="colorMobileChart" x1="0" y1="0" x2="0" y2="1">
+                                       <stop offset="5%" stopColor={activeMarketingChart === "reach" ? "#10b981" : activeMarketingChart === "adspend" ? "#3b82f6" : "#a855f7"} stopOpacity={0.3}/>
+                                       <stop offset="95%" stopColor={activeMarketingChart === "reach" ? "#10b981" : activeMarketingChart === "adspend" ? "#3b82f6" : "#a855f7"} stopOpacity={0}/>
+                                   </linearGradient>
+                               </defs>
+                               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#262626" />
+                               <XAxis dataKey="label" fontSize={10} tickLine={false} axisLine={false} stroke="#a3a3a3" />
+                               <YAxis fontSize={10} tickLine={false} axisLine={false} stroke="#a3a3a3" tickFormatter={(value) => activeMarketingChart === "adspend" ? `€${value}` : value.toLocaleString()} />
+                               <Tooltip cursor={{ fill: '#ffffff', opacity: 0.05 }} content={({ active, payload, label }) => {
+                                   if (!active || !payload?.length) return null;
+                                   const color = activeMarketingChart === "reach" ? "#10b981" : activeMarketingChart === "adspend" ? "#3b82f6" : "#a855f7";
+                                   const name = activeMarketingChart === "reach" ? "Total Reach" : activeMarketingChart === "adspend" ? "Ad Spend" : "Followers";
+                                   const val = activeMarketingChart === "adspend" ? `€${Number(payload[0].value).toFixed(2)}` : Number(payload[0].value).toLocaleString();
+                                   return (<div style={{ backgroundColor: "#171717", border: "1px solid #404040", borderRadius: "12px", padding: "12px 14px", color: "#f5f5f5" }}><p style={{ color: "#a3a3a3", marginBottom: "8px", fontSize: "12px" }}>{label}</p><p style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px" }}><span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: color, display: "inline-block" }}></span><span style={{ color: "#a3a3a3" }}>{name}:</span><span style={{ fontWeight: "600" }}>{val}</span></p></div>);
+                               }} />
+                               <Area type="monotone" dataKey={activeMarketingChart === "reach" ? "total_reach" : activeMarketingChart === "adspend" ? "ad_spend" : "followers"} stroke={activeMarketingChart === "reach" ? "#10b981" : activeMarketingChart === "adspend" ? "#3b82f6" : "#a855f7"} strokeWidth={2} fillOpacity={1} fill="url(#colorMobileChart)" />
+                           </AreaChart>
+                       </ResponsiveContainer>
+                   </div>
+               )}
+           </div>
+       </div>
+
+       {/* Desktop: Reach Graphs */}
+       <div className="hidden md:grid grid-cols-1 lg:grid-cols-2 gap-6">
+
             {/* Total Reach History */}
             <div className="bg-neutral-900 p-6 rounded-2xl border border-neutral-800 shadow-lg relative">
                 <div className="flex items-center justify-between mb-4">
@@ -811,25 +794,22 @@ export default function MarketingPage() {
         </div>
 
         {/* Marketing Reach vs Sales Revenue */}
-        {comboChartData.length > 0 && (
-          <div className="bg-neutral-900 p-6 rounded-2xl border border-neutral-800 shadow-lg flex flex-col h-[400px]">
-              <div className="flex items-center justify-between mb-4 shrink-0">
-                  <div>
-                      <h3 className="text-lg font-bold text-white mb-1">Marketing Reach vs Sales Revenue</h3>
-                      <p className="text-xs text-neutral-500">Does your reach drive sales?</p>
-                  </div>
-                  <label className="flex items-center gap-2 cursor-pointer bg-neutral-950 px-3 py-1.5 rounded-lg border border-neutral-800 hover:border-emerald-500/50 transition-colors">
-                      <input type="checkbox" checked={showRollingAvg} onChange={(e) => setShowRollingAvg(e.target.checked)} className="rounded border-neutral-700 bg-neutral-900 text-emerald-500 focus:ring-emerald-500/20" />
-                      <span className="text-xs font-semibold text-neutral-400 select-none">7-Day Rolling Avg</span>
-                  </label>
+        {comboChartData.length > 0 && (() => {
+          const maxRevenue = Math.max(...comboChartData.map(d => d.revenue || 0));
+          const revenueDomainMax = Math.ceil(maxRevenue * 1.5);
+          return (
+          <div className="bg-neutral-900 p-4 md:p-6 rounded-2xl border border-neutral-800 shadow-lg flex flex-col h-[300px] md:h-[400px]">
+              <div className="mb-3 md:mb-4 shrink-0">
+                  <h3 className="text-sm md:text-lg font-bold text-white mb-1"><span className="md:hidden">Reach vs Revenue</span><span className="hidden md:inline">Marketing Reach vs Sales Revenue</span></h3>
+                  <p className="text-xs text-neutral-500">Does your reach drive sales?</p>
               </div>
               <div className="flex-1 min-h-0">
                   <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={comboChartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+                      <ComposedChart data={comboChartData} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#262626" />
                           <XAxis dataKey="label" fontSize={10} axisLine={false} tickLine={false} stroke="#a3a3a3" />
-                          <YAxis yAxisId="left" fontSize={10} axisLine={false} tickLine={false} stroke="#a3a3a3" tickFormatter={(val) => val >= 1000 ? `${(val/1000).toFixed(1)}k` : val} />
-                          <YAxis yAxisId="right" orientation="right" fontSize={10} axisLine={false} tickLine={false} stroke="#eab308" tickFormatter={(val) => `€${val}`} />
+                          <YAxis yAxisId="left" fontSize={10} axisLine={false} tickLine={false} stroke="#a3a3a3" tickCount={3} tickFormatter={(val) => val >= 1000 ? `${(val/1000).toFixed(1)}k` : val} />
+                          <YAxis yAxisId="right" orientation="right" fontSize={10} axisLine={false} tickLine={false} stroke="#eab308" tickFormatter={(val) => `€${val}`} domain={[0, revenueDomainMax]} hide className="hidden md:block" />
                           <Tooltip cursor={{ fill: '#ffffff', opacity: 0.05 }} content={({ active, payload, label }) => {
                               if (!active || !payload?.length) return null;
                               return (
@@ -837,7 +817,7 @@ export default function MarketingPage() {
                                       <p style={{ color: "#a3a3a3", marginBottom: "8px", fontSize: "12px" }}>{label}</p>
                                       {payload.map((entry, idx) => (
                                           <p key={idx} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", margin: "4px 0" }}>
-                                              <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: entry.color, display: "inline-block" }}></span>
+                                              <span style={{ width: "10px", height: "10px", borderRadius: "2px", backgroundColor: entry.color, display: "inline-block" }}></span>
                                               <span style={{ color: "#a3a3a3" }}>{entry.name}:</span>
                                               <span style={{ fontWeight: "600" }}>{entry.name === "Sales Revenue" ? `\u20AC${Number(entry.value).toFixed(2)}` : Number(entry.value).toLocaleString()}</span>
                                           </p>
@@ -845,14 +825,24 @@ export default function MarketingPage() {
                                   </div>
                               );
                           }} />
-                          <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "10px" }} />
-                          <Line yAxisId="left" type="monotone" dataKey={showRollingAvg ? "smoothedTotalReach" : "totalReach"} name="Total Reach" stroke="#8b5cf6" strokeWidth={3} dot={!showRollingAvg && { r: 3, fill: "#8b5cf6", strokeWidth: 0 }} activeDot={{ r: 5 }} />
-                          <Line yAxisId="right" type="monotone" dataKey={showRollingAvg ? "smoothedRevenue" : "revenue"} name="Sales Revenue" stroke="#eab308" strokeWidth={3} dot={!showRollingAvg && { r: 3, fill: "#eab308", strokeWidth: 0 }} activeDot={{ r: 5 }} />
+                          <Legend content={({ payload }) => (
+                              <div style={{ display: "flex", justifyContent: "center", gap: "16px", paddingTop: "8px", fontSize: "12px" }}>
+                                  {payload.map((entry, idx) => (
+                                      <div key={idx} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                          <span style={{ width: "10px", height: "10px", borderRadius: "2px", backgroundColor: entry.color, display: "inline-block" }}></span>
+                                          <span style={{ color: "#a3a3a3" }}>{entry.value}</span>
+                                      </div>
+                                  ))}
+                              </div>
+                          )} />
+                          <Line yAxisId="left" type="natural" dataKey="totalReach" name="Total Reach" stroke="#8b5cf6" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                          <Line yAxisId="right" type="natural" dataKey="revenue" name="Sales Revenue" stroke="#eab308" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
                       </ComposedChart>
                   </ResponsiveContainer>
               </div>
           </div>
-        )}
+          );
+        })()}
 
     </div>
   );

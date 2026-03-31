@@ -14,6 +14,10 @@ export const metadata = {
   description: "Restaurant Management Dashboard",
 };
 
+export const viewport = {
+  viewportFit: "cover",
+};
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en" className={inter.variable}>

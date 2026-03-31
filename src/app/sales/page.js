@@ -8,7 +8,7 @@ import {
 } from "recharts";
 import { 
   Calendar, Filter, RefreshCw, DollarSign, Layers,
-  ArrowUpRight, ArrowDownRight, Minus, User, ShoppingBag
+  ArrowUpRight, ArrowDownRight, Minus, User, ShoppingBag, ChevronDown
 } from "lucide-react";
 import { parseISO, subDays, differenceInDays, format, getDay, getHours } from "date-fns";
 
@@ -35,6 +35,8 @@ export default function AnalyticsPage() {
     bolt: true,
     foody: true,
   });
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [activeBottomChart, setActiveBottomChart] = useState("dow");
 
   const [rawPosData, setRawPosData] = useState([]);
   const [rawDelData, setRawDelData] = useState([]);
@@ -257,6 +259,20 @@ export default function AnalyticsPage() {
         }
     });
 
+    let rejectedValue = 0;
+    let rejectedCount = 0;
+    rawDelData.forEach(r => {
+        const partner = (r.delivery_partner || "").toLowerCase();
+        const status = (r.delivery_status || "").toLowerCase();
+        if (['wolt', 'bolt', 'foody'].includes(partner) && selectedSources[partner] && status !== 'delivered') {
+            const dStr = r.order_placed;
+            if (dStr && isCurrent(dStr)) {
+                rejectedValue += Number(r.price || 0);
+                rejectedCount += 1;
+            }
+        }
+    });
+
     const dailyTrend = [];
     if (days > 0 && days <= 365) {
         let tempD = new Date(startObjMidnight);
@@ -364,6 +380,11 @@ export default function AnalyticsPage() {
         orders: { val: currOrders, change: calcChange(currOrders, prevOrders) },
         aov: { val: currAOV, change: calcChange(currAOV, prevAOV) },
         avgDailyOrderValue: { val: currAvgDailyOrderValue, change: calcChange(currAvgDailyOrderValue, prevAvgDailyOrderValue) },
+        rejected: {
+            value: rejectedValue,
+            count: rejectedCount,
+            pct: (currRev + rejectedValue) > 0 ? (rejectedValue / (currRev + rejectedValue)) * 100 : 0
+        },
         hasValidPrevPeriod
     };
 
@@ -402,7 +423,7 @@ export default function AnalyticsPage() {
     return (
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-end justify-between">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
             <SkeletonBlock className="h-7 w-48 mb-2" />
             <SkeletonBlock className="h-4 w-80" />
@@ -411,10 +432,10 @@ export default function AnalyticsPage() {
         </div>
         {/* Filter bar */}
         <SkeletonBlock className="h-16 w-full rounded-2xl" />
-        {/* 4 KPI cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="bg-neutral-900 p-5 rounded-2xl border border-neutral-800">
+        {/* 5 KPI cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="bg-neutral-900 p-4 md:p-5 rounded-2xl border border-neutral-800">
               <SkeletonBlock className="h-3 w-28 mb-3" />
               <SkeletonBlock className="h-8 w-36 mb-3" />
               <SkeletonBlock className="h-4 w-24" />
@@ -423,11 +444,11 @@ export default function AnalyticsPage() {
         </div>
         {/* 2 charts side by side */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-6 h-[400px]">
+          <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-4 md:p-6 h-[250px] md:h-[400px]">
             <SkeletonBlock className="h-5 w-32 mb-4" />
             <SkeletonBlock className="h-full w-full rounded-xl" />
           </div>
-          <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-6 h-[400px]">
+          <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-4 md:p-6 h-[300px] md:h-[400px]">
             <SkeletonBlock className="h-5 w-40 mb-4" />
             <SkeletonBlock className="h-full w-full rounded-xl" />
           </div>
@@ -436,11 +457,11 @@ export default function AnalyticsPage() {
         <SkeletonBlock className="h-64 w-full rounded-2xl" />
         {/* 2 bottom charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-6 h-[350px]">
+          <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-4 md:p-6 h-[250px] md:h-[350px]">
             <SkeletonBlock className="h-5 w-44 mb-4" />
             <SkeletonBlock className="h-full w-full rounded-xl" />
           </div>
-          <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-6 h-[350px]">
+          <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-4 md:p-6 h-[250px] md:h-[350px]">
             <SkeletonBlock className="h-5 w-44 mb-4" />
             <SkeletonBlock className="h-full w-full rounded-xl" />
           </div>
@@ -449,12 +470,12 @@ export default function AnalyticsPage() {
     );
   }
 
-  const pd = processedData || { kpis: { revenue:{val:0, change:0}, orders:{val:0, change:0}, aov:{val:0, change:0}, avgDailyOrderValue:{val:0, change:0}, hasValidPrevPeriod: true }, dailyTrend: [], dowChart: [], hodChart: [], platformTable: [] };
+  const pd = processedData || { kpis: { revenue:{val:0, change:0}, orders:{val:0, change:0}, aov:{val:0, change:0}, avgDailyOrderValue:{val:0, change:0}, rejected:{value:0, count:0, pct:0}, hasValidPrevPeriod: true }, dailyTrend: [], dowChart: [], hodChart: [], platformTable: [] };
   const pieData = pd.platformTable.map(p => ({ name: p.name, value: p.revenue, color: COLORS[p.id] }));
 
   return (
     <div className="space-y-6">
-      <div className="flex items-end justify-between">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
             <h1 className="text-2xl font-bold text-white tracking-tight">Sales Overview</h1>
             <p className="text-sm text-neutral-400 mt-1">Performance metrics, sales breakdown, and insights.</p>
@@ -465,10 +486,87 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      <div className="bg-neutral-900 p-4 rounded-2xl border border-neutral-800 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-6">
+      {/* Mobile Filter Bar */}
+      <div className="md:hidden">
+        <button
+          onClick={() => setFiltersOpen(!filtersOpen)}
+          className="w-full flex items-center justify-between px-4 py-3 bg-neutral-900 border border-neutral-800 rounded-lg filter-pattern"
+        >
+          <div className="flex items-center gap-2">
+            <Filter size={16} className="text-emerald-500" />
+            <span className="text-sm font-semibold text-white">Filters</span>
+          </div>
+          <ChevronDown size={16} className={`text-neutral-400 transition-transform duration-200 ${filtersOpen ? "rotate-180" : ""}`} />
+        </button>
+        {filtersOpen && (
+          <div className="mt-1 bg-neutral-900 border border-neutral-800 rounded-lg p-4 space-y-3 filter-pattern">
+            {/* Date Range */}
+            <div>
+              <p className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">Date Range</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-neutral-500 mb-1 block">From</label>
+                  <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setActivePreset(null); }} className="w-full bg-neutral-950 border border-neutral-800 rounded-lg text-neutral-200 text-xs px-3 py-2 focus:outline-none focus:border-emerald-500/50" />
+                </div>
+                <div>
+                  <label className="text-[10px] text-neutral-500 mb-1 block">To</label>
+                  <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setActivePreset(null); }} className="w-full bg-neutral-950 border border-neutral-800 rounded-lg text-neutral-200 text-xs px-3 py-2 focus:outline-none focus:border-emerald-500/50" />
+                </div>
+              </div>
+            </div>
+            {/* Granularity + Presets */}
+            <div>
+              <p className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">View & Quick Range</p>
+              <div className="flex flex-col gap-2">
+                <div className="flex bg-neutral-950 rounded-lg p-1 border border-neutral-800 w-fit">
+                  {["daily", "weekly", "monthly"].map((g) => (
+                    <button key={g} onClick={() => setGranularity(g)}
+                      className={`capitalize px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${granularity === g ? "bg-emerald-500 text-white shadow-sm" : "text-neutral-400 hover:text-white hover:bg-neutral-800 cursor-pointer"}`}
+                    >{g}</button>
+                  ))}
+                </div>
+                <div className="flex bg-neutral-950 rounded-lg p-1 border border-neutral-800 w-fit">
+                  {["1M", "3M", "6M", "1Y"].map((preset) => {
+                    const targetStart = lastUpdatedDate ? parseISO(lastUpdatedDate) : new Date();
+                    switch (preset) {
+                      case "1M": targetStart.setMonth(targetStart.getMonth() - 1); break;
+                      case "3M": targetStart.setMonth(targetStart.getMonth() - 3); break;
+                      case "6M": targetStart.setMonth(targetStart.getMonth() - 6); break;
+                      case "1Y": targetStart.setFullYear(targetStart.getFullYear() - 1); break;
+                    }
+                    const isPresetDisabled = oldestAvailableDate ? (targetStart < oldestAvailableDate) : false;
+                    return (
+                      <button key={preset} onClick={() => !isPresetDisabled && handleDatePreset(preset)} disabled={isPresetDisabled}
+                        className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${isPresetDisabled ? "text-neutral-700 cursor-not-allowed bg-transparent" : activePreset === preset ? "bg-emerald-500 text-white shadow-sm" : "text-neutral-400 hover:text-white hover:bg-neutral-800 cursor-pointer"}`}
+                      >{preset}</button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+            {/* Sources */}
+            <div>
+              <p className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">Sources</p>
+              <div className="flex flex-wrap gap-1.5">
+                {["pos", "wolt", "bolt", "foody"].map((source) => (
+                  <button key={source} onClick={() => handleSourceToggle(source)}
+                    className={`group flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all duration-200 border cursor-pointer ${selectedSources[source] ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-neutral-950 border-neutral-800 text-neutral-500'}`}
+                  >
+                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: selectedSources[source] ? COLORS[source] : '#525252' }} />
+                    <span className="capitalize">{source === 'pos' ? 'POS' : source}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Desktop Filter Bar (unchanged) */}
+      <div className="hidden md:flex bg-neutral-900 p-4 rounded-2xl border border-neutral-800 shadow-lg flex-row items-center justify-between gap-6 filter-pattern">
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
             <div className="flex items-center gap-2 text-emerald-500 shrink-0"><Calendar size={18} /><span className="font-semibold text-white text-sm">Range</span></div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
                  <div className="flex items-center gap-2 bg-neutral-950 p-1 rounded-xl border border-neutral-800 hover:border-emerald-500/50 transition-colors group">
                     <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setActivePreset(null); }} className="bg-transparent text-neutral-200 text-xs px-2 py-1 focus:outline-none focus:text-white cursor-pointer" />
                     <span className="text-neutral-600 text-xs">to</span>
@@ -500,7 +598,7 @@ export default function AnalyticsPage() {
                 </div>
             </div>
         </div>
-        <div className="hidden md:block h-8 w-px bg-neutral-800"></div>
+        <div className="h-8 w-px bg-neutral-800"></div>
         <div className="flex flex-wrap items-center gap-4">
              <div className="flex items-center gap-2 text-emerald-500 shrink-0"><Filter size={18} /><span className="font-semibold text-white text-sm">Sources</span></div>
             <div className="flex items-center gap-2">
@@ -516,10 +614,10 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-neutral-900 p-5 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden">
+       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="bg-neutral-900 p-4 md:p-5 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden">
                <p className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-1">Total Revenue</p>
-               <h3 className="text-3xl font-bold text-white mb-2">€{pd.kpis.revenue.val.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</h3>
+               <h3 className="text-xl md:text-3xl font-bold text-white mb-2">€{pd.kpis.revenue.val.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</h3>
                {pd.kpis.hasValidPrevPeriod ? (
                    <div className="flex items-center justify-between">
                        {renderTrend(pd.kpis.revenue.change)}
@@ -531,9 +629,9 @@ export default function AnalyticsPage() {
                    </div>
                )}
           </div>
-          <div className="bg-neutral-900 p-5 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden">
+          <div className="bg-neutral-900 p-4 md:p-5 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden">
                <p className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-1">Total Orders</p>
-               <h3 className="text-3xl font-bold text-white mb-2">{pd.kpis.orders.val.toLocaleString()}</h3>
+               <h3 className="text-xl md:text-3xl font-bold text-white mb-2">{pd.kpis.orders.val.toLocaleString()}</h3>
                {pd.kpis.hasValidPrevPeriod ? (
                    <div className="flex items-center justify-between">
                        {renderTrend(pd.kpis.orders.change)}
@@ -545,9 +643,9 @@ export default function AnalyticsPage() {
                    </div>
                )}
           </div>
-          <div className="bg-neutral-900 p-5 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden">
+          <div className="bg-neutral-900 p-4 md:p-5 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden">
                <p className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-1">Avg Order Value</p>
-               <h3 className="text-3xl font-bold text-white mb-2">€{pd.kpis.aov.val.toFixed(2)}</h3>
+               <h3 className="text-xl md:text-3xl font-bold text-white mb-2">€{pd.kpis.aov.val.toFixed(2)}</h3>
                {pd.kpis.hasValidPrevPeriod ? (
                    <div className="flex items-center justify-between">
                        {renderTrend(pd.kpis.aov.change)}
@@ -559,9 +657,9 @@ export default function AnalyticsPage() {
                    </div>
                )}
           </div>
-          <div className="bg-neutral-900 p-5 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden">
+          <div className="bg-neutral-900 p-4 md:p-5 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden">
                <p className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-1">Avg Daily Order Value</p>
-               <h3 className="text-3xl font-bold text-white mb-2">€{pd.kpis.avgDailyOrderValue.val.toFixed(2)}</h3>
+               <h3 className="text-xl md:text-3xl font-bold text-white mb-2">€{pd.kpis.avgDailyOrderValue.val.toFixed(2)}</h3>
                {pd.kpis.hasValidPrevPeriod ? (
                    <div className="flex items-center justify-between">
                        {renderTrend(pd.kpis.avgDailyOrderValue.change)}
@@ -573,10 +671,18 @@ export default function AnalyticsPage() {
                    </div>
                )}
           </div>
+          <div className="bg-neutral-900 p-4 md:p-5 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden">
+               <p className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-1">Rejected / Cancelled</p>
+               <h3 className="text-xl md:text-3xl font-bold text-red-500 mb-2">{pd.kpis.rejected.pct.toFixed(1)}%</h3>
+               <div className="flex items-center justify-between">
+                   <span className="text-xs text-neutral-400">€{pd.kpis.rejected.value.toFixed(2)} lost</span>
+                   <span className="text-[10px] text-neutral-500">{pd.kpis.rejected.count} orders</span>
+               </div>
+          </div>
        </div>
 
        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 bg-neutral-900 p-6 rounded-2xl border border-neutral-800 shadow-lg h-[400px] flex flex-col">
+          <div className="lg:col-span-2 bg-neutral-900 p-4 md:p-6 rounded-2xl border border-neutral-800 shadow-lg h-[250px] md:h-[400px] flex flex-col">
             <h3 className="text-lg font-bold text-white mb-4 shrink-0">Sales Trend</h3>
             <div className="flex-1 min-h-0">
                 <ResponsiveContainer width="100%" height="100%">
@@ -615,15 +721,54 @@ export default function AnalyticsPage() {
             </div>
           </div>
           
-          <div className="bg-neutral-900 p-6 rounded-2xl border border-neutral-800 shadow-lg h-[400px] flex flex-col">
+          {/* Mobile: Source Distribution — compact side-by-side */}
+          <div className="md:hidden bg-neutral-900 p-4 rounded-2xl border border-neutral-800 shadow-lg">
+            <h3 className="text-sm font-bold text-white mb-3 shrink-0">Source Distribution</h3>
+            {pieData.length === 0 ? (
+                <p className="text-sm text-neutral-500">No source data</p>
+            ) : (
+                <div className="flex items-center gap-4">
+                    <div className="w-[140px] h-[140px] shrink-0">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie data={pieData} cx="50%" cy="50%" innerRadius={30} outerRadius={55} paddingAngle={2} dataKey="value" nameKey="name" labelLine={false}>
+                                    {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} stroke="rgba(0,0,0,0)" />)}
+                                </Pie>
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </div>
+                    <div className="flex-1 space-y-2">
+                        {pieData.map((entry, idx) => {
+                            const total = pieData.reduce((s, e) => s + e.value, 0);
+                            const pct = total > 0 ? ((entry.value / total) * 100).toFixed(1) : "0.0";
+                            return (
+                                <div key={idx} className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-sm shrink-0" style={{backgroundColor: entry.color}}></div>
+                                        <span className="text-xs text-neutral-300">{entry.name}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs font-semibold text-white">€{entry.value.toFixed(0)}</span>
+                                        <span className="text-[10px] text-neutral-500">{pct}%</span>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+          </div>
+
+          {/* Desktop: Source Distribution — full doughnut */}
+          <div className="hidden md:flex bg-neutral-900 p-6 rounded-2xl border border-neutral-800 shadow-lg h-[400px] flex-col">
             <h3 className="text-lg font-bold text-white mb-4 shrink-0">Source Distribution</h3>
             {pieData.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-neutral-500"><p className="text-sm">No source data</p></div>
             ) : (
-                <div className="flex-1 min-h-0">
+                <div className="flex-1 min-h-0 flex flex-col relative">
                     <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
-                            <Pie data={pieData} cx="50%" cy="50%" innerRadius={0} outerRadius={100} paddingAngle={2} dataKey="value" nameKey="name" labelLine={false} label={renderCustomizedLabel}>
+                            <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={2} dataKey="value" nameKey="name" labelLine={false} label={renderCustomizedLabel}>
                                 {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} stroke="rgba(0,0,0,0)" />)}
                             </Pie>
                             <RechartsTooltip content={({active, payload}) => {
@@ -642,55 +787,82 @@ export default function AnalyticsPage() {
                             }} />
                         </PieChart>
                     </ResponsiveContainer>
+                    <div className="flex flex-wrap justify-center gap-4 mt-4">
+                        {pieData.map((entry, idx) => (
+                            <div key={idx} className="flex items-center gap-2 text-xs text-neutral-300">
+                                <div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: entry.color}}></div>
+                                <span>{entry.name}</span>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             )}
           </div>
        </div>
 
-       <div className="bg-neutral-900 rounded-2xl border border-neutral-800 shadow-lg overflow-hidden">
-          <div className="p-6 border-b border-neutral-800">
-              <h3 className="text-lg font-bold text-white">Revenue by Platform</h3>
-          </div>
-          <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                  <thead className="bg-neutral-950/50">
-                      <tr>
-                          <th className="px-6 py-4 text-xs font-semibold text-neutral-400 uppercase tracking-wider">Platform</th>
-                          <th className="px-6 py-4 text-xs font-semibold text-neutral-400 uppercase tracking-wider text-right">Revenue</th>
-                          <th className="px-6 py-4 text-xs font-semibold text-neutral-400 uppercase tracking-wider text-right">Orders</th>
-                          <th className="px-6 py-4 text-xs font-semibold text-neutral-400 uppercase tracking-wider text-right">AOV</th>
-                          <th className="px-6 py-4 text-xs font-semibold text-neutral-400 uppercase tracking-wider text-right">Share</th>
-                          <th className="px-6 py-4 text-xs font-semibold text-neutral-400 uppercase tracking-wider text-right">Trend</th>
-                      </tr>
-                  </thead>
-                  <tbody className="divide-y divide-neutral-800">
-                      {pd.platformTable.length === 0 ? (
-                          <tr><td colSpan="6" className="px-6 py-8 text-center text-sm text-neutral-500">No data for selected period</td></tr>
-                      ) : pd.platformTable.map((p, idx) => (
-                          <tr key={p.id} className="hover:bg-neutral-800/20 transition-colors">
-                              <td className="px-6 py-4">
-                                  <div className="flex items-center gap-3">
-                                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[p.id] }}></div>
-                                      <span className="font-bold text-white">{p.name}</span>
+
+       {/* Mobile: Tabbed bottom charts */}
+       <div className="md:hidden">
+           <div className="flex bg-neutral-900 rounded-xl p-1 border border-neutral-800 mb-4">
+               <button onClick={() => setActiveBottomChart("dow")} className={`flex-1 px-3 py-2 text-xs font-medium rounded-lg transition-colors ${activeBottomChart === "dow" ? "bg-emerald-500 text-white" : "text-neutral-400"}`}>By Day</button>
+               <button onClick={() => setActiveBottomChart("hod")} className={`flex-1 px-3 py-2 text-xs font-medium rounded-lg transition-colors ${activeBottomChart === "hod" ? "bg-emerald-500 text-white" : "text-neutral-400"}`}>By Hour</button>
+           </div>
+           <div className="bg-neutral-900 p-4 rounded-2xl border border-neutral-800 shadow-lg h-[250px] flex flex-col">
+              <h3 className="text-sm font-bold text-white mb-3 shrink-0">{activeBottomChart === "dow" ? "Revenue by Day of Week" : "Revenue by Hour of Day"}</h3>
+              <div className="flex-1 min-h-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                      {activeBottomChart === "dow" ? (
+                      <BarChart data={pd.dowChart} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#262626" />
+                          <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} stroke="#a3a3a3" />
+                          <YAxis fontSize={10} axisLine={false} tickLine={false} stroke="#737373" tickFormatter={(val) => `€${val}`} />
+                          <RechartsTooltip cursor={{ fill: '#ffffff', opacity: 0.05 }} content={({ active, payload, label }) => {
+                              if (!active || !payload?.length) return null;
+                              return (
+                                  <div style={{ backgroundColor: "#171717", border: "1px solid #404040", borderRadius: "12px", padding: "12px 14px", color: "#f5f5f5" }}>
+                                      <p style={{ color: "#a3a3a3", marginBottom: "8px", fontSize: "12px" }}>{label}</p>
+                                      <p style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px" }}>
+                                          <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: payload[0].color || "#10b981", display: "inline-block" }}></span>
+                                          <span style={{ color: "#a3a3a3" }}>Daily Average:</span>
+                                          <span style={{ fontWeight: "600" }}>€{Number(payload[0].value).toFixed(2)}</span>
+                                      </p>
                                   </div>
-                              </td>
-                              <td className="px-6 py-4 text-right text-sm font-medium text-neutral-200">€{p.revenue.toFixed(2)}</td>
-                              <td className="px-6 py-4 text-right text-sm font-medium text-neutral-300">{p.orders}</td>
-                              <td className="px-6 py-4 text-right text-sm font-medium text-neutral-300">€{p.aov.toFixed(2)}</td>
-                              <td className="px-6 py-4 text-right">
-                                  <span className="inline-block bg-neutral-800 text-neutral-300 px-2 py-0.5 rounded text-xs">{p.share.toFixed(1)}%</span>
-                              </td>
-                              <td className="px-6 py-4 flex justify-end">
-                                  {p.hasValidPrevPeriod ? renderTrend(p.change) : <span className="text-xs text-neutral-500">-</span>}
-                              </td>
-                          </tr>
-                      ))}
-                  </tbody>
-              </table>
-          </div>
+                              );
+                          }} />
+                          <Bar dataKey="avgRevenue" radius={[4, 4, 0, 0]}>
+                              {pd.dowChart.map((entry, idx) => (
+                                  <Cell key={`cell-${idx}`} fill={COLORS[entry.dominant] || "#ef4444"} />
+                              ))}
+                          </Bar>
+                      </BarChart>
+                      ) : (
+                      <BarChart data={pd.hodChart} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#262626" />
+                          <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} stroke="#a3a3a3" interval={3} />
+                          <YAxis fontSize={10} axisLine={false} tickLine={false} stroke="#737373" tickFormatter={(val) => `€${val}`} />
+                          <RechartsTooltip cursor={{ fill: '#ffffff', opacity: 0.05 }} content={({ active, payload, label }) => {
+                              if (!active || !payload?.length) return null;
+                              return (
+                                  <div style={{ backgroundColor: "#171717", border: "1px solid #404040", borderRadius: "12px", padding: "12px 14px", color: "#f5f5f5" }}>
+                                      <p style={{ color: "#a3a3a3", marginBottom: "8px", fontSize: "12px" }}>{label}</p>
+                                      <p style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px" }}>
+                                          <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#10b981", display: "inline-block" }}></span>
+                                          <span style={{ color: "#a3a3a3" }}>Total Revenue:</span>
+                                          <span style={{ fontWeight: "600" }}>€{Number(payload[0].value).toFixed(2)}</span>
+                                      </p>
+                                  </div>
+                              );
+                          }} />
+                          <Bar dataKey="revenue" fill="#10b981" radius={[2, 2, 0, 0]} />
+                      </BarChart>
+                      )}
+                  </ResponsiveContainer>
+              </div>
+           </div>
        </div>
 
-       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+       {/* Desktop: Side-by-side bottom charts */}
+       <div className="hidden md:grid grid-cols-1 lg:grid-cols-2 gap-6">
            <div className="bg-neutral-900 p-6 rounded-2xl border border-neutral-800 shadow-lg h-[350px] flex flex-col">
               <h3 className="text-lg font-bold text-white mb-4 shrink-0">Revenue by Day of Week</h3>
               <div className="flex-1 min-h-0">
