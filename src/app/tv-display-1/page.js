@@ -64,7 +64,7 @@ export default function TvDisplayPage() {
                 flex: 1,
                 display: "flex",
                 flexDirection: "column",
-                borderRight: i < displayed.length - 1 ? "1px solid #222" : "none",
+                borderRight: i < displayed.length - 1 ? "4px solid #000" : "none",
                 position: "relative",
                 overflow: "hidden",
               }}
@@ -136,7 +136,7 @@ export default function TvDisplayPage() {
                   {item.canonical_name}
                 </h2>
                 {item.description && (
-                  <p style={{ fontSize: 16, color: "#999", margin: 0, lineHeight: 1.4, fontWeight: 400, textTransform: "uppercase" }}>
+                  <p style={{ fontSize: 20, color: "#999", margin: 0, lineHeight: 1.4, fontWeight: 400, textTransform: "uppercase" }}>
                     {item.description}
                   </p>
                 )}
