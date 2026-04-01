@@ -28,7 +28,7 @@ const S = {
   },
   desc: {
     fontFamily: "'Nunito', sans-serif",
-    fontSize: 15.5,
+    fontSize: 18,
     color: "#666",
     margin: "2px 0 0 0",
     lineHeight: 1.25,
@@ -163,13 +163,13 @@ export default function TvDisplay4Page() {
             {chicken.map((item, i) => <ComboItem key={i} item={item} />)}
           </div>
           <InfoBox>
-            <p style={{ fontFamily: "'Bebas Neue', cursive", fontSize: 32, color: ORANGE, margin: "0 0 6px 0", letterSpacing: "0.03em" }}>
+            <p style={{ fontFamily: "'Bebas Neue', cursive", fontSize: 38, color: ORANGE, margin: "0 0 6px 0", letterSpacing: "0.03em" }}>
               Every combo includes
             </p>
-            <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 16, color: "#888", margin: "0 0 3px 0", lineHeight: 1.35 }}>
+            <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 19, color: "#888", margin: "0 0 3px 0", lineHeight: 1.35 }}>
               Choose 1 Side — Fries · Coleslaw · Mashed Potatoes · Rice with Corn
             </p>
-            <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 16, color: "#888", margin: 0, lineHeight: 1.35 }}>
+            <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 19, color: "#888", margin: 0, lineHeight: 1.35 }}>
               Choose 1 Soft Drink — Coca-Cola · Fanta · 7Up · Diet options available
             </p>
           </InfoBox>
