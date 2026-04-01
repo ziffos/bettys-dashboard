@@ -19,7 +19,7 @@ const S = {
   },
   comboName: {
     fontFamily: "'Bebas Neue', cursive",
-    fontSize: 31.5,
+    fontSize: 28,
     color: "#fff",
     margin: 0,
     textTransform: "uppercase",
