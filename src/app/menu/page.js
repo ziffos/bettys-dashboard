@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useRef } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { supabase } from "../../lib/supabase";
 import SkeletonBlock from "../../components/SkeletonBlock";
 import { Search, Table2, LayoutGrid, Pencil, Trash2, Plus, X, Check, ChevronDown } from "lucide-react";
@@ -539,7 +539,8 @@ export default function MenuPage() {
                 };
 
                 return (
-                  <tr key={item.id} className={`hover:bg-neutral-800/20 transition-colors group ${isEditing ? "bg-neutral-800/30" : ""}`} style={{ opacity: dimmed ? 0.45 : 1 }}>
+                  <React.Fragment key={item.id}>
+                  <tr className={`hover:bg-neutral-800/20 transition-colors group ${isEditing ? "bg-neutral-800/30" : ""}`} style={{ opacity: dimmed ? 0.45 : 1 }}>
                     {/* Item name */}
                     <td className="px-5 py-3">
                       {isEditing ? (
@@ -598,6 +599,58 @@ export default function MenuPage() {
                       )}
                     </td>
                   </tr>
+                  {isEditing && (
+                    <tr className="bg-neutral-800/20">
+                      <td colSpan={columns.length} className="px-5 py-3">
+                        <div className="grid grid-cols-4 gap-4">
+                          <div>
+                            <label className="block text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-1">Description</label>
+                            <textarea
+                              value={editValues.description ?? ""}
+                              onChange={(e) => setEditValues((p) => ({ ...p, description: e.target.value }))}
+                              rows={2}
+                              placeholder="Short description..."
+                              className="w-full bg-neutral-950 border border-neutral-700 focus:border-emerald-500 rounded-lg px-2 py-1.5 text-sm text-neutral-200 focus:outline-none transition-colors resize-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-1">Sort Order</label>
+                            <input
+                              type="number"
+                              value={editValues.sort_order ?? ""}
+                              onChange={(e) => setEditValues((p) => ({ ...p, sort_order: e.target.value }))}
+                              onKeyDown={(e) => { if (e.key === "Enter") saveEdit(); }}
+                              placeholder="0"
+                              className="w-full bg-neutral-950 border border-neutral-700 focus:border-emerald-500 rounded-lg px-2 py-1.5 text-sm text-neutral-200 focus:outline-none transition-colors"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-1">Servings</label>
+                            <input
+                              type="number"
+                              value={editValues.servings ?? ""}
+                              onChange={(e) => setEditValues((p) => ({ ...p, servings: e.target.value }))}
+                              onKeyDown={(e) => { if (e.key === "Enter") saveEdit(); }}
+                              placeholder="1"
+                              className="w-full bg-neutral-950 border border-neutral-700 focus:border-emerald-500 rounded-lg px-2 py-1.5 text-sm text-neutral-200 focus:outline-none transition-colors"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-1">Image URL</label>
+                            <input
+                              type="text"
+                              value={editValues.image_url ?? ""}
+                              onChange={(e) => setEditValues((p) => ({ ...p, image_url: e.target.value }))}
+                              onKeyDown={(e) => { if (e.key === "Enter") saveEdit(); }}
+                              placeholder="https://..."
+                              className="w-full bg-neutral-950 border border-neutral-700 focus:border-emerald-500 rounded-lg px-2 py-1.5 text-sm text-neutral-200 focus:outline-none transition-colors"
+                            />
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 );
               })}
             </tbody>
