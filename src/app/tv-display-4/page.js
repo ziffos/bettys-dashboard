@@ -45,7 +45,7 @@ const S = {
   },
   simpleRowName: {
     fontFamily: "'Nunito', sans-serif",
-    fontSize: 25,
+    fontSize: 22,
     color: "#ccc",
     margin: 0,
   },
