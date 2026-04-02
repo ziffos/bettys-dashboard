@@ -4,6 +4,33 @@ import { supabase } from "../../lib/supabase";
 
 const REF_W = 1920;
 const REF_H = 1080;
+const ORANGE = "#FFA000";
+
+function DescriptionLines({ text }) {
+  if (!text) return null;
+  const parts = text.split("·").map((s) => s.trim()).filter(Boolean);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "center" }}>
+      {parts.map((part, i) => {
+        const match = part.match(/^(\d+)\s*(pcs|pieces?)?\s*(.+)$/i);
+        if (match) {
+          const qty = match[1];
+          const rest = match[3].trim();
+          return (
+            <p key={i} style={{ fontSize: 24, color: "#fff", margin: 0, lineHeight: 1.3, fontWeight: 600, textShadow: "0 2px 8px rgba(0,0,0,0.8)", fontFamily: "'Nunito', sans-serif" }}>
+              <span style={{ color: ORANGE, fontWeight: 800 }}>{qty}x</span>{" "}{rest}
+            </p>
+          );
+        }
+        return (
+          <p key={i} style={{ fontSize: 24, color: "#fff", margin: 0, lineHeight: 1.3, fontWeight: 600, textShadow: "0 2px 8px rgba(0,0,0,0.8)", fontFamily: "'Nunito', sans-serif" }}>
+            {part}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function TvDisplay2Page() {
   const [items, setItems] = useState([]);
@@ -84,11 +111,7 @@ export default function TvDisplay2Page() {
             </div>
 
             <div style={{ position: "relative", zIndex: 2, marginTop: "auto", padding: "0 28px 32px", textAlign: "center" }}>
-              {item.description && (
-                <p style={{ fontSize: 18, color: "rgba(255,255,255,0.8)", margin: 0, lineHeight: 1.45, fontWeight: 400, textTransform: "uppercase", textShadow: "0 1px 6px rgba(0,0,0,0.7)" }}>
-                  {item.description}
-                </p>
-              )}
+              <DescriptionLines text={item.description} />
               {item.servings > 0 && (
                 <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 12 }}>
                   {[...Array(item.servings)].map((_, si) => (
