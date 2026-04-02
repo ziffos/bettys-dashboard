@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, useMemo } from "react";
+import Image from "next/image";
 import { supabase } from "../../lib/supabase";
 
 const ORANGE = "#FFA000";
@@ -145,9 +146,9 @@ export default function QrMenuPage() {
                   {catItems.map((item) => (
                     <div key={item.canonical_name} style={{ background: "#141414", borderRadius: 16, overflow: "hidden", border: "1px solid #1e1e1e" }}>
                       {/* Image */}
-                      <div style={{ width: "100%", aspectRatio: "1 / 1", background: "#1a1a1a", overflow: "hidden" }}>
+                      <div style={{ width: "100%", aspectRatio: "1 / 1", background: "#1a1a1a", overflow: "hidden", position: "relative" }}>
                         {item.image_url ? (
-                          <img src={item.image_url} alt={item.canonical_name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          <Image src={item.image_url} alt={item.canonical_name} fill sizes="45vw" quality={70} style={{ objectFit: "cover" }} />
                         ) : (
                           <div style={{ width: "100%", height: "100%", background: "#1a1a1a" }} />
                         )}

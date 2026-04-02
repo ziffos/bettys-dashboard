@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
+import Image from "next/image";
 import { supabase } from "../../lib/supabase";
 
 const REF_W = 1920;
@@ -94,10 +95,14 @@ export default function TvDisplayPage() {
           >
             {/* Background image */}
             {item.image_url ? (
-              <img
+              <Image
                 src={item.image_url}
                 alt={item.canonical_name}
-                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", zIndex: 0 }}
+                fill
+                sizes="25vw"
+                quality={75}
+                priority={i === 0}
+                style={{ objectFit: "cover", zIndex: 0 }}
               />
             ) : (
               <div style={{ position: "absolute", inset: 0, background: "#1a1a1a", zIndex: 0 }} />
