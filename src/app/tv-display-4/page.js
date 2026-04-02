@@ -72,7 +72,7 @@ function ComboItem({ item }) {
 
 function SimpleRow({ name, price }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid #1a1a1a" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0", borderBottom: "1px solid #1a1a1a" }}>
       <p style={S.simpleRowName}>{name}</p>
       {price != null && <p style={S.simpleRowPrice}>€{Number(price).toFixed(2)}</p>}
     </div>
