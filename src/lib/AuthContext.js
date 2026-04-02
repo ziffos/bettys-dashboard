@@ -46,7 +46,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     let timeoutId;
 
-    if (loading && pathname !== "/login" && !pathname.startsWith("/tv-display")) {
+    if (loading && pathname !== "/login" && !pathname.startsWith("/tv-display") && pathname !== "/qr-menu") {
       timeoutId = setTimeout(() => {
         if (loading) {
           handleSignOut("Session timed out. Please log in again.");
@@ -78,7 +78,7 @@ export const AuthProvider = ({ children }) => {
           setProfile(null);
           setPermissions(null);
           setLoading(false);
-          if (pathname !== "/login" && !pathname.startsWith("/tv-display")) {
+          if (pathname !== "/login" && !pathname.startsWith("/tv-display") && pathname !== "/qr-menu") {
             router.push("/login");
           }
         }

@@ -26,7 +26,7 @@ export default function ClientLayout({ children }) {
   }
 
   // If we are on the login or tv-display page, don't show the sidebar or header
-  if (pathname === "/login" || pathname.startsWith("/tv-display")) {
+  if (pathname === "/login" || pathname.startsWith("/tv-display") || pathname === "/qr-menu") {
      return <>{children}</>;
   }
 
