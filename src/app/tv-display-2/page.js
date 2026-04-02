@@ -25,7 +25,6 @@ export default function TvDisplay2Page() {
         .from("menu_items")
         .select("canonical_name, description, pos_price, image_url, sort_order, servings")
         .eq("is_active", true)
-        .eq("category", "Fried Chicken Combos")
         .order("sort_order", { ascending: true })
         .range(4, 7);
       if (data) setItems(data);

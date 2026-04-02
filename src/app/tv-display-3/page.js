@@ -25,9 +25,8 @@ export default function TvDisplay3Page() {
         .from("menu_items")
         .select("canonical_name, description, pos_price, image_url, sort_order, servings")
         .eq("is_active", true)
-        .eq("category", "Burger & Wrap Combos")
         .order("sort_order", { ascending: true })
-        .limit(4);
+        .range(8, 11);
       if (data) setItems(data);
     }
     fetchItems();
