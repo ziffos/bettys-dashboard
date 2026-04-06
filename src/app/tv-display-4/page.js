@@ -9,7 +9,7 @@ const REF_H = 1080;
 const S = {
   catTitle: {
     fontFamily: "'Bebas Neue', cursive",
-    fontSize: 46.5,
+    fontSize: 56,
     color: "#fff",
     margin: 0,
     borderLeft: `4px solid ${ORANGE}`,
@@ -19,7 +19,7 @@ const S = {
   },
   comboName: {
     fontFamily: "'Bebas Neue', cursive",
-    fontSize: 28,
+    fontSize: 34,
     color: "#fff",
     margin: 0,
     textTransform: "uppercase",
@@ -37,7 +37,7 @@ const S = {
   },
   price: {
     fontFamily: "'Bebas Neue', cursive",
-    fontSize: 29,
+    fontSize: 35,
     color: ORANGE,
     margin: 0,
     whiteSpace: "nowrap",
@@ -45,13 +45,13 @@ const S = {
   },
   simpleRowName: {
     fontFamily: "'Nunito', sans-serif",
-    fontSize: 22,
+    fontSize: 26,
     color: "#ccc",
     margin: 0,
   },
   simpleRowPrice: {
     fontFamily: "'Bebas Neue', cursive",
-    fontSize: 29,
+    fontSize: 35,
     color: ORANGE,
     margin: 0,
     whiteSpace: "nowrap",
@@ -62,7 +62,7 @@ function FormatDesc({ text }) {
   if (!text) return null;
   const parts = text.split("·").map((s) => s.trim()).filter(Boolean);
   return (
-    <p style={{ fontSize: 18, color: "#999", margin: "3px 0 0", lineHeight: 1.35, fontFamily: "'Nunito', sans-serif", fontWeight: 600, maxWidth: "85%" }}>
+    <p style={{ fontSize: 22, color: "#999", margin: "3px 0 0", lineHeight: 1.35, fontFamily: "'Nunito', sans-serif", fontWeight: 600, maxWidth: "85%" }}>
       {parts.map((part, i) => {
         const match = part.match(/^(\d+)\s*(pcs|pieces?)?\s*(.+)$/i);
         return (
@@ -205,7 +205,7 @@ export default function TvDisplay4Page() {
 
           <div style={{ marginTop: 18 }}>
             <CategoryTitle title="Dips — €0.70 each" />
-            <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 20, color: "#ccc", margin: 0, lineHeight: 1.6 }}>
+            <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 24, color: "#ccc", margin: 0, lineHeight: 1.6 }}>
               {dips.map((d) => d.canonical_name).join("  ·  ")}
             </p>
           </div>
