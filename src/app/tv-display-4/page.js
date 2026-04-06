@@ -159,48 +159,37 @@ export default function TvDisplay4Page() {
         {/* ─── Column 1: Fried Chicken Combos ─── */}
         <div style={{ display: "flex", flexDirection: "column", padding: "22px 22px", borderRight: "1px solid #2a2a2a" }}>
           <CategoryTitle title="Fried Chicken Combos" />
-          <div style={{ flex: "0 1 auto" }}>
+          <div>
             {chicken.map((item, i) => <ComboItem key={i} item={item} />)}
           </div>
-          <InfoBox>
-            <p style={{ fontFamily: "'Bebas Neue', cursive", fontSize: 38, color: ORANGE, margin: "0 0 6px 0", letterSpacing: "0.03em" }}>
-              Every combo includes
-            </p>
-            <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 19, color: "#888", margin: "0 0 3px 0", lineHeight: 1.35 }}>
-              Choose 1 Side — Fries · Coleslaw · Mashed Potatoes · Rice with Corn
-            </p>
-            <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 19, color: "#888", margin: 0, lineHeight: 1.35 }}>
-              Choose 1 Soft Drink — Coca-Cola · Fanta · 7Up · Diet options available
-            </p>
-          </InfoBox>
         </div>
 
-        {/* ─── Column 2: Burgers & Wraps + Products ─── */}
+        {/* ─── Column 2: Burgers & Wraps + Sides ─── */}
         <div style={{ display: "flex", flexDirection: "column", padding: "22px 22px", borderRight: "1px solid #2a2a2a" }}>
           <CategoryTitle title="Burger & Wrap Combos" />
           <div>
             {burgers.map((item, i) => <ComboItem key={i} item={item} />)}
           </div>
           <div style={{ marginTop: 18 }}>
-            <CategoryTitle title="Products" />
+            <CategoryTitle title="Sides" />
             <div>
-              {products.map((item, i) => <SimpleRow key={i} name={item.canonical_name} price={item.pos_price} />)}
+              {sides.map((item, i) => <SimpleRow key={i} name={item.canonical_name} price={item.pos_price} />)}
             </div>
           </div>
         </div>
 
-        {/* ─── Column 3: Sides, Dips, Drinks ─── */}
+        {/* ─── Column 3: Products, Dips, Drinks ─── */}
         <div style={{ display: "flex", flexDirection: "column", padding: "22px 22px" }}>
-          <CategoryTitle title="Sides" />
+          <CategoryTitle title="Products" />
           <div>
-            {sides.map((item, i) => <SimpleRow key={i} name={item.canonical_name} price={item.pos_price} />)}
+            {products.map((item, i) => <SimpleRow key={i} name={item.canonical_name} price={item.pos_price} />)}
           </div>
 
           <div style={{ marginTop: 18 }}>
-            <CategoryTitle title="Dips" />
-            <div>
-              {dips.map((item, i) => <SimpleRow key={i} name={item.canonical_name} price={item.pos_price} />)}
-            </div>
+            <CategoryTitle title="Dips — €0.70 each" />
+            <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 20, color: "#ccc", margin: 0, lineHeight: 1.6 }}>
+              {dips.map((d) => d.canonical_name).join("  ·  ")}
+            </p>
           </div>
 
           <div style={{ marginTop: 18 }}>
