@@ -58,12 +58,36 @@ const S = {
   },
 };
 
+function DescriptionLines({ text }) {
+  if (!text) return null;
+  const parts = text.split("·").map((s) => s.trim()).filter(Boolean);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 1, marginTop: 2 }}>
+      {parts.map((part, i) => {
+        const match = part.match(/^(\d+)\s*(pcs|pieces?)?\s*(.+)$/i);
+        if (match) {
+          return (
+            <p key={i} style={{ fontSize: 15, color: "#999", margin: 0, lineHeight: 1.3, fontWeight: 600, fontFamily: "'Nunito', sans-serif" }}>
+              <span style={{ color: ORANGE, fontWeight: 800 }}>{match[1]}x</span>{" "}{match[3].trim()}
+            </p>
+          );
+        }
+        return (
+          <p key={i} style={{ fontSize: 15, color: "#999", margin: 0, lineHeight: 1.3, fontWeight: 600, fontFamily: "'Nunito', sans-serif" }}>
+            {part}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 function ComboItem({ item }) {
   return (
     <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #1a1a1a", gap: 12 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={S.comboName}>{item.canonical_name}</p>
-        {item.description && <p style={S.desc}>{item.description}</p>}
+        <DescriptionLines text={item.description} />
       </div>
       {item.pos_price != null && <p style={S.price}>€{Number(item.pos_price).toFixed(2)}</p>}
     </div>
