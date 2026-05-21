@@ -97,8 +97,10 @@ function SimpleRow({ name, price }) {
   );
 }
 
-function CategoryTitle({ title }) {
-  return <h3 style={{ ...S.catTitle, marginBottom: 8 }}>{title}</h3>;
+function CategoryTitle({ title, size = "lg" }) {
+  const fontSize = size === "sm" ? 40 : 56;
+  const marginBottom = size === "sm" ? 4 : 8;
+  return <h3 style={{ ...S.catTitle, fontSize, marginBottom }}>{title}</h3>;
 }
 
 function InfoBox({ children }) {
@@ -203,15 +205,15 @@ export default function TvDisplay4Page() {
             {products.map((item, i) => <SimpleRow key={i} name={item.canonical_name} price={item.pos_price} />)}
           </div>
 
-          <div style={{ marginTop: 18 }}>
-            <CategoryTitle title="Dips — €0.70 each" />
-            <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 24, color: "#ccc", margin: 0, lineHeight: 1.6 }}>
+          <div style={{ marginTop: 12 }}>
+            <CategoryTitle title="Dips — €0.70 each" size="sm" />
+            <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 22, color: "#ccc", margin: 0, lineHeight: 1.5 }}>
               {dips.map((d) => d.canonical_name).join("  ·  ")}
             </p>
           </div>
 
-          <div style={{ marginTop: 18 }}>
-            <CategoryTitle title="Drinks" />
+          <div style={{ marginTop: 12 }}>
+            <CategoryTitle title="Drinks" size="sm" />
             <div>
               <SimpleRow name="Soft Drinks 330ml" price={1.50} />
               <SimpleRow name="Water" price={0.80} />
