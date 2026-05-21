@@ -14,9 +14,7 @@ import {
   Star,
   ShoppingBag,
   CreditCard,
-  Calendar,
-  Wallet,
-  Users
+  Wallet
 } from "lucide-react";
 import logo from "../../public/images/betty_logo.png";
 import { useAuth } from "../lib/AuthContext";
@@ -36,8 +34,6 @@ const ANALYTICS_ITEMS = [
 const OPERATIONS_ITEMS = [
   { slug: "menu",        href: "/menu",             icon: UtensilsCrossed, label: "Menu" },
   { slug: "payouts",     href: "/platform-payouts", icon: CreditCard,      label: "Platform Payouts" },
-  { slug: "calendar",    href: "/calendar",         icon: Calendar,        label: "Calendar" },
-  { slug: "payroll",     href: "/payroll",           icon: Users,           label: "Payroll" },
   { slug: "my-payroll",  href: "/my-payroll",        icon: Wallet,          label: "My Payroll" },
 ];
 
