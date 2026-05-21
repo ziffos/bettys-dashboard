@@ -18,6 +18,7 @@ const SLUG_TO_PATH = {
   calendar: "/calendar",
   "my-payroll": "/my-payroll",
   payroll: "/payroll",
+  "tv-displays": "/tv-displays",
   settings: "/settings",
 };
 
@@ -46,7 +47,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     let timeoutId;
 
-    if (loading && pathname !== "/login" && !pathname.startsWith("/tv-display") && pathname !== "/qr-menu") {
+    if (loading && pathname !== "/login" && !pathname.startsWith("/tv-display-") && pathname !== "/qr-menu") {
       timeoutId = setTimeout(() => {
         if (loading) {
           handleSignOut("Session timed out. Please log in again.");
@@ -78,7 +79,7 @@ export const AuthProvider = ({ children }) => {
           setProfile(null);
           setPermissions(null);
           setLoading(false);
-          if (pathname !== "/login" && !pathname.startsWith("/tv-display") && pathname !== "/qr-menu") {
+          if (pathname !== "/login" && !pathname.startsWith("/tv-display-") && pathname !== "/qr-menu") {
             router.push("/login");
           }
         }
