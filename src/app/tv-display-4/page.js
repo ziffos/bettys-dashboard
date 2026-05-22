@@ -137,8 +137,17 @@ export default function TvDisplay4Page() {
       if (data) setItems(data);
     }
     fetchItems();
-    const interval = setInterval(fetchItems, 60000);
-    return () => clearInterval(interval);
+    const channel = supabase
+      .channel("tv-display-4")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "menu_items" },
+        fetchItems,
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const grouped = useMemo(() => {

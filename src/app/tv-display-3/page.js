@@ -51,15 +51,24 @@ export default function TvDisplay3Page() {
     async function fetchItems() {
       const { data } = await supabase
         .from("menu_items")
-        .select("canonical_name, description, pos_price, image_url, sort_order, servings")
+        .select("canonical_name, description, pos_price, image_url, servings, position")
         .eq("is_active", true)
-        .order("sort_order", { ascending: true })
-        .range(8, 11);
+        .eq("tv_number", 3)
+        .order("position", { ascending: true });
       if (data) setItems(data);
     }
     fetchItems();
-    const interval = setInterval(fetchItems, 30000);
-    return () => clearInterval(interval);
+    const channel = supabase
+      .channel("tv-display-3")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "menu_items" },
+        fetchItems,
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const displayed = items.slice(0, 4);
