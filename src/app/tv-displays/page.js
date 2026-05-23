@@ -18,6 +18,27 @@ const DISPLAYS = [
 const EDITABLE_TVS = [1, 2, 3];
 const SLOTS_PER_TV = 4;
 
+const CATEGORIES = [
+  "Fried Chicken Combos",
+  "Burger & Wrap Combos",
+  "Products",
+  "Sides",
+  "Dips",
+  "Drinks",
+];
+
+const CATEGORY_COLORS = {
+  "Fried Chicken Combos": "#facc15",
+  "Burger & Wrap Combos": "#fb923c",
+  Products: "#ef4444",
+  Sides: "#10b981",
+  Dips: "#8b5cf6",
+  Drinks: "#3b82f6",
+  Unknown: "#737373",
+};
+
+const CATEGORY_ORDER = Object.fromEntries(CATEGORIES.map((c, i) => [c, i]));
+
 function DisplayPreview({ label, path }) {
   const containerRef = useRef(null);
   const [scale, setScale] = useState(0);
@@ -107,7 +128,7 @@ function ProductCard({
       onDragEnd={onDragEnd}
       onClick={() => onPick(item)}
       className={[
-        "group relative flex items-center gap-2 w-full p-2 rounded-lg border text-left transition-all",
+        "group relative flex flex-col items-start gap-0.5 w-full p-2 rounded-lg border text-left transition-all",
         "bg-neutral-900 hover:bg-neutral-800 active:scale-[0.98]",
         isSelected
           ? "border-emerald-400 ring-2 ring-emerald-400/40"
@@ -115,27 +136,10 @@ function ProductCard({
         isDragSource ? "opacity-40" : "opacity-100",
       ].join(" ")}
     >
-      <div className="relative w-10 h-10 shrink-0 rounded-md overflow-hidden bg-neutral-950">
-        {item.image_url ? (
-          <Image
-            src={item.image_url}
-            alt={item.canonical_name}
-            fill
-            sizes="40px"
-            className="object-cover"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-neutral-700 text-[10px]">
-            No img
-          </div>
-        )}
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-xs font-semibold text-white truncate">{item.canonical_name}</p>
-        {item.pos_price != null && (
-          <p className="text-[11px] text-amber-400">€{Number(item.pos_price).toFixed(2)}</p>
-        )}
-      </div>
+      <p className="text-xs font-semibold text-white truncate w-full">{item.canonical_name}</p>
+      {item.pos_price != null && (
+        <p className="text-[11px] text-amber-400">€{Number(item.pos_price).toFixed(2)}</p>
+      )}
     </button>
   );
 }
@@ -250,7 +254,7 @@ function LayoutEditor({ onDone }) {
   const fetchItems = useCallback(async () => {
     const { data, error } = await supabase
       .from("menu_items")
-      .select("id, canonical_name, pos_price, image_url, tv_number, position")
+      .select("id, canonical_name, category, pos_price, image_url, tv_number, position")
       .eq("is_active", true)
       .order("canonical_name", { ascending: true });
     if (error) {
@@ -270,6 +274,16 @@ function LayoutEditor({ onDone }) {
   const slotItem = (tv, pos) =>
     items.find((it) => it.tv_number === tv && it.position === pos);
   const unassigned = items.filter((it) => it.tv_number == null);
+  const unassignedByCategory = CATEGORIES.map((cat) => ({
+    category: cat,
+    items: unassigned.filter((it) => (it.category || "Unknown") === cat),
+  })).filter((g) => g.items.length > 0);
+  const unknownCategoryItems = unassigned.filter(
+    (it) => !it.category || !CATEGORY_ORDER.hasOwnProperty(it.category),
+  );
+  if (unknownCategoryItems.length > 0) {
+    unassignedByCategory.push({ category: "Unknown", items: unknownCategoryItems });
+  }
 
   // Place `movingId` into (targetTv, targetPos). If a different item already
   // sits there, swap it into wherever movingId came from (which may be null,
@@ -412,7 +426,7 @@ function LayoutEditor({ onDone }) {
 
       {/* Library */}
       <section className="bg-neutral-900 border border-neutral-800 rounded-2xl p-3 md:p-4">
-        <h3 className="text-xs md:text-sm font-semibold text-white mb-2">
+        <h3 className="text-xs md:text-sm font-semibold text-white mb-3">
           Available products{" "}
           <span className="text-neutral-500 font-normal">({unassigned.length})</span>
         </h3>
@@ -421,18 +435,38 @@ function LayoutEditor({ onDone }) {
             All active products are placed on a TV slot.
           </p>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
-            {unassigned.map((item) => (
-              <ProductCard
-                key={item.id}
-                item={item}
-                isSelected={selected?.id === item.id}
-                isDragSource={dragSource?.id === item.id}
-                onPick={pickItem}
-                onDragStart={onProductDragStart}
-                onDragEnd={onDragEnd}
-              />
-            ))}
+          <div className="space-y-4">
+            {unassignedByCategory.map(({ category, items: catItems }) => {
+              const color = CATEGORY_COLORS[category] || CATEGORY_COLORS.Unknown;
+              return (
+                <div key={category}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span
+                      className="inline-block px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wide"
+                      style={{ backgroundColor: `${color}20`, color }}
+                    >
+                      {category}
+                    </span>
+                    <span className="text-[11px] text-neutral-500">
+                      ({catItems.length})
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+                    {catItems.map((item) => (
+                      <ProductCard
+                        key={item.id}
+                        item={item}
+                        isSelected={selected?.id === item.id}
+                        isDragSource={dragSource?.id === item.id}
+                        onPick={pickItem}
+                        onDragStart={onProductDragStart}
+                        onDragEnd={onDragEnd}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </section>
