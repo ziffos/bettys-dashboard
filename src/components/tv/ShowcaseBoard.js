@@ -1,19 +1,24 @@
 "use client";
 
 /*
- * Animated version of the TV 1/2/3 showcase board — a motion proposal, not yet
- * wired into the live displays. Same data contract as tv-display-1..3 (4 slots
- * from `menu_items` filtered on tv_number), same 1920x1080 scale-to-fit shell.
+ * Animated showcase board for TV 1, 2 and 3 — a motion proposal, not yet wired
+ * into the live displays. Same data contract as tv-display-1..3 (4 slots from
+ * `menu_items` filtered on tv_number), same 1920x1080 scale-to-fit shell.
+ *
+ * The spotlight is shared across all three screens: see motionClock.js. During
+ * the calm phase every dish on every screen is shown normally; during the
+ * feature phase exactly one dish anywhere across the three screens is lifted,
+ * and the turn walks slot 1..4 of TV1, then TV2, then TV3.
  *
  * Motion layers, slowest to fastest:
  *   1. Ken Burns   — each photo drifts + zooms on its own 30s phase, forever.
- *   2. Spotlight   — every HERO_MS one panel widens and brightens; siblings dim.
+ *   2. Spotlight   — clock-synced, one dish at a time across the three screens.
  *   3. Light bar   — a highlight runs along the shared orange base bar.
  *   4. Shimmer     — a gloss sweep crosses each price pill on its own phase.
  *   5. Boot        — one-shot cascade whenever the slot contents actually change.
  *
- * Everything animated is transform / opacity / box-shadow, except the panel
- * width (flex-grow), which reflows 4 boxes once every 7s — cheap enough for the
+ * Everything animated is transform / opacity, except the panel width
+ * (flex-grow), which reflows 4 boxes once per turn — cheap enough for the
  * Android sticks these run on, and it's what makes the spotlight read as
  * cinematic rather than as a brightness flicker.
  */
@@ -21,14 +26,34 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { supabase } from "../../lib/supabase";
+import { DWELL_MS, SLOTS_PER_TV, heroForTv, phaseAt } from "./motionClock";
 
 const REF_W = 1920;
 const REF_H = 1080;
 const ORANGE = "#FFA000";
 
-const SLOTS = 4;
-const HERO_MS = 7000; // spotlight dwell per panel
-const HERO_GROW = 1.62; // hero flex-grow vs. 1 for the rest
+const HERO_GROW = 1.62; // featured panel's flex-grow vs. 1 for the rest
+
+/* Names are kept to a single line. A panel is at its narrowest while a sibling
+ * on the same screen holds the spotlight: 1920 / (HERO_GROW + 3) minus the 32px
+ * side padding. Sizing against that worst case means the font is fixed, so the
+ * text never reflows while the panel animates. */
+const NAME_AVAIL = Math.floor(REF_W / (HERO_GROW + SLOTS_PER_TV - 1)) - 64;
+const NAME_MAX = 52;
+const NAME_MIN = 24;
+const BEBAS_CHAR_EM = 0.44; // measured average advance for Bebas Neue caps
+
+function nameSize(name) {
+  if (!name) return NAME_MAX;
+  const fit = Math.floor(NAME_AVAIL / (name.length * BEBAS_CHAR_EM));
+  return Math.max(NAME_MIN, Math.min(NAME_MAX, fit));
+}
+
+/* One size for all four panels on a screen — whatever the longest name needs.
+ * Per-item sizing fits more text but makes neighbouring panels look mismatched. */
+function boardNameSize(names) {
+  return names.reduce((min, n) => Math.min(min, nameSize(n)), NAME_MAX);
+}
 
 function DescriptionLines({ text }) {
   if (!text) return null;
@@ -56,7 +81,9 @@ function DescriptionLines({ text }) {
 export default function ShowcaseBoard({ tvNumber }) {
   const [items, setItems] = useState([]);
   const [scale, setScale] = useState(1);
-  const [tick, setTick] = useState(0);
+  // null on first paint so the server-rendered markup and the client agree;
+  // the ticker below fills it in a frame later.
+  const [phase, setPhase] = useState(null);
   // Bumped only when the slot contents change, so the boot cascade replays on a
   // real menu edit but not on every realtime echo.
   const [revision, setRevision] = useState(0);
@@ -71,6 +98,24 @@ export default function ShowcaseBoard({ tvNumber }) {
     window.addEventListener("resize", updateScale);
     return () => window.removeEventListener("resize", updateScale);
   }, [updateScale]);
+
+  // Re-render once per phase change rather than on a fast interval: 13 renders
+  // per 139s cycle instead of a few hundred.
+  useEffect(() => {
+    let cancelled = false;
+    let id;
+    const step = () => {
+      if (cancelled) return;
+      const next = phaseAt(Date.now());
+      setPhase(next);
+      id = setTimeout(step, Math.max(120, next.msLeft));
+    };
+    id = setTimeout(step, 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(id);
+    };
+  }, []);
 
   useEffect(() => {
     async function fetchItems() {
@@ -104,17 +149,14 @@ export default function ShowcaseBoard({ tvNumber }) {
     };
   }, [tvNumber]);
 
-  const displayed = useMemo(() => items.slice(0, SLOTS), [items]);
+  const displayed = useMemo(() => items.slice(0, SLOTS_PER_TV), [items]);
+  const nameFont = useMemo(
+    () => boardNameSize(displayed.map((d) => d.canonical_name)),
+    [displayed],
+  );
 
-  // Advance the spotlight. `tick` counts up forever and the hero index is
-  // derived from it, so a slot count change can never leave hero out of range.
-  useEffect(() => {
-    if (displayed.length < 2) return;
-    const id = setInterval(() => setTick((t) => t + 1), HERO_MS);
-    return () => clearInterval(id);
-  }, [displayed.length]);
-
-  const hero = displayed.length ? tick % displayed.length : 0;
+  const calm = !phase || phase.calm;
+  const hero = heroForTv(tvNumber, phase);
 
   return (
     <>
@@ -159,13 +201,15 @@ export default function ShowcaseBoard({ tvNumber }) {
           animation-delay: calc(var(--i) * -7.5s);
           will-change: transform;
           transition: filter 1100ms ease;
+          filter: saturate(0.7);
         }
-        .panel:not(.hero) .kb { filter: saturate(0.7); }
+        /* Full colour when nothing is featured, or when this panel is. */
+        .board.calm .kb, .panel.hero .kb { filter: none; }
         @keyframes kenburns {
           from { transform: scale(1.03) translate3d(0, 0, 0); }
           to   { transform: scale(1.13) translate3d(-1.6%, -1.4%, 0); }
         }
-        /* Odd panels drift the other way so the board never pulses in unison. */
+        /* Even panels drift the other way so the board never pulses in unison. */
         .panel:nth-child(even) .kb { animation-name: kenburnsAlt; }
         @keyframes kenburnsAlt {
           from { transform: scale(1.12) translate3d(1.5%, 1%, 0); }
@@ -197,9 +241,9 @@ export default function ShowcaseBoard({ tvNumber }) {
           opacity: 0.46;
           transition: opacity 1100ms cubic-bezier(0.65, 0, 0.35, 1);
         }
-        .hero .dim { opacity: 0; }
+        .board.calm .dim, .panel.hero .dim { opacity: 0; }
 
-        /* Orange rim-light on the featured panel. */
+        /* Orange rim-light on the featured panel only. */
         .rim {
           inset: 0; z-index: 3;
           box-shadow: inset 0 0 0 3px rgba(255,160,0,0.85),
@@ -207,13 +251,13 @@ export default function ShowcaseBoard({ tvNumber }) {
           opacity: 0;
           transition: opacity 900ms ease;
         }
-        .hero .rim { opacity: 1; }
+        .panel.hero .rim { opacity: 1; }
 
         /* ── Content ─────────────────────────────────────────────────── */
         .top {
           position: relative;
           z-index: 4;
-          padding: 36px 32px 0;
+          padding: 40px 32px 0;
           text-align: center;
           transform-origin: top center;
           transition: transform 1100ms cubic-bezier(0.65, 0, 0.35, 1),
@@ -221,8 +265,7 @@ export default function ShowcaseBoard({ tvNumber }) {
           transform: scale(0.94);
           opacity: 0.86;
         }
-        .hero .top { transform: scale(1); opacity: 1; }
-        .top.hasBadge { padding-top: 84px; }
+        .board.calm .top, .panel.hero .top { transform: scale(1); opacity: 1; }
 
         .bottom {
           position: relative;
@@ -236,24 +279,23 @@ export default function ShowcaseBoard({ tvNumber }) {
           transform: scale(0.94);
           opacity: 0.82;
         }
-        .hero .bottom { transform: scale(1); opacity: 1; }
+        .board.calm .bottom, .panel.hero .bottom { transform: scale(1); opacity: 1; }
 
-        /* Fixed two-line box: long names wrap when a panel is in its narrow
-         * state, and reserving the height keeps every panel's price pill on the
-         * same baseline as the spotlight moves. */
-        .name {
+        /* Single line, always. Font size is picked per item to fit the narrow
+         * state; the fixed box height keeps every price pill on one baseline. */
+        .nameBox {
           display: flex;
           align-items: center;
           justify-content: center;
-          min-height: 2.1em;
+          height: 62px;
+        }
+        .name {
           font-family: 'Bebas Neue', cursive;
-          font-size: 52px;
           color: #fff;
           margin: 0;
-          line-height: 1.05;
+          line-height: 1;
           letter-spacing: 0.02em;
-          text-align: center;
-          text-wrap: balance;
+          white-space: nowrap;
           text-shadow: 0 2px 10px rgba(0,0,0,0.6);
           animation: riseIn 800ms cubic-bezier(0.22, 1, 0.36, 1) both;
           animation-delay: calc(var(--i) * 140ms + 200ms);
@@ -262,13 +304,13 @@ export default function ShowcaseBoard({ tvNumber }) {
         .nameRule {
           height: 3px;
           width: 96px;
-          margin: 12px auto 0;
+          margin: 10px auto 0;
           background: ${ORANGE};
           border-radius: 2px;
           transform: scaleX(0);
           transition: transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
         }
-        .hero .nameRule { transform: scaleX(1); }
+        .panel.hero .nameRule { transform: scaleX(1); }
 
         @keyframes riseIn {
           from { opacity: 0; transform: translateY(28px); }
@@ -301,7 +343,7 @@ export default function ShowcaseBoard({ tvNumber }) {
           box-shadow: 0 6px 18px rgba(0,0,0,0.45);
           transition: box-shadow 1100ms ease;
         }
-        .hero .pill {
+        .panel.hero .pill {
           box-shadow: 0 6px 18px rgba(0,0,0,0.45),
                       0 0 46px rgba(255,160,0,0.55);
         }
@@ -321,44 +363,6 @@ export default function ShowcaseBoard({ tvNumber }) {
           0%   { transform: translateX(-240%) skewX(-18deg); }
           14%  { transform: translateX(340%) skewX(-18deg); }
           100% { transform: translateX(340%) skewX(-18deg); }
-        }
-
-        /* ── Feeds badge ─────────────────────────────────────────────── */
-        .badge {
-          position: absolute;
-          top: 24px;
-          left: 50%;
-          z-index: 5;
-          overflow: hidden;
-          background: ${ORANGE};
-          color: #141414;
-          font-weight: 800;
-          font-size: 22px;
-          padding: 10px 20px;
-          border-radius: 999px;
-          letter-spacing: 0.06em;
-          white-space: nowrap;
-          animation: badgeIn 900ms cubic-bezier(0.22, 1, 0.36, 1) both,
-                     badgeGlow 3.4s ease-in-out 1.2s infinite;
-          animation-delay: calc(var(--i) * 140ms + 480ms), 1.2s;
-        }
-        @keyframes badgeIn {
-          0%   { opacity: 0; transform: translate(-50%, -14px) scale(0.8); }
-          100% { opacity: 1; transform: translate(-50%, 0) scale(1); }
-        }
-        @keyframes badgeGlow {
-          0%, 100% { box-shadow: 0 6px 16px rgba(0,0,0,0.5), 0 0 0 rgba(255,160,0,0); }
-          50%      { box-shadow: 0 6px 16px rgba(0,0,0,0.5), 0 0 34px rgba(255,160,0,0.75); }
-        }
-        .badge::after {
-          content: "";
-          position: absolute;
-          top: 0; left: 0;
-          width: 40%;
-          height: 100%;
-          background: linear-gradient(100deg, transparent, rgba(255,255,255,0.75), transparent);
-          transform: translateX(-260%) skewX(-18deg);
-          animation: shimmer 7s linear 2.2s infinite;
         }
 
         /* ── Description + servings ──────────────────────────────────── */
@@ -410,18 +414,17 @@ export default function ShowcaseBoard({ tvNumber }) {
         }
 
         @media (prefers-reduced-motion: reduce) {
-          .kb, .bar::after, .pill::after, .badge::after { animation: none !important; }
+          .kb, .bar::after, .pill::after { animation: none !important; }
         }
       `}</style>
 
       <div
         key={revision}
-        className="board"
+        className={`board${calm ? " calm" : ""}`}
         style={{ width: REF_W, height: REF_H, transform: `scale(${scale})` }}
       >
         {displayed.map((item, i) => {
-          const isFeatured = item.servings >= 4;
-          const isHero = i === hero;
+          const isHero = !calm && i === hero;
           return (
             <div
               key={`${item.canonical_name}-${i}`}
@@ -450,16 +453,12 @@ export default function ShowcaseBoard({ tvNumber }) {
               <div className="dim" />
               <div className="rim" />
 
-              {isFeatured && (
-                <div className="badge" style={{ "--i": i }}>
-                  ★ FEEDS {item.servings}
+              <div className="top">
+                <div className="nameBox">
+                  <h2 className="name" style={{ "--i": i, fontSize: nameFont }}>
+                    {item.canonical_name}
+                  </h2>
                 </div>
-              )}
-
-              <div className={`top${isFeatured ? " hasBadge" : ""}`}>
-                <h2 className="name" style={{ "--i": i }}>
-                  {item.canonical_name}
-                </h2>
                 <div className="nameRule" />
                 {item.pos_price != null && (
                   <div className="pillWrap" style={{ "--i": i }}>
