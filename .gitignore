@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# TV motion review assets (large video artifacts, not part of the app)
+/public/tv-motion/
