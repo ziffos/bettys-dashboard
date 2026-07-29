@@ -9,35 +9,34 @@ const REF_H = 1080;
 const S = {
   catTitle: {
     fontFamily: "'Bebas Neue', cursive",
-    fontSize: 56,
+    fontSize: 52,
     color: "#fff",
     margin: 0,
     borderLeft: `4px solid ${ORANGE}`,
-    paddingLeft: 12,
+    paddingLeft: 14,
     letterSpacing: "0.04em",
     textTransform: "uppercase",
   },
   comboName: {
     fontFamily: "'Bebas Neue', cursive",
-    fontSize: 34,
+    fontSize: 32,
     color: "#fff",
     margin: 0,
     textTransform: "uppercase",
     letterSpacing: "0.02em",
-    lineHeight: 1.15,
+    lineHeight: 1.12,
   },
   desc: {
     fontFamily: "'Nunito', sans-serif",
-    fontSize: 18,
-    color: "#666",
+    fontSize: 21,
+    color: "#9a938c",
     margin: "2px 0 0 0",
-    lineHeight: 1.25,
-    textTransform: "uppercase",
-    maxWidth: "70%",
+    lineHeight: 1.3,
+    fontWeight: 600,
   },
   price: {
     fontFamily: "'Bebas Neue', cursive",
-    fontSize: 35,
+    fontSize: 34,
     color: ORANGE,
     margin: 0,
     whiteSpace: "nowrap",
@@ -51,7 +50,7 @@ const S = {
   },
   simpleRowPrice: {
     fontFamily: "'Bebas Neue', cursive",
-    fontSize: 35,
+    fontSize: 34,
     color: ORANGE,
     margin: 0,
     whiteSpace: "nowrap",
@@ -62,7 +61,7 @@ function FormatDesc({ text }) {
   if (!text) return null;
   const parts = text.split("·").map((s) => s.trim()).filter(Boolean);
   return (
-    <p style={{ fontSize: 22, color: "#999", margin: "3px 0 0", lineHeight: 1.35, fontFamily: "'Nunito', sans-serif", fontWeight: 600, maxWidth: "85%" }}>
+    <p style={S.desc}>
       {parts.map((part, i) => {
         const match = part.match(/^(\d+)\s*(pcs|pieces?)?\s*(.+)$/i);
         return (
@@ -78,12 +77,12 @@ function FormatDesc({ text }) {
 
 function ComboItem({ item }) {
   return (
-    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #1a1a1a", gap: 12 }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
+    <div style={{ padding: "6px 0", borderBottom: "1px solid #1a1a1a" }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 14 }}>
         <p style={S.comboName}>{item.canonical_name}</p>
-        <FormatDesc text={item.description} />
+        {item.pos_price != null && <p style={S.price}>€{Number(item.pos_price).toFixed(2)}</p>}
       </div>
-      {item.pos_price != null && <p style={S.price}>€{Number(item.pos_price).toFixed(2)}</p>}
+      <FormatDesc text={item.description} />
     </div>
   );
 }
@@ -98,17 +97,9 @@ function SimpleRow({ name, price }) {
 }
 
 function CategoryTitle({ title, size = "lg" }) {
-  const fontSize = size === "sm" ? 40 : 56;
-  const marginBottom = size === "sm" ? 4 : 8;
+  const fontSize = size === "sm" ? 38 : 52;
+  const marginBottom = size === "sm" ? 6 : 12;
   return <h3 style={{ ...S.catTitle, fontSize, marginBottom }}>{title}</h3>;
-}
-
-function InfoBox({ children }) {
-  return (
-    <div style={{ marginTop: "auto", background: "#141414", border: "1px solid #222", borderRadius: 8, padding: "14px 20px" }}>
-      {children}
-    </div>
-  );
 }
 
 export default function TvDisplay4Page() {
@@ -165,11 +156,19 @@ export default function TvDisplay4Page() {
   const products = grouped["Products"] || [];
   const sides = grouped["Sides"] || [];
   const dips = grouped["Dips"] || [];
+  const drinks = grouped["Drinks"] || [];
+
+  const water = drinks.find((d) => /water/i.test(d.canonical_name));
+  const softDrinks = drinks.filter((d) => !/water/i.test(d.canonical_name));
+  const softPrice = softDrinks[0]?.pos_price ?? 1.5;
+  const softNames = softDrinks
+    .map((d) => d.canonical_name.replace(/\s*330ml/i, "").trim())
+    .join(" · ");
 
   return (
     <>
       <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Nunito:wght@400;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Nunito:wght@400;600;700;800&display=swap');
         body { margin: 0; padding: 0; overflow: hidden; background: #0d0d0d; }
       `}</style>
       <div
@@ -186,7 +185,7 @@ export default function TvDisplay4Page() {
         }}
       >
         {/* ─── Column 1: Fried Chicken Combos ─── */}
-        <div style={{ display: "flex", flexDirection: "column", padding: "22px 22px", borderRight: "1px solid #2a2a2a" }}>
+        <div style={{ display: "flex", flexDirection: "column", padding: "26px 30px", borderRight: "1px solid #2a2a2a" }}>
           <CategoryTitle title="Fried Chicken Combos" />
           <div>
             {chicken.map((item, i) => <ComboItem key={i} item={item} />)}
@@ -194,12 +193,12 @@ export default function TvDisplay4Page() {
         </div>
 
         {/* ─── Column 2: Burgers & Wraps + Sides ─── */}
-        <div style={{ display: "flex", flexDirection: "column", padding: "22px 22px", borderRight: "1px solid #2a2a2a" }}>
+        <div style={{ display: "flex", flexDirection: "column", padding: "26px 30px", borderRight: "1px solid #2a2a2a" }}>
           <CategoryTitle title="Burger & Wrap Combos" />
           <div>
             {burgers.map((item, i) => <ComboItem key={i} item={item} />)}
           </div>
-          <div style={{ marginTop: 18 }}>
+          <div style={{ marginTop: 22 }}>
             <CategoryTitle title="Sides" />
             <div>
               {sides.map((item, i) => <SimpleRow key={i} name={item.canonical_name} price={item.pos_price} />)}
@@ -208,25 +207,34 @@ export default function TvDisplay4Page() {
         </div>
 
         {/* ─── Column 3: Products, Dips, Drinks ─── */}
-        <div style={{ display: "flex", flexDirection: "column", padding: "22px 22px" }}>
+        <div style={{ display: "flex", flexDirection: "column", padding: "26px 30px" }}>
           <CategoryTitle title="Products" />
           <div>
             {products.map((item, i) => <SimpleRow key={i} name={item.canonical_name} price={item.pos_price} />)}
           </div>
 
-          <div style={{ marginTop: 12 }}>
-            <CategoryTitle title="Dips — €0.70 each" size="sm" />
-            <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 22, color: "#ccc", margin: 0, lineHeight: 1.5 }}>
-              {dips.map((d) => d.canonical_name).join("  ·  ")}
-            </p>
+          <div style={{ marginTop: 22 }}>
+            <CategoryTitle title="Dips — €0.70" size="sm" />
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 10 }}>
+              {dips.map((d, i) => (
+                <span key={i} style={{ background: "#191919", border: "1px solid #2e2e2e", color: "#d9d4cf", fontFamily: "'Nunito', sans-serif", fontWeight: 700, fontSize: 23, lineHeight: 1, padding: "11px 17px", borderRadius: 999 }}>
+                  {d.canonical_name}
+                </span>
+              ))}
+            </div>
           </div>
 
-          <div style={{ marginTop: 12 }}>
+          <div style={{ marginTop: 22 }}>
             <CategoryTitle title="Drinks" size="sm" />
             <div>
-              <SimpleRow name="Soft Drinks 330ml" price={1.50} />
-              <SimpleRow name="Water" price={0.80} />
+              <SimpleRow name="Soft Drinks 330ml" price={softPrice} />
+              {water && <SimpleRow name="Water" price={water.pos_price} />}
             </div>
+            {softNames && (
+              <p style={{ fontFamily: "'Nunito', sans-serif", fontSize: 21, color: "#8a8178", margin: "8px 0 0", lineHeight: 1.5, fontWeight: 600 }}>
+                {softNames}
+              </p>
+            )}
           </div>
         </div>
       </div>
