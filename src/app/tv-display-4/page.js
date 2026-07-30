@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
+import Image from "next/image";
 import { supabase } from "../../lib/supabase";
 
 const ORANGE = "#FFA000";
@@ -102,6 +103,74 @@ function CategoryTitle({ title, size = "lg" }) {
   return <h3 style={{ ...S.catTitle, fontSize, marginBottom }}>{title}</h3>;
 }
 
+// The board is dense: only ~180px is free under column 1 and ~120px under
+// column 2. Keep the fills inside that or `margin-top: auto` stops resolving
+// and they push into the TV's overscan zone.
+const FILL_H = 156;
+const FILL_GAP = 20;
+
+/* Hero card for the sharing deal, sat beside the QR under column 1. */
+function BestValue({ item }) {
+  if (!item?.image_url) return null;
+  return (
+    <div style={{ flex: 1, minWidth: 0, position: "relative", height: FILL_H, borderRadius: 14, overflow: "hidden", border: `2px solid ${ORANGE}` }}>
+      <Image src={item.image_url} alt={item.canonical_name} fill sizes="33vw" quality={75} style={{ objectFit: "cover" }} />
+      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.92) 12%, rgba(0,0,0,0.25) 65%, transparent)" }} />
+      {item.servings > 1 && (
+        <div style={{ position: "absolute", top: 12, left: 12, background: ORANGE, color: "#141414", fontFamily: "'Nunito', sans-serif", fontWeight: 800, fontSize: 17, lineHeight: 1, letterSpacing: "0.06em", padding: "8px 14px", borderRadius: 999 }}>
+          ★ FEEDS {item.servings}
+        </div>
+      )}
+      {/* No description here — the same item is listed in full a few rows above. */}
+      <div style={{ position: "absolute", left: 18, right: 18, bottom: 16, display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12 }}>
+        <p style={{ fontFamily: "'Bebas Neue', cursive", fontSize: 36, lineHeight: 1, color: "#fff", margin: 0, textTransform: "uppercase", letterSpacing: "0.02em" }}>
+          {item.canonical_name}
+        </p>
+        {item.pos_price != null && (
+          <span style={{ flex: "none", background: ORANGE, color: "#141414", fontFamily: "'Bebas Neue', cursive", fontSize: 34, lineHeight: 1, padding: "9px 17px 6px", borderRadius: 999, whiteSpace: "nowrap" }}>
+            €{Number(item.pos_price).toFixed(2)}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const STEPS = ["Pick chicken", "Pick a side", "Add a drink"];
+
+/* Three-step combo explainer — fills the dead space under column 2. */
+function ComboSteps() {
+  return (
+    <div style={{ marginTop: "auto", paddingTop: 8, marginBottom: FILL_GAP, display: "flex", gap: 12 }}>
+      {STEPS.map((step, i) => (
+        <div key={i} style={{ flex: 1, textAlign: "center", background: "#141414", border: "1px solid #262626", borderRadius: 12, padding: "12px 10px" }}>
+          <div style={{ width: 34, height: 34, margin: "0 auto 8px", borderRadius: 999, background: ORANGE, color: "#141414", fontFamily: "'Bebas Neue', cursive", fontSize: 24, lineHeight: "34px" }}>
+            {i + 1}
+          </div>
+          <p style={{ fontFamily: "'Bebas Neue', cursive", fontSize: 26, lineHeight: 1.05, color: "#fff", margin: 0, textTransform: "uppercase", letterSpacing: "0.02em", whiteSpace: "nowrap" }}>
+            {step}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* QR to the public /qr-menu page, which carries the Google review link. */
+function ScanCard() {
+  return (
+    <div style={{ flex: "none", width: 134, height: FILL_H, background: "#141414", border: "1px solid #262626", borderRadius: 14, padding: 10, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}>
+      <div style={{ background: "#fff", borderRadius: 8, padding: 6, lineHeight: 0 }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/images/qr-menu.svg" alt="" width={88} height={88} />
+      </div>
+      <p style={{ fontFamily: "'Bebas Neue', cursive", fontSize: 21, lineHeight: 1.05, color: "#fff", margin: 0, textTransform: "uppercase", letterSpacing: "0.03em", textAlign: "center", whiteSpace: "nowrap" }}>
+        Scan for menu
+      </p>
+    </div>
+  );
+}
+
 export default function TvDisplay4Page() {
   const [items, setItems] = useState([]);
   const [scale, setScale] = useState(1);
@@ -121,7 +190,7 @@ export default function TvDisplay4Page() {
     async function fetchItems() {
       const { data } = await supabase
         .from("menu_items")
-        .select("canonical_name, category, pos_price, description, sort_order")
+        .select("canonical_name, category, pos_price, description, sort_order, image_url, servings")
         .eq("is_active", true)
         .order("sort_order", { ascending: true })
         .order("canonical_name", { ascending: true });
@@ -165,6 +234,18 @@ export default function TvDisplay4Page() {
     .map((d) => d.canonical_name.replace(/\s*330ml/i, "").trim())
     .join(" · ");
 
+  // Biggest sharing deal that has a photo — the Family Deal today, but it
+  // follows the data rather than naming an item.
+  const bestValue = useMemo(() => {
+    const withPhoto = items.filter((i) => i.image_url);
+    if (!withPhoto.length) return null;
+    return withPhoto.reduce((best, i) =>
+      (i.servings ?? 0) !== (best.servings ?? 0)
+        ? (i.servings ?? 0) > (best.servings ?? 0) ? i : best
+        : (i.pos_price ?? 0) > (best.pos_price ?? 0) ? i : best,
+    );
+  }, [items]);
+
   return (
     <>
       <style jsx global>{`
@@ -190,6 +271,10 @@ export default function TvDisplay4Page() {
           <div>
             {chicken.map((item, i) => <ComboItem key={i} item={item} />)}
           </div>
+          <div style={{ marginTop: "auto", paddingTop: 8, marginBottom: FILL_GAP, display: "flex", gap: 14, alignItems: "stretch" }}>
+            <BestValue item={bestValue} />
+            <ScanCard />
+          </div>
         </div>
 
         {/* ─── Column 2: Burgers & Wraps + Sides ─── */}
@@ -204,6 +289,7 @@ export default function TvDisplay4Page() {
               {sides.map((item, i) => <SimpleRow key={i} name={item.canonical_name} price={item.pos_price} />)}
             </div>
           </div>
+          <ComboSteps />
         </div>
 
         {/* ─── Column 3: Products, Dips, Drinks ─── */}
