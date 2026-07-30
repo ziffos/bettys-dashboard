@@ -167,18 +167,6 @@ function ComboSteps() {
   );
 }
 
-function ScanCard() {
-  return (
-    <div className="scan">
-      <div className="scanQr">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/images/qr-menu.svg" alt="" width={86} height={86} />
-      </div>
-      <p className="scanText">Scan for menu</p>
-    </div>
-  );
-}
-
 export default function MenuBoard() {
   const [items, setItems] = useState([]);
   const [scale, setScale] = useState(1);
@@ -621,38 +609,6 @@ export default function MenuBoard() {
           100% { transform: translateX(340%) skewX(-18deg); }
         }
 
-        .scan {
-          flex: none;
-          width: 126px;
-          height: ${M.fillH}px;
-          background: #141414;
-          border: 1px solid #262626;
-          border-radius: 14px;
-          padding: 9px;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          gap: 7px;
-          animation: scanBreathe 5s ease-in-out infinite;
-        }
-        @keyframes scanBreathe {
-          0%, 100% { border-color: #262626; box-shadow: 0 0 0 rgba(255,160,0,0); }
-          50%      { border-color: rgba(255,160,0,0.6); box-shadow: 0 0 26px rgba(255,160,0,0.3); }
-        }
-        .scanQr { background: #fff; border-radius: 8px; padding: 5px; line-height: 0; }
-        .scanText {
-          font-family: 'Bebas Neue', cursive;
-          font-size: 20px;
-          line-height: 1.05;
-          color: #fff;
-          margin: 0;
-          text-transform: uppercase;
-          letter-spacing: 0.03em;
-          text-align: center;
-          white-space: nowrap;
-        }
-
         /* ── Combo steps: 1 -> 2 -> 3 ────────────────────────────────── */
         .steps {
           margin-top: auto;
@@ -738,7 +694,6 @@ export default function MenuBoard() {
           </div>
           <div className="fill">
             <HeroCard item={bestValue} />
-            <ScanCard />
           </div>
         </div>
 

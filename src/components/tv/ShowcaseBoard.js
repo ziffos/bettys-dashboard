@@ -5,11 +5,11 @@
  * into the live displays. Same data contract as tv-display-1..3 (4 slots from
  * `menu_items` filtered on tv_number), same 1920x1080 scale-to-fit shell.
  *
- * The spotlight is shared across all three screens: see motionClock.js. During
- * the calm phase every dish on every screen wears the activated design; during
- * the feature phase only one dish anywhere across the three screens keeps it
- * and also widens, while the rest dim back. The turn walks slot 1..4 of TV1,
- * then TV2, then TV3.
+ * The spotlight is shared across all three screens: see motionClock.js. Every
+ * dish wears the activated design by default. When a turn lands on this screen,
+ * the dish whose turn it is widens and the other three on that same screen dim
+ * back; the other two screens are untouched and stay activated. The turn walks
+ * slot 1..4 of TV1, then TV2, then TV3, then a long calm phase.
  *
  * Motion layers, slowest to fastest:
  *   1. Ken Burns   — each photo drifts + zooms on its own 30s phase, forever.
@@ -165,6 +165,10 @@ export default function ShowcaseBoard({ tvNumber }) {
 
   const calm = !phase || phase.calm;
   const hero = heroForTv(tvNumber, phase);
+  /* Whether the current turn belongs to this screen. Dimming is local: while
+   * the spotlight is on another screen, this one stays in its normal state
+   * rather than going dark in sympathy. */
+  const screenActive = hero >= 0;
 
   return (
     <>
@@ -432,10 +436,11 @@ export default function ShowcaseBoard({ tvNumber }) {
         style={{ width: REF_W, height: REF_H, transform: `scale(${scale})` }}
       >
         {displayed.map((item, i) => {
-          const isHero = !calm && i === hero;
-          // During the calm phase every dish wears the activated design; during
-          // the feature phase only the one whose turn it is.
-          const isActivated = calm || isHero;
+          const isHero = screenActive && i === hero;
+          // A dish only dims when its own screen is the one running the
+          // spotlight and it is not the dish being featured. Otherwise — calm
+          // phase, or the turn is on another screen — it stays activated.
+          const isActivated = !screenActive || isHero;
           return (
             <div
               key={`${item.canonical_name}-${i}`}
