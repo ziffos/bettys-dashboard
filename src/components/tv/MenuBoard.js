@@ -4,14 +4,15 @@
  * Animated version of the TV 4 full-menu board — a motion proposal, not yet
  * wired into the live display. Same data contract as tv-display-4.
  *
- * Also fixes a live bug: at 1920x1080 the current board's columns measure
- * 1154px, so the Family Deal card, the combo steps and the Water row are cut
- * off below the screen edge. Metrics here are tightened (see M) to fit 1080.
+ * Also fixes a live bug: at 1920x1080 the deployed board's columns measure
+ * 1142px, so its bottom rows are cut off below the screen edge. Metrics here
+ * are tightened (see M) to fit 1080 exactly.
  *
  * Motion layers:
- *   1. Reading light — a highlight walks row by row down col 1, then 2, then 3,
- *      forever. One shared period (--cycle) with a per-row delay, so it is pure
- *      CSS: no per-frame React state for ~30 rows.
+ *   1. Reading light — a highlight walks row by row down col 1, then 2, then 3.
+ *      One pass every MENU_SWEEP_PERIOD_MS, resting in between. A single class
+ *      on the board starts every row's animation at its own delay, so ~30 rows
+ *      cost one React state change per pass rather than per frame.
  *   2. Boot cascade  — columns in L->R, category rules draw down, rows rise.
  *   3. Combo steps   — 1 -> 2 -> 3 pulse in sequence, so the "build a combo"
  *      instruction actually reads as a sequence.
@@ -24,6 +25,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { supabase } from "../../lib/supabase";
+import { menuSweepAt } from "./motionClock";
 
 const ORANGE = "#FFA000";
 const REF_W = 1920;
@@ -33,8 +35,8 @@ const REF_H = 1080;
  * finishing one column and starting the next. */
 const ROW_STEP = 0.42;
 const COL_PAUSE = 1.1;
-/* Tail of quiet time after the light leaves the last row. */
-const CYCLE_TAIL = 7;
+/* How long one row stays lit as the light passes over it. */
+const ROW_ANIM_MS = 1300;
 
 /* Tightened metrics so three dense columns fit inside 1080. */
 const M = {
@@ -181,6 +183,7 @@ export default function MenuBoard() {
   const [items, setItems] = useState([]);
   const [scale, setScale] = useState(1);
   const [flashed, setFlashed] = useState(() => new Set());
+  const [sweeping, setSweeping] = useState(false);
   const [revision, setRevision] = useState(0);
   const pricesRef = useRef(null);
   const signatureRef = useRef("");
@@ -280,7 +283,7 @@ export default function MenuBoard() {
   }, [items]);
 
   /* Reading-light schedule: walk col 1 top-to-bottom, then col 2, then col 3.
-   * Returns per-column delay lookups plus the shared cycle length. */
+   * Returns per-column delay lookups plus how long a full pass takes. */
   const light = useMemo(() => {
     const columns = [
       [chicken.length],
@@ -295,9 +298,27 @@ export default function MenuBoard() {
         return start;
       }),
     );
-    const cycle = Math.min(26, Math.max(16, t + CYCLE_TAIL));
-    return { delays, cycle };
+    return { delays, durationMs: t * 1000 + ROW_ANIM_MS };
   }, [chicken.length, burgers.length, sides.length, products.length]);
+
+  /* The light makes a single pass, then the board rests until the next one.
+   * Same wall-clock trick as the showcase boards, so it is deterministic and
+   * a reload lands wherever the period actually is. */
+  useEffect(() => {
+    let cancelled = false;
+    let id;
+    const step = () => {
+      if (cancelled) return;
+      const next = menuSweepAt(Date.now(), light.durationMs);
+      setSweeping(next.sweeping);
+      id = setTimeout(step, Math.max(150, next.msLeft));
+    };
+    id = setTimeout(step, 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(id);
+    };
+  }, [light.durationMs]);
 
   const d = (col, group, row) => light.delays[col][group] + row * ROW_STEP;
   const isFlashed = (name) => flashed.has(name);
@@ -352,19 +373,23 @@ export default function MenuBoard() {
           min-height: 1em;
           background: ${ORANGE};
           transform-origin: top center;
-          animation: ruleDraw 700ms cubic-bezier(0.22, 1, 0.36, 1) both,
-                     rulePulse var(--cycle) linear infinite;
-          animation-delay: calc(var(--b) * 60ms + 260ms), var(--d);
+          animation: ruleDraw 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+          animation-delay: calc(var(--b) * 60ms + 260ms);
         }
         @keyframes ruleDraw {
           from { transform: scaleY(0); }
           to   { transform: scaleY(1); }
         }
         /* The rule brightens as the reading light enters its category. */
+        .board.sweeping .catRule {
+          animation: rulePulse ease-out both;
+          animation-duration: ${ROW_ANIM_MS}ms;
+          animation-delay: var(--d);
+        }
         @keyframes rulePulse {
           0%, 100% { box-shadow: none; }
-          1.5%     { box-shadow: 0 0 22px 3px rgba(255,160,0,0.85); }
-          6%       { box-shadow: none; }
+          25%      { box-shadow: 0 0 22px 3px rgba(255,160,0,0.85); }
+          60%      { box-shadow: none; }
         }
         .catText {
           animation: riseIn 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -393,27 +418,29 @@ export default function MenuBoard() {
           background: linear-gradient(90deg, rgba(255,160,0,0.20), rgba(255,160,0,0.05) 70%, transparent);
           opacity: 0;
           pointer-events: none;
-          animation: rowLight var(--cycle) linear infinite;
+        }
+        .board.sweeping .rowLight {
+          animation: rowLight ease-out both;
+          animation-duration: ${ROW_ANIM_MS}ms;
           animation-delay: var(--d);
           will-change: opacity;
         }
         @keyframes rowLight {
           0%    { opacity: 0; }
-          1.4%  { opacity: 1; }
-          3.2%  { opacity: 1; }
-          5.4%  { opacity: 0; }
+          22%   { opacity: 1; }
+          55%   { opacity: 1; }
           100%  { opacity: 0; }
         }
-        .rowInner {
-          position: relative;
-          animation: rowNudge var(--cycle) linear infinite;
+        .rowInner { position: relative; }
+        .board.sweeping .rowInner {
+          animation: rowNudge ease-out both;
+          animation-duration: ${ROW_ANIM_MS}ms;
           animation-delay: var(--d);
           will-change: transform;
         }
         @keyframes rowNudge {
           0%    { transform: translateX(0); }
-          2%    { transform: translateX(8px); }
-          6%    { transform: translateX(0); }
+          25%   { transform: translateX(8px); }
           100%  { transform: translateX(0); }
         }
 
@@ -685,19 +712,15 @@ export default function MenuBoard() {
         .section { margin-top: ${M.sectionGap}px; }
 
         @media (prefers-reduced-motion: reduce) {
-          .rowLight, .rowInner, .heroKb, .heroPrice::after, .catRule { animation: none !important; }
+          .board.sweeping .rowLight, .board.sweeping .rowInner,
+          .heroKb, .heroPrice::after { animation: none !important; }
         }
       `}</style>
 
       <div
         key={revision}
-        className="board"
-        style={{
-          width: REF_W,
-          height: REF_H,
-          transform: `scale(${scale})`,
-          "--cycle": `${light.cycle}s`,
-        }}
+        className={`board${sweeping ? " sweeping" : ""}`}
+        style={{ width: REF_W, height: REF_H, transform: `scale(${scale})` }}
       >
         {/* ─── Column 1: Fried Chicken Combos ─── */}
         <div className="col" style={{ "--c": 0 }}>

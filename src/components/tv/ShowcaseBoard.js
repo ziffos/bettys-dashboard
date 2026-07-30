@@ -6,9 +6,10 @@
  * `menu_items` filtered on tv_number), same 1920x1080 scale-to-fit shell.
  *
  * The spotlight is shared across all three screens: see motionClock.js. During
- * the calm phase every dish on every screen is shown normally; during the
- * feature phase exactly one dish anywhere across the three screens is lifted,
- * and the turn walks slot 1..4 of TV1, then TV2, then TV3.
+ * the calm phase every dish on every screen wears the activated design; during
+ * the feature phase only one dish anywhere across the three screens keeps it
+ * and also widens, while the rest dim back. The turn walks slot 1..4 of TV1,
+ * then TV2, then TV3.
  *
  * Motion layers, slowest to fastest:
  *   1. Ken Burns   — each photo drifts + zooms on its own 30s phase, forever.
@@ -26,7 +27,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { supabase } from "../../lib/supabase";
-import { DWELL_MS, SLOTS_PER_TV, heroForTv, phaseAt } from "./motionClock";
+import {
+  SLOTS_PER_TV,
+  SPOTLIGHT_MS,
+  calmOverrideFromUrl,
+  heroForTv,
+  phaseAt,
+} from "./motionClock";
 
 const REF_W = 1920;
 const REF_H = 1080;
@@ -100,13 +107,14 @@ export default function ShowcaseBoard({ tvNumber }) {
   }, [updateScale]);
 
   // Re-render once per phase change rather than on a fast interval: 13 renders
-  // per 139s cycle instead of a few hundred.
+  // per cycle instead of a few hundred.
   useEffect(() => {
     let cancelled = false;
     let id;
+    const calmMs = calmOverrideFromUrl();
     const step = () => {
       if (cancelled) return;
-      const next = phaseAt(Date.now());
+      const next = phaseAt(Date.now(), calmMs);
       setPhase(next);
       id = setTimeout(step, Math.max(120, next.msLeft));
     };
@@ -180,7 +188,7 @@ export default function ShowcaseBoard({ tvNumber }) {
           flex-direction: column;
           flex-basis: 0;
           min-width: 0;
-          transition: flex-grow 1100ms cubic-bezier(0.65, 0, 0.35, 1);
+          transition: flex-grow ${SPOTLIGHT_MS}ms cubic-bezier(0.65, 0, 0.35, 1);
           animation: panelIn 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
           animation-delay: calc(var(--i) * 140ms);
           will-change: flex-grow;
@@ -200,11 +208,11 @@ export default function ShowcaseBoard({ tvNumber }) {
           animation: kenburns 30s ease-in-out infinite alternate;
           animation-delay: calc(var(--i) * -7.5s);
           will-change: transform;
-          transition: filter 1100ms ease;
+          transition: filter ${SPOTLIGHT_MS}ms ease;
           filter: saturate(0.7);
         }
         /* Full colour when nothing is featured, or when this panel is. */
-        .board.calm .kb, .panel.hero .kb { filter: none; }
+        .panel.activated .kb { filter: none; }
         @keyframes kenburns {
           from { transform: scale(1.03) translate3d(0, 0, 0); }
           to   { transform: scale(1.13) translate3d(-1.6%, -1.4%, 0); }
@@ -239,9 +247,9 @@ export default function ShowcaseBoard({ tvNumber }) {
           inset: 0; z-index: 2;
           background: #000;
           opacity: 0.46;
-          transition: opacity 1100ms cubic-bezier(0.65, 0, 0.35, 1);
+          transition: opacity ${SPOTLIGHT_MS}ms cubic-bezier(0.65, 0, 0.35, 1);
         }
-        .board.calm .dim, .panel.hero .dim { opacity: 0; }
+        .panel.activated .dim { opacity: 0; }
 
         /* Orange rim-light on the featured panel only. */
         .rim {
@@ -249,9 +257,9 @@ export default function ShowcaseBoard({ tvNumber }) {
           box-shadow: inset 0 0 0 3px rgba(255,160,0,0.85),
                       inset 0 0 90px rgba(255,160,0,0.16);
           opacity: 0;
-          transition: opacity 900ms ease;
+          transition: opacity ${SPOTLIGHT_MS}ms ease;
         }
-        .panel.hero .rim { opacity: 1; }
+        .panel.activated .rim { opacity: 1; }
 
         /* ── Content ─────────────────────────────────────────────────── */
         .top {
@@ -260,12 +268,12 @@ export default function ShowcaseBoard({ tvNumber }) {
           padding: 40px 32px 0;
           text-align: center;
           transform-origin: top center;
-          transition: transform 1100ms cubic-bezier(0.65, 0, 0.35, 1),
-                      opacity 1100ms ease;
+          transition: transform ${SPOTLIGHT_MS}ms cubic-bezier(0.65, 0, 0.35, 1),
+                      opacity ${SPOTLIGHT_MS}ms ease;
           transform: scale(0.94);
           opacity: 0.86;
         }
-        .board.calm .top, .panel.hero .top { transform: scale(1); opacity: 1; }
+        .panel.activated .top { transform: scale(1); opacity: 1; }
 
         .bottom {
           position: relative;
@@ -274,12 +282,12 @@ export default function ShowcaseBoard({ tvNumber }) {
           padding: 0 28px 44px;
           text-align: center;
           transform-origin: bottom center;
-          transition: transform 1100ms cubic-bezier(0.65, 0, 0.35, 1),
-                      opacity 1100ms ease;
+          transition: transform ${SPOTLIGHT_MS}ms cubic-bezier(0.65, 0, 0.35, 1),
+                      opacity ${SPOTLIGHT_MS}ms ease;
           transform: scale(0.94);
           opacity: 0.82;
         }
-        .board.calm .bottom, .panel.hero .bottom { transform: scale(1); opacity: 1; }
+        .panel.activated .bottom { transform: scale(1); opacity: 1; }
 
         /* Single line, always. Font size is picked per item to fit the narrow
          * state; the fixed box height keeps every price pill on one baseline. */
@@ -308,9 +316,9 @@ export default function ShowcaseBoard({ tvNumber }) {
           background: ${ORANGE};
           border-radius: 2px;
           transform: scaleX(0);
-          transition: transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
+          transition: transform ${SPOTLIGHT_MS}ms cubic-bezier(0.22, 1, 0.36, 1);
         }
-        .panel.hero .nameRule { transform: scaleX(1); }
+        .panel.activated .nameRule { transform: scaleX(1); }
 
         @keyframes riseIn {
           from { opacity: 0; transform: translateY(28px); }
@@ -341,9 +349,9 @@ export default function ShowcaseBoard({ tvNumber }) {
           border-radius: 999px;
           letter-spacing: 0.03em;
           box-shadow: 0 6px 18px rgba(0,0,0,0.45);
-          transition: box-shadow 1100ms ease;
+          transition: box-shadow ${SPOTLIGHT_MS}ms ease;
         }
-        .panel.hero .pill {
+        .panel.activated .pill {
           box-shadow: 0 6px 18px rgba(0,0,0,0.45),
                       0 0 46px rgba(255,160,0,0.55);
         }
@@ -425,10 +433,13 @@ export default function ShowcaseBoard({ tvNumber }) {
       >
         {displayed.map((item, i) => {
           const isHero = !calm && i === hero;
+          // During the calm phase every dish wears the activated design; during
+          // the feature phase only the one whose turn it is.
+          const isActivated = calm || isHero;
           return (
             <div
               key={`${item.canonical_name}-${i}`}
-              className={`panel${isHero ? " hero" : ""}`}
+              className={`panel${isHero ? " hero" : ""}${isActivated ? " activated" : ""}`}
               style={{ "--i": i, flexGrow: isHero ? HERO_GROW : 1 }}
             >
               <div className="kb" style={{ "--i": i }}>
