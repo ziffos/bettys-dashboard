@@ -1,7 +1,10 @@
 "use client";
 
 /*
- * All four boards on one page, for reviewing the motion proposal.
+ * All four in-store boards on one page.
+ *
+ * These are the real screens — as of the switch, /tv-display-1..4 render the
+ * animated boards, so each pane below is exactly what is on the wall.
  *
  * Named tv-display-* so ClientLayout serves it with no sidebar and no login,
  * the same way the boards themselves are served.
@@ -37,10 +40,10 @@ const FAST_CALM_S = 8;
 const CHANGES = [
   `${Math.round(CALM_MS / 60000)} min calm phase — every dish activated at once`,
   `Then one dish at a time across all three screens, ${DWELL_MS / 1000}s each`,
+  "Only the screen holding the turn dims; the other two stay normal",
   "Screens sync on wall-clock time — no channel between them needed",
   "Ken Burns drift on each photo, offset phases",
   "Gloss sweep on price pills, light running along the base bar",
-  "Names forced to one line; FEEDS badge removed",
 ];
 
 function BoardFrame({ src, title }) {
@@ -176,13 +179,13 @@ export default function TvMotionDemoPage() {
             Betty&apos;s Crispy Chicken
           </p>
           <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight">
-            In-store displays — motion proposal
+            In-store displays — live
           </h1>
           <p className="text-sm text-neutral-400 mt-1.5 max-w-3xl">
-            All four boards below are live, on real menu data. The in-store TVs are
-            unchanged and still point at{" "}
-            <code className="text-neutral-300">/tv-display-1…4</code> — nothing here
-            is switched on yet.
+            This is what is on the wall right now:{" "}
+            <code className="text-neutral-300">/tv-display-1…4</code> on real menu
+            data. A TV already showing a board needs a refresh to pick up a code
+            change; menu edits come through by themselves.
           </p>
         </header>
 
@@ -232,7 +235,7 @@ export default function TvMotionDemoPage() {
                   </span>
                   <span className="text-xs text-neutral-500">slots {(n - 1) * 4 + 1}–{n * 4}</span>
                   <a
-                    href={`/tv-display-motion-${n}`}
+                    href={`/tv-display-${n}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="ml-auto text-xs text-neutral-400 hover:text-white underline shrink-0"
@@ -242,8 +245,8 @@ export default function TvMotionDemoPage() {
                 </div>
                 <BoardFrame
                   key={q}
-                  src={`/tv-display-motion-${n}${q}`}
-                  title={`TV ${n} proposed`}
+                  src={`/tv-display-${n}${q}`}
+                  title={`TV ${n}`}
                 />
               </div>
             ))}
@@ -259,57 +262,6 @@ export default function TvMotionDemoPage() {
           </ul>
         </section>
 
-        {/* Before / after for one showcase screen */}
-        <section className="mb-10">
-          <div className="flex flex-wrap items-baseline gap-3 mb-3">
-            <h2 className="text-lg md:text-xl font-semibold text-white">
-              Screen 1 · before and after
-            </h2>
-            <span className="text-xs text-neutral-500">
-              The live board has no motion at all
-            </span>
-          </div>
-          <div className="flex flex-col lg:flex-row gap-4">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="w-2.5 h-2.5 rounded-sm bg-neutral-600 shrink-0" />
-                <span className="text-xs font-bold tracking-wider uppercase text-white">
-                  Now
-                </span>
-                <a
-                  href="/tv-display-1"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="ml-auto text-xs text-neutral-400 hover:text-white underline"
-                >
-                  Full screen
-                </a>
-              </div>
-              <BoardFrame src="/tv-display-1" title="TV 1 today" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-2">
-                <span
-                  className="w-2.5 h-2.5 rounded-sm shrink-0"
-                  style={{ background: ORANGE }}
-                />
-                <span className="text-xs font-bold tracking-wider uppercase text-white">
-                  Proposed
-                </span>
-                <a
-                  href="/tv-display-motion-1"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="ml-auto text-xs text-neutral-400 hover:text-white underline"
-                >
-                  Full screen
-                </a>
-              </div>
-              <BoardFrame key={q} src={`/tv-display-motion-1${q}`} title="TV 1 proposed" />
-            </div>
-          </div>
-        </section>
-
         {/* Screen 4 */}
         <section className="mb-10">
           <div className="flex flex-wrap items-baseline gap-3 mb-3">
@@ -317,56 +269,26 @@ export default function TvMotionDemoPage() {
               Screen 4 · full menu board
             </h2>
             <span className="text-xs text-neutral-500">
-              Reading light passes once every {Math.round(MENU_SWEEP_PERIOD_MS / 60000)}{" "}
-              min, resting in between — also fixes the bottom-of-board clipping
+              Independent of the spotlight — its reading light passes once every{" "}
+              {Math.round(MENU_SWEEP_PERIOD_MS / 60000)} min
             </span>
+            <a
+              href="/tv-display-4"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ml-auto text-xs text-neutral-400 hover:text-white underline"
+            >
+              Full screen
+            </a>
           </div>
-          <div className="flex flex-col lg:flex-row gap-4">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="w-2.5 h-2.5 rounded-sm bg-neutral-600 shrink-0" />
-                <span className="text-xs font-bold tracking-wider uppercase text-white">
-                  Now
-                </span>
-                <span className="text-xs text-neutral-500">overflows by 62px</span>
-                <a
-                  href="/tv-display-4"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="ml-auto text-xs text-neutral-400 hover:text-white underline"
-                >
-                  Full screen
-                </a>
-              </div>
-              <BoardFrame src="/tv-display-4" title="TV 4 today" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-2">
-                <span
-                  className="w-2.5 h-2.5 rounded-sm shrink-0"
-                  style={{ background: ORANGE }}
-                />
-                <span className="text-xs font-bold tracking-wider uppercase text-white">
-                  Proposed
-                </span>
-                <span className="text-xs text-neutral-500">fits 1080</span>
-                <a
-                  href="/tv-display-motion-4"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="ml-auto text-xs text-neutral-400 hover:text-white underline"
-                >
-                  Full screen
-                </a>
-              </div>
-              <BoardFrame src="/tv-display-motion-4" title="TV 4 proposed" />
-            </div>
+          <div className="max-w-4xl">
+            <BoardFrame src="/tv-display-4" title="TV 4" />
           </div>
         </section>
 
         <footer className="text-xs text-neutral-500 border-t border-neutral-900 pt-4 leading-relaxed">
-          Scaled-down panes are only for comparison — judge the motion at{" "}
-          <span className="text-neutral-300">Full screen</span> on an actual TV. The
+          Scaled-down panes are only for monitoring — judge the motion on an actual
+          TV. The
           calm phase ({Math.round(CALM_MS / 60000)} min), the dwell per dish (
           {DWELL_MS / 1000}s) and screen 4&apos;s sweep interval (
           {Math.round(MENU_SWEEP_PERIOD_MS / 60000)} min) are all one-line changes in{" "}
