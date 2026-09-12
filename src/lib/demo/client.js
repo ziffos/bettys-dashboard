@@ -2,7 +2,7 @@
 // fixtures in ./generate.js.
 //
 // It implements only the surface this app actually uses: the PostgREST query
-// builder (select/filter/order/limit/range/single), the auth calls AuthContext
+// builder (select/filter/order/limit/range/single/ilike/or), the auth calls AuthContext
 // depends on, and no-op realtime channels. Writes mutate the in-memory tables
 // and are lost on reload — which is the point. Nothing here can reach the
 // network, so demo mode cannot read or corrupt production.
@@ -57,6 +57,16 @@ function applyEmbeds(rows, embeds) {
 
 // ------------------------------------------------------------- query builder
 
+/** PostgREST's `%` wildcards, as a regex. `_` matches a single character. */
+const likeRe = (pattern, flags) =>
+  new RegExp(
+    `^${String(pattern)
+      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      .replace(/%/g, ".*")
+      .replace(/_/g, ".")}$`,
+    flags
+  );
+
 const OPS = {
   eq: (a, b) => a === b,
   neq: (a, b) => a !== b,
@@ -66,7 +76,24 @@ const OPS = {
   lte: (a, b) => a <= b,
   in: (a, b) => b.includes(a),
   is: (a, b) => a === b,
+  like: (a, b) => a != null && likeRe(b, "").test(String(a)),
+  ilike: (a, b) => a != null && likeRe(b, "i").test(String(a)),
 };
+
+/**
+ * `.or("a.ilike.%x%,b.ilike.%x%")` — one filter that passes if any of its
+ * comma-separated `column.op.value` terms does. Commas inside the value (as in
+ * `in.(a,b)`) are not supported; nothing in this app needs them.
+ */
+function parseOr(expression) {
+  return String(expression)
+    .split(",")
+    .map((term) => {
+      const [column, op, ...rest] = term.split(".");
+      return { column, op, value: rest.join(".") };
+    })
+    .filter((t) => OPS[t.op]);
+}
 
 class Query {
   constructor(table) {
@@ -138,10 +165,18 @@ class Query {
       .then(resolve, reject);
   }
 
+  or(expression) {
+    this.filters.push({ op: "or", terms: parseOr(expression) });
+    return this;
+  }
+
   _match(row) {
-    return this.filters.every(({ op, column, value }) =>
-      OPS[op](row[column], value)
-    );
+    return this.filters.every((filter) => {
+      if (filter.op === "or") {
+        return filter.terms.some((t) => OPS[t.op](row[t.column], t.value));
+      }
+      return OPS[filter.op](row[filter.column], filter.value);
+    });
   }
 
   _run() {

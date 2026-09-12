@@ -31,7 +31,7 @@ conventions in "Legacy UI" still apply to it.
 
 | Screen | Route | Status |
 |---|---|---|
-| Shell (rail, header, mobile nav, theme) + Login | — | todo |
+| Shell (rail, header, mobile nav, theme) + Login | — | **done** |
 | Overview | `/` | todo |
 | Sales | `/sales` | todo |
 | Marketing | `/marketing` | todo |
@@ -134,16 +134,36 @@ not set `job_title` — it is filled in afterwards from the Settings panel.
   sales-weighted across the days a statement covers, and a day with no statement
   is marked *estimated* rather than confirmed
 
+### The shell
+
+- `ClientLayout` composes `Sidebar` (the desktop rail), `AppHeader` and
+  `MobileNav`. The rail expands on hover and can be pinned; the pin is in
+  localStorage under `bettys-rail-pinned`.
+- `RangeContext` holds the one date range the header owns. It is relative to
+  **today**, and carries the equal-length previous period for comparisons.
+  Migrated screens read it with `useRange()` instead of owning a picker.
+- `CommandPalette` is ⌘K: pages, dishes, people, and orders matched on their
+  reference or item string.
+- Design tokens are Tailwind v4 `@theme` variables in `globals.css`, so a screen
+  writes `text-subtle` / `border-line` / `font-mono`, not raw hex.
+
 ## Legacy UI (screens not yet migrated)
 
-- Dark theme: `neutral-950` background, emerald accents, `color-scheme: dark`
-- Inter via `next/font`
+`ClientLayout` keeps a `MIGRATED` set. A route not in it renders inside
+`.legacy-surface`, which restores the dark backdrop the page was written
+against — otherwise its white headings would sit on the new light canvas and
+vanish. **Add the route to `MIGRATED` in the same commit that rebuilds it.**
+When the last screen lands, delete both the set and the CSS class.
+
+- Dark theme: `neutral-950` background, emerald accents
 - Recharts for charts, Lucide React for icons
 - Path alias: `@/*` → `./src/*`
 - Mobile breakpoint at `md` (768px)
 - React Compiler is enabled in `next.config.mjs`
 - Dev origins allow `*.trycloudfare.com` (Cloudflare tunnel) and `127.0.0.1`
   (the screenshot tool)
+- `next build` and `next dev` share `.next/` — stop the dev server before
+  building, or the screenshots come back from a half-written bundle
 
 ## Deployment
 

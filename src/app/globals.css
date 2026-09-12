@@ -1,17 +1,63 @@
 @import "tailwindcss";
 
+/* The v2 design system. See design/DESIGN.md — these are the same values, named
+   so a screen can say `border-line` instead of `border-[#eaeaea]` and the
+   twelfth screen picks the same grey as the first. */
+@theme {
+  --color-canvas: #fafafa;
+  --color-surface: #ffffff;
+
+  --color-ink: #000000;
+  --color-ink-strong: #171717;
+  --color-muted: #666666;
+  --color-subtle: #8f8f8f;
+  --color-faint: #b3b3b3;
+
+  --color-line: #eaeaea;
+  --color-line-strong: #d4d4d4;
+  --color-wash: #f2f2f2;
+  --color-wash-light: #fafafa;
+
+  --color-accent: #0070f3;
+  --color-danger: #ee0000;
+  --color-warn: #f5a623;
+  --color-warn-ink: #b26a00;
+
+  /* Platform colours are fixed — they mean something. */
+  --color-wolt: #007cf0;
+  --color-foody: #f5a623;
+  --color-bolt: #50e3c2;
+  --color-pos: #171717;
+  --color-instagram: #7928ca;
+  --color-facebook: #0070f3;
+
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --radius-card: 12px;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-pop: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.08);
+  --shadow-panel: -8px 0 32px rgba(0, 0, 0, 0.06);
+}
+
 @layer base {
-  /* Force dark mode for native inputs like date pickers */
   :root {
-    color-scheme: dark;
+    color-scheme: light;
   }
-  
-  html, body {
+
+  html,
+  body {
     @apply overflow-x-hidden;
   }
 
   body {
-    @apply bg-neutral-950 text-neutral-200 antialiased;
+    @apply bg-canvas text-ink antialiased;
+    font-family: var(--font-sans);
+  }
+
+  ::selection {
+    background: #171717;
+    color: #fff;
   }
 
   a,
@@ -27,16 +73,6 @@
     cursor: pointer;
   }
 
-  .filter-pattern {
-    background-image: repeating-linear-gradient(
-      45deg,
-      rgba(29, 158, 117, 0.05) 0px,
-      rgba(29, 158, 117, 0.05) 1px,
-      transparent 1px,
-      transparent 9px
-    );
-  }
-
   input[type="text"],
   input[type="email"],
   input[type="password"],
@@ -47,5 +83,62 @@
   input:not([type]),
   textarea {
     cursor: text;
+  }
+}
+
+/* Scaffolding for the rebuild: a not-yet-rebuilt page keeps the dark backdrop
+   it was written against, so the shell can go light before every screen has.
+   Deleted along with MIGRATED in ClientLayout once the last screen lands. */
+.legacy-surface {
+  background: #0a0a0a;
+  color: #e5e5e5;
+  border-radius: 12px;
+  padding: 16px;
+  min-height: 100%;
+}
+
+@layer utilities {
+  /* The skeleton block used by every loading state. */
+  .shimmer {
+    background: linear-gradient(90deg, #f2f2f2 0%, #fafafa 50%, #f2f2f2 100%);
+    background-size: 320px 100%;
+    animation: shimmer 1.2s linear infinite;
+  }
+
+  .shimmer-faint {
+    background: linear-gradient(90deg, #f7f7f7 0%, #fcfcfc 50%, #f7f7f7 100%);
+    background-size: 320px 100%;
+    animation: shimmer 1.2s linear infinite;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -320px 0;
+  }
+  100% {
+    background-position: 320px 0;
+  }
+}
+
+@keyframes drawerIn {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes riseIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

@@ -16,8 +16,8 @@ depending on `NEXT_PUBLIC_DEMO`. Every page imports that one module, so the swap
 covers the whole app without touching a single page component.
 
 The demo client is a small in-memory stand-in for the PostgREST query builder
-(`select` / `eq` / `gte` / `lte` / `in` / `order` / `limit` / `range` /
-`single` / `maybeSingle`, plus embedded foreign-key selects), the auth calls
+(`select` / `eq` / `gte` / `lte` / `in` / `like` / `ilike` / `or` / `order` /
+`limit` / `range` / `single` / `maybeSingle`, plus embedded foreign-key selects), the auth calls
 `AuthContext` needs, and no-op realtime channels. **It has no network access**,
 so demo mode cannot read from or write to production. That also makes the
 write-capable screens — the menu editor and the TV layout editor — safe to click

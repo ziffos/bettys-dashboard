@@ -1,142 +1,229 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   House,
   ChartNoAxesCombined,
+  Megaphone,
+  ShoppingBag,
+  Star,
+  UtensilsCrossed,
+  CreditCard,
+  Calendar,
+  Wallet,
+  Tv,
+  Users,
   Settings,
   LogOut,
-  Megaphone,
-  UtensilsCrossed,
-  Star,
-  ShoppingBag,
-  CreditCard,
-  Wallet,
-  Tv
+  Pin,
+  PinOff,
 } from "lucide-react";
 import logo from "../../public/images/betty_logo.png";
 import { useAuth } from "../lib/AuthContext";
 import { supabase } from "../lib/supabase";
 
-const TOP_ITEMS = [
-  { slug: "overview", href: "/", icon: House, label: "Overview" },
+export const NAV_GROUPS = [
+  {
+    title: null,
+    items: [{ slug: "overview", href: "/", icon: House, label: "Overview" }],
+  },
+  {
+    title: "Analytics",
+    items: [
+      { slug: "sales", href: "/sales", icon: ChartNoAxesCombined, label: "Sales" },
+      { slug: "marketing", href: "/marketing", icon: Megaphone, label: "Marketing" },
+      { slug: "products", href: "/products", icon: ShoppingBag, label: "Products" },
+      { slug: "reviews", href: "/reviews", icon: Star, label: "Reviews" },
+    ],
+  },
+  {
+    title: "Operations",
+    items: [
+      { slug: "menu", href: "/menu", icon: UtensilsCrossed, label: "Menu" },
+      { slug: "payouts", href: "/platform-payouts", icon: CreditCard, label: "Platform Payouts" },
+      { slug: "calendar", href: "/calendar", icon: Calendar, label: "Calendar" },
+      { slug: "payroll", href: "/payroll", icon: Wallet, label: "Payroll" },
+      { slug: "tv-displays", href: "/tv-displays", icon: Tv, label: "TV Displays" },
+      { slug: "my-payroll", href: "/my-payroll", icon: Users, label: "My Payroll" },
+    ],
+  },
+  {
+    title: "System",
+    items: [{ slug: "settings", href: "/settings", icon: Settings, label: "Settings" }],
+  },
 ];
 
-const ANALYTICS_ITEMS = [
-  { slug: "sales",       href: "/sales",     icon: ChartNoAxesCombined, label: "Sales" },
-  { slug: "marketing",   href: "/marketing", icon: Megaphone,           label: "Marketing" },
-  { slug: "products",    href: "/products",  icon: ShoppingBag,         label: "Products" },
-  { slug: "reviews",     href: "/reviews",   icon: Star,                label: "Reviews" },
-];
-
-const OPERATIONS_ITEMS = [
-  { slug: "menu",         href: "/menu",             icon: UtensilsCrossed, label: "Menu" },
-  { slug: "payouts",      href: "/platform-payouts", icon: CreditCard,      label: "Platform Payouts" },
-  { slug: "tv-displays",  href: "/tv-displays",      icon: Tv,              label: "TV Displays" },
-  { slug: "my-payroll",   href: "/my-payroll",       icon: Wallet,          label: "My Payroll" },
-];
-
-const SYSTEM_ITEMS = [
-  { slug: "settings", href: "/settings", icon: Settings, label: "Settings" },
-];
-
-export default function Sidebar({ onCloseMobile }) {
-  const pathname = usePathname();
-  const { user, profile, signOut, canAccess } = useAuth();
+/**
+ * Which nav entries the signed-in person may actually open.
+ *
+ * My Payroll is the one entry that is hidden for a reason other than
+ * permissions: admins do not have shifts, and an employee with no shifts on
+ * record would only find an empty page.
+ */
+export function useVisibleNav() {
+  const { user, profile, canAccess } = useAuth();
   const [hasShifts, setHasShifts] = useState(false);
+  const isAdmin = profile?.role === "admin";
 
-  // Check if employee has any shifts (to decide My Payroll visibility)
   useEffect(() => {
-    if (!user || profile?.role === "admin") return;
+    if (!user || isAdmin) return;
+    let cancelled = false;
     supabase
       .from("shifts")
       .select("id", { count: "exact", head: true })
       .eq("employee_id", user.id)
-      .then(({ count }) => setHasShifts((count ?? 0) > 0));
-  }, [user, profile]);
+      .then(({ count }) => {
+        if (!cancelled) setHasShifts((count ?? 0) > 0);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, isAdmin]);
 
-  const isAdmin = profile?.role === "admin";
-
-  const filterItems = (items) => items.filter((item) => {
+  const allowed = (item) => {
     if (!canAccess(item.slug)) return false;
-    if (item.slug === "my-payroll" && isAdmin) return false;
-    if (item.slug === "my-payroll" && !hasShifts) return false;
+    if (item.slug === "my-payroll" && (isAdmin || !hasShifts)) return false;
     return true;
-  });
-
-  const visibleTop = filterItems(TOP_ITEMS);
-  const visibleAnalytics = filterItems(ANALYTICS_ITEMS);
-  const visibleOperations = filterItems(OPERATIONS_ITEMS);
-  const visibleSystem = filterItems(SYSTEM_ITEMS);
-
-  const renderGroup = (items, label) => {
-    if (items.length === 0) return null;
-    return (
-      <>
-        {label && <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-2 md:mb-3 pl-3 md:pl-4 mt-4 md:mt-5 first:mt-0">{label}</p>}
-        {items.map((item) => (
-          <NavLink key={item.slug} href={item.href} icon={item.icon} label={item.label} active={pathname === item.href} onClick={onCloseMobile} />
-        ))}
-      </>
-    );
   };
 
-  return (
-    <div className="h-full flex flex-col p-4 md:p-6">
-      {/* Brand Section */}
-      <div className="flex items-center gap-3 mb-6 md:mb-10 pl-1 md:pl-2 h-12 md:h-auto">
-        <Image src={logo} alt="Logo" className="w-8 h-8 md:w-10 md:h-10 object-contain rounded-lg" />
-        <div className="flex flex-col">
-          <h2 className="text-sm md:text-lg font-medium md:font-bold text-white tracking-tight leading-none">Betty's</h2>
-          <p className="text-[9px] md:text-[10px] uppercase tracking-wider text-emerald-500 font-bold mt-0.5 md:mt-1">Dashboard</p>
-        </div>
-      </div>
-
-      {/* Navigation */}
-      <nav className="flex-1 space-y-0.5 md:space-y-1 overflow-y-auto">
-        {renderGroup(visibleTop, null)}
-        {renderGroup(visibleAnalytics, "Analytics")}
-        {renderGroup(visibleOperations, "Operations")}
-        {renderGroup(visibleSystem, "System")}
-      </nav>
-
-      {/* Logout — always visible */}
-      <div className="pt-4 md:pt-6 border-t border-neutral-800">
-         <button
-            onClick={() => signOut()}
-            className="w-full flex items-center gap-3 px-3 md:px-4 py-2.5 md:py-3 text-sm font-medium text-red-400 hover:bg-red-500/10 hover:text-red-300 rounded-xl transition-all duration-200 group"
-         >
-            <LogOut size={18} className="stroke-[1.5] md:w-5 md:h-5" />
-            <span>Logout</span>
-         </button>
-      </div>
-    </div>
+  return NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter(allowed) })).filter(
+    (g) => g.items.length > 0
   );
 }
 
-// Helper Component for Navigation Links
-function NavLink({ href, icon: Icon, label, active, onClick }) {
-    return (
-        <Link
-          href={href}
-          onClick={onClick}
-          className={`
-            flex items-center gap-3 text-sm font-medium transition-all duration-200 group
-            px-3 py-2.5 md:px-4 md:py-3
-            ${active
-                ? "bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.3)] rounded-xl"
-                : "text-neutral-400 hover:text-white hover:bg-white/5 rounded-xl"
-            }
-          `}
+const PIN_KEY = "bettys-rail-pinned";
+
+export default function Sidebar() {
+  const pathname = usePathname();
+  const { profile, signOut } = useAuth();
+  const [hovered, setHovered] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const groups = useVisibleNav();
+
+  // Read the pin after mount so the server and the first client render agree.
+  useEffect(() => {
+    setPinned(window.localStorage.getItem(PIN_KEY) === "1");
+  }, []);
+
+  const togglePin = () => {
+    setPinned((was) => {
+      window.localStorage.setItem(PIN_KEY, was ? "0" : "1");
+      return !was;
+    });
+  };
+
+  const open = pinned || hovered;
+  const name = profile?.full_name || "";
+  const initials =
+    name
+      .split(" ")
+      .filter(Boolean)
+      .map((p) => p[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "—";
+
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{ width: open ? 224 : 60 }}
+      className="hidden md:flex shrink-0 flex-col border-r border-line bg-surface transition-[width] duration-200 overflow-hidden sticky top-0 h-screen"
+    >
+      {/* Brand */}
+      <div className="h-14 flex items-center gap-2.5 px-3.5 border-b border-line shrink-0">
+        <Image
+          src={logo}
+          alt="Betty's"
+          className="w-7 h-7 rounded-md object-contain shrink-0"
+        />
+        <div
+          className="overflow-hidden whitespace-nowrap flex-1 min-w-0 transition-opacity duration-150"
+          style={{ opacity: open ? 1 : 0 }}
         >
-          <Icon
-            size={18}
-            className={`stroke-[1.5] transition-colors md:w-5 md:h-5 ${active ? "stroke-white md:stroke-white" : "group-hover:stroke-emerald-400"}`}
-          />
-          {label}
-        </Link>
-    );
+          <div className="text-[13px] font-semibold tracking-[-0.01em] leading-[1.1]">
+            Betty&apos;s Crispy Chicken
+          </div>
+          <div className="font-mono text-[10px] text-subtle tracking-[0.04em]">LIMASSOL</div>
+        </div>
+        <button
+          onClick={togglePin}
+          title={pinned ? "Unpin the sidebar" : "Keep the sidebar open"}
+          className="w-6 h-6 flex items-center justify-center rounded-md text-subtle hover:text-ink hover:bg-wash shrink-0 transition-opacity duration-150"
+          style={{ opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none" }}
+        >
+          {pinned ? <PinOff size={13} /> : <Pin size={13} />}
+        </button>
+      </div>
+
+      {/* Nav */}
+      <nav className="flex-1 p-2 flex flex-col gap-0.5 overflow-y-auto overflow-x-hidden">
+        {groups.map((group, gi) => (
+          <div key={group.title ?? `group-${gi}`} className="contents">
+            {group.title && (
+              <p
+                className="font-mono text-[10px] text-subtle tracking-[0.06em] uppercase mt-3.5 mb-1 pl-2.5 whitespace-nowrap transition-opacity duration-150"
+                style={{ opacity: open ? 1 : 0 }}
+              >
+                {group.title}
+              </p>
+            )}
+            {group.items.map((item) => {
+              const active = pathname === item.href;
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.slug}
+                  href={item.href}
+                  title={open ? undefined : item.label}
+                  className={`flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] whitespace-nowrap ${
+                    active
+                      ? "bg-wash text-ink font-medium"
+                      : "text-muted hover:bg-wash-light hover:text-ink"
+                  }`}
+                >
+                  <Icon size={16} strokeWidth={1.75} className="shrink-0" />
+                  <span
+                    className="transition-opacity duration-150"
+                    style={{ opacity: open ? 1 : 0 }}
+                  >
+                    {item.label}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        ))}
+      </nav>
+
+      {/* Person */}
+      <div className="border-t border-line p-2 shrink-0">
+        <div className="flex items-center gap-2.5 px-1.5 py-1.5">
+          <div className="w-7 h-7 rounded-full bg-ink-strong text-surface font-mono text-[10px] flex items-center justify-center shrink-0">
+            {initials}
+          </div>
+          <div
+            className="flex-1 min-w-0 overflow-hidden whitespace-nowrap transition-opacity duration-150"
+            style={{ opacity: open ? 1 : 0 }}
+          >
+            <div className="text-[13px] font-medium truncate">{name}</div>
+            <div className="text-[11px] text-subtle truncate">
+              {profile?.job_title || (profile?.role === "admin" ? "Admin" : "Employee")}
+            </div>
+          </div>
+          <button
+            onClick={() => signOut()}
+            title="Log out"
+            className="w-7 h-7 flex items-center justify-center rounded-md text-subtle hover:text-danger hover:bg-wash shrink-0 transition-opacity duration-150"
+            style={{ opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none" }}
+          >
+            <LogOut size={15} strokeWidth={1.75} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }

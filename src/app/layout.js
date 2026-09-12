@@ -1,12 +1,21 @@
 import "./globals.css";
 import ClientLayout from "../components/ClientLayout";
 import { AuthProvider } from "../lib/AuthContext";
-import { Inter } from "next/font/google";
+import { RangeProvider } from "../lib/RangeContext";
+import { Geist, Geist_Mono } from "next/font/google";
 
-const inter = Inter({
+// Geist Mono is not decoration — it is the label style throughout the design:
+// KPI labels, table headers, axis ticks, invoice numbers, times.
+const geist = Geist({
   subsets: ["latin"],
   display: "swap",
-  variable: "--font-inter",
+  variable: "--font-geist",
+});
+
+const geistMono = Geist_Mono({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-geist-mono",
 });
 
 export const metadata = {
@@ -20,13 +29,13 @@ export const viewport = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={`${geist.variable} ${geistMono.variable}`}>
       <body>
-         <AuthProvider>
-           <ClientLayout>
-              {children}
-           </ClientLayout>
-         </AuthProvider>
+        <AuthProvider>
+          <RangeProvider>
+            <ClientLayout>{children}</ClientLayout>
+          </RangeProvider>
+        </AuthProvider>
       </body>
     </html>
   );

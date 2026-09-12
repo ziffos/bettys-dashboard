@@ -38,12 +38,47 @@ page.on("pageerror", (e) => problems.push(`uncaught: ${e.message}`));
 
 await page.goto(BASE + route, { waitUntil: "networkidle", timeout: 60000 });
 
-// The pages fetch on mount and render a skeleton until the promises land, so
-// networkidle alone still catches the skeleton on the slower screens.
+// networkidle is not enough on its own. Pages fetch on mount, swap a skeleton
+// for the real thing, and then Recharts animates its bars up from zero — a
+// picture taken at network idle catches empty charts. Wait instead until the
+// DOM has stopped changing for a beat.
 await page
-  .waitForFunction(() => !document.querySelector("[data-loading]"), { timeout: 5000 })
+  .waitForFunction(
+    () =>
+      new Promise((resolve) => {
+        let timer = setTimeout(() => resolve(true), 900);
+        const observer = new MutationObserver(() => {
+          clearTimeout(timer);
+          timer = setTimeout(() => {
+            observer.disconnect();
+            resolve(true);
+          }, 900);
+        });
+        observer.observe(document.body, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+        });
+      }),
+    { timeout: 20000 }
+  )
   .catch(() => {});
-await page.waitForTimeout(2500);
+await page.waitForTimeout(600);
+
+// Playwright's fullPage resizes the viewport to the document height and shoots
+// immediately. That resize makes Recharts re-measure and replay its grow-from-
+// zero animation, so the picture comes back with empty charts. Do the resize
+// here instead and give the page a moment to settle at its final size.
+const fullHeight = await page.evaluate(() =>
+  Math.min(
+    12000,
+    Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)
+  )
+);
+if (fullHeight > Number(height)) {
+  await page.setViewportSize({ width: Number(width), height: fullHeight });
+  await page.waitForTimeout(1600);
+}
 
 if (process.env.SHOT_CLICK) {
   await page.click(process.env.SHOT_CLICK, { timeout: 5000 });
