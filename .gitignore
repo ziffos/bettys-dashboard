@@ -42,3 +42,6 @@ next-env.d.ts
 
 # TV motion review assets (large video artifacts, not part of the app)
 /public/tv-motion/
+
+# screenshot working output (design/reference/ is the committed baseline)
+/.shots/

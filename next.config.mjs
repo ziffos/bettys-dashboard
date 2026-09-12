@@ -1,7 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactCompiler: true,
-  allowedDevOrigins: ['*.trycloudfare.com'],
+  // trycloudfare for tunnel access; 127.0.0.1 so tools/shot.sh can load /_next/*
+  allowedDevOrigins: ['*.trycloudfare.com', '127.0.0.1'],
   images: {
     remotePatterns: [
       {
