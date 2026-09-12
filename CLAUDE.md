@@ -32,7 +32,7 @@ conventions in "Legacy UI" still apply to it.
 | Screen | Route | Status |
 |---|---|---|
 | Shell (rail, header, mobile nav, theme) + Login | — | **done** |
-| Overview | `/` | todo |
+| Overview | `/` | **done** |
 | Sales | `/sales` | todo |
 | Marketing | `/marketing` | todo |
 | Products | `/products` | todo |
@@ -79,7 +79,9 @@ Chicken" built with **Next.js 16 App Router**, **React 19**, **Supabase** and
 ### Key directories
 
 - `src/app/` — Next.js App Router pages (file-based routing)
-- `src/components/` — Shared UI (ClientLayout, Sidebar, SkeletonBlock)
+- `src/components/` — The shell (ClientLayout, Sidebar, AppHeader, MobileNav)
+- `src/components/ui/` — The pieces every rebuilt screen composes from
+- `src/lib/format.js` — Money, dates, sparklines, item parsing, paginated reads
 - `src/components/tv/` — The in-store display boards (out of scope)
 - `src/lib/` — Supabase client (`supabase.js`) and auth context (`AuthContext.js`)
 - `src/lib/demo/` — In-memory Supabase stand-in for demo mode

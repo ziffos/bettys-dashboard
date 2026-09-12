@@ -22,8 +22,38 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="${SHOT_OUT:-$REPO/.shots}"
 PORT="${SHOT_PORT:-3007}"
+PIDFILE="/tmp/bettys-shot-dev.pid"
 
 mkdir -p "$OUT"
+
+# Stop the server this script started. Matching on a process name instead would
+# also match the shell running this script, which kills the run itself — so the
+# pid is written down and only that pid is signalled.
+stop_server() {
+  if [ -f "$PIDFILE" ]; then
+    local pid
+    pid="$(cat "$PIDFILE" 2>/dev/null || true)"
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      kill "$pid" 2>/dev/null || true
+      sleep 2
+      kill -9 "$pid" 2>/dev/null || true
+    fi
+    rm -f "$PIDFILE"
+  fi
+}
+
+if [ "${1:-}" = "--stop" ]; then
+  stop_server
+  echo "dev server stopped"
+  exit 0
+fi
+
+# next build and next dev share .next/, so a build run against a live dev server
+# leaves it serving half-written manifests. --restart is the way back.
+if [ "${1:-}" = "--restart" ]; then
+  stop_server
+  shift
+fi
 
 ROUTES=(
   "/:overview"
@@ -48,16 +78,24 @@ esac
 
 # Reuse a running server rather than starting a second one — two Next dev
 # servers on the same repo fight over .next/ and produce half-built pages.
-if curl -s -o /dev/null --max-time 2 "http://127.0.0.1:$PORT/"; then
+# A 200 is not enough: a server whose .next was deleted under it answers with a
+# 500 page that screenshots perfectly well. Check for real markup.
+healthy() {
+  curl -s --max-time 4 "http://127.0.0.1:$PORT/" 2>/dev/null | grep -q '<body'
+}
+
+if healthy; then
   echo "using dev server already on :$PORT"
 else
+  stop_server
   echo "starting dev server on :$PORT (demo mode)…"
-  (cd "$REPO" && NEXT_PUBLIC_DEMO=1 npx next dev -p "$PORT" > /tmp/bettys-shot-dev.log 2>&1 &)
-  for _ in $(seq 1 40); do
-    curl -s -o /dev/null --max-time 2 "http://127.0.0.1:$PORT/" && break
+  (cd "$REPO" && NEXT_PUBLIC_DEMO=1 exec npx next dev -p "$PORT" > /tmp/bettys-shot-dev.log 2>&1 &
+   echo $! > "$PIDFILE")
+  for _ in $(seq 1 45); do
+    healthy && break
     sleep 1
   done
-  curl -s -o /dev/null --max-time 2 "http://127.0.0.1:$PORT/" || {
+  healthy || {
     echo "dev server never came up — see /tmp/bettys-shot-dev.log" >&2
     exit 1
   }

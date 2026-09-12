@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -96,24 +96,27 @@ export function useVisibleNav() {
 
 const PIN_KEY = "bettys-rail-pinned";
 
+// The pin lives in localStorage, which does not exist during SSR. Reading it
+// through useSyncExternalStore gives the server a defined answer (false) and
+// the client the stored one, without an effect that re-renders on mount.
+const pinListeners = new Set();
+const subscribePin = (cb) => {
+  pinListeners.add(cb);
+  return () => pinListeners.delete(cb);
+};
+const readPin = () => window.localStorage.getItem(PIN_KEY) === "1";
+const readPinOnServer = () => false;
+const writePin = (value) => {
+  window.localStorage.setItem(PIN_KEY, value ? "1" : "0");
+  pinListeners.forEach((cb) => cb());
+};
+
 export default function Sidebar() {
   const pathname = usePathname();
   const { profile, signOut } = useAuth();
   const [hovered, setHovered] = useState(false);
-  const [pinned, setPinned] = useState(false);
+  const pinned = useSyncExternalStore(subscribePin, readPin, readPinOnServer);
   const groups = useVisibleNav();
-
-  // Read the pin after mount so the server and the first client render agree.
-  useEffect(() => {
-    setPinned(window.localStorage.getItem(PIN_KEY) === "1");
-  }, []);
-
-  const togglePin = () => {
-    setPinned((was) => {
-      window.localStorage.setItem(PIN_KEY, was ? "0" : "1");
-      return !was;
-    });
-  };
 
   const open = pinned || hovered;
   const name = profile?.full_name || "";
@@ -150,7 +153,7 @@ export default function Sidebar() {
           <div className="font-mono text-[10px] text-subtle tracking-[0.04em]">LIMASSOL</div>
         </div>
         <button
-          onClick={togglePin}
+          onClick={() => writePin(!pinned)}
           title={pinned ? "Unpin the sidebar" : "Keep the sidebar open"}
           className="w-6 h-6 flex items-center justify-center rounded-md text-subtle hover:text-ink hover:bg-wash shrink-0 transition-opacity duration-150"
           style={{ opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none" }}

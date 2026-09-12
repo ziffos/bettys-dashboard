@@ -1,815 +1,922 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { TriangleAlert } from "lucide-react";
 import { supabase } from "../lib/supabase";
-import { useAuth } from "../lib/AuthContext";
-import { Star } from "lucide-react";
-import SkeletonBlock from "../components/SkeletonBlock";
-import { parseISO, format } from "date-fns";
+import { useRange } from "../lib/RangeContext";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  LabelList,
-  ResponsiveContainer,
-} from "recharts";
+  Card,
+  CardHeader,
+  EmptyState,
+  KpiCard,
+  LoadingState,
+  PageHeader,
+  Segmented,
+  SidePanel,
+  Stars,
+  UpcomingCard,
+  PLATFORM,
+} from "../components/ui";
+import {
+  DOW_SHORT,
+  MONTHS,
+  euro,
+  euro2,
+  eachDay,
+  fetchAllRows,
+  kfmt,
+  num,
+  parseDay,
+  parseItems,
+  pctChange,
+  rangeTitle,
+  signedPct,
+} from "../lib/format";
 
-// ─── Constants ───────────────────────────────────────────────────────────────
+const DELIVERY_IDS = ["wolt", "foody", "bolt"];
+const SOURCE_IDS = [...DELIVERY_IDS, "pos"];
 
-const PLATFORM_BADGE = {
-  wolt: "bg-blue-500/15 text-blue-400",
-  foody: "bg-amber-500/15 text-amber-400",
-  bolt: "bg-emerald-500/15 text-emerald-400",
+const INTERVALS = [
+  { id: "daily", label: "Daily" },
+  { id: "weekly", label: "Weekly" },
+  { id: "monthly", label: "Monthly" },
+];
+
+/** Everything a platform takes off the top, per statement. */
+const feesOf = (payout) =>
+  Number(payout.commission_total || 0) +
+  Number(payout.ad_spend || 0) +
+  Number(payout.other_fees || 0) +
+  Number(payout.customer_deductions || 0);
+
+/** The business day an order belongs to, in Cyprus. */
+const dayOf = (timestamp) => {
+  if (!timestamp) return null;
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Nicosia",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(timestamp));
 };
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function getCyprusNow() {
-  return new Date(
-    new Date().toLocaleString("en-US", { timeZone: "Europe/Nicosia" })
-  );
-}
-
-/** Convert order_placed to YYYY-MM-DD — same as sales page: parseISO + format (local tz) */
-function getDateStr(orderPlaced) {
-  if (!orderPlaced) return null;
-  return format(parseISO(orderPlaced), "yyyy-MM-dd");
-}
-
-/** Paginated fetch — same as sales page, handles Supabase 1000-row default limit */
-async function fetchAllRows(table, select, filters) {
-  const PAGE_SIZE = 1000;
-  let allRows = [];
-  let from = 0;
-  while (true) {
-    let query = supabase.from(table).select(select).range(from, from + PAGE_SIZE - 1);
-    for (const f of filters) {
-      query = query[f.op](f.col, f.val);
-    }
-    const { data, error } = await query;
-    if (error || !data) break;
-    allRows = allRows.concat(data);
-    if (data.length < PAGE_SIZE) break;
-    from += PAGE_SIZE;
-  }
-  return allRows;
-}
-
-function formatShortDate(dateStr) {
-  return new Date(dateStr).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
+const timeOf = (timestamp) =>
+  new Intl.DateTimeFormat("en-GB", {
     timeZone: "Europe/Nicosia",
-  });
-}
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(timestamp));
 
-function getGreeting(hour) {
-  if (hour < 12) return "Good morning";
-  if (hour < 18) return "Good afternoon";
-  return "Good evening";
-}
+export default function OverviewPage() {
+  const range = useRange();
+  const [interval, setIntervalId] = useState("daily");
+  const [raw, setRaw] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [failure, setFailure] = useState(null);
+  const [openDay, setOpenDay] = useState(null);
 
-/** Custom shape for net (green) bar — rounds top corners only when no commission above */
-function NetBarShape({ x, y, width, height, commission }) {
-  if (!height || height <= 0) return null;
-  if (!commission || commission <= 0) {
-    const r = 4;
+  // ── Fetch ────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setFailure(null);
+
+    (async () => {
+      const windowFrom = range.previous.from;
+      const until = `${range.to}T23:59:59.999`;
+
+      try {
+      const [deliveries, pos, payouts, social, reviews] = await Promise.all([
+        fetchAllRows(
+          supabase,
+          "delivery_purchases",
+          "order_placed, price, delivery_status, delivery_partner, items",
+          [
+            { op: "gte", col: "order_placed", val: windowFrom },
+            { op: "lte", col: "order_placed", val: until },
+          ]
+        ),
+        fetchAllRows(supabase, "pos_sales", "order_placed, price, items", [
+          { op: "gte", col: "order_placed", val: windowFrom },
+          { op: "lte", col: "order_placed", val: until },
+        ]),
+        fetchAllRows(
+          supabase,
+          "platform_payouts",
+          "platform, period_from, period_to, gross_sales, commission_total, ad_spend, other_fees, customer_deductions",
+          [
+            { op: "gte", col: "period_to", val: windowFrom },
+            { op: "lte", col: "period_from", val: range.to },
+          ]
+        ),
+        fetchAllRows(supabase, "social_stats", "stat_date, platform, total_reach", [
+          { op: "gte", col: "stat_date", val: windowFrom },
+          { op: "lte", col: "stat_date", val: range.to },
+        ]),
+        fetchAllRows(supabase, "reviews", "rating, review_text, source_platform, review_date", [
+          { op: "gte", col: "review_date", val: range.from },
+          { op: "lte", col: "review_date", val: until },
+        ]),
+      ]);
+
+      if (cancelled) return;
+      setRaw({ deliveries, pos, payouts, social, reviews });
+      setLoading(false);
+      } catch (err) {
+        if (cancelled) return;
+        console.error("Overview fetch failed:", err);
+        setFailure(err.message || "Could not load this period.");
+        setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [range.from, range.to, range.previous.from]);
+
+  // ── Derive ───────────────────────────────────────────────────────────────
+  const model = useMemo(() => {
+    if (!raw) return null;
+
+    // A delivery only counts as revenue once it reached someone.
+    const sold = raw.deliveries.filter(
+      (d) => (d.delivery_status || "").toLowerCase() === "delivered"
+    );
+
+    /** Per-day, per-source revenue and order counts for the whole window. */
+    const byDay = {};
+    const touch = (day) =>
+      (byDay[day] ??= {
+        rev: { wolt: 0, foody: 0, bolt: 0, pos: 0 },
+        ord: { wolt: 0, foody: 0, bolt: 0, pos: 0 },
+      });
+
+    for (const d of sold) {
+      const day = dayOf(d.order_placed);
+      const src = (d.delivery_partner || "").toLowerCase();
+      if (!day || !SOURCE_IDS.includes(src)) continue;
+      const bucket = touch(day);
+      bucket.rev[src] += Number(d.price || 0);
+      bucket.ord[src] += 1;
+    }
+    for (const p of raw.pos) {
+      const day = dayOf(p.order_placed);
+      if (!day) continue;
+      const bucket = touch(day);
+      bucket.rev.pos += Number(p.price || 0);
+      bucket.ord.pos += 1;
+    }
+
+    const revOn = (day, src) => byDay[day]?.rev[src] ?? 0;
+    const grossOn = (day) => SOURCE_IDS.reduce((a, s) => a + revOn(day, s), 0);
+    const ordersOn = (day) =>
+      SOURCE_IDS.reduce((a, s) => a + (byDay[day]?.ord[s] ?? 0), 0);
+
+    // ── Fees.
+    //
+    // There is no per-order fee anywhere: platforms bill by statement. So a
+    // statement's fees are spread across its days in proportion to what we
+    // actually sold on each of them, and a day no statement covers yet is
+    // *estimated* from that platform's average rate rather than left at zero.
+    const payouts = raw.payouts.filter((p) => p.period_from && p.period_to);
+
+    /** Per-platform gross and fees across a set of statements. */
+    const totalsFrom = (list) => {
+      const out = {};
+      for (const p of list) {
+        const plat = (p.platform || "").toLowerCase();
+        const t = (out[plat] ??= { gross: 0, fees: 0 });
+        t.gross += Number(p.gross_sales || 0);
+        t.fees += feesOf(p);
+      }
+      return out;
+    };
+
+    // Rates for estimating days no statement covers yet come from the whole
+    // fetched window — a wider base is steadier than the handful of statements
+    // that happen to overlap a seven-day range.
+    const platformTotals = totalsFrom(payouts);
+    const blendedRate = (() => {
+      const g = Object.values(platformTotals).reduce((a, t) => a + t.gross, 0);
+      const f = Object.values(platformTotals).reduce((a, t) => a + t.fees, 0);
+      return g > 0 ? f / g : 0;
+    })();
+    const rateOf = (plat) => {
+      const t = platformTotals[plat];
+      return t && t.gross > 0 ? t.fees / t.gross : blendedRate;
+    };
+
+    /** What each statement costs us on one specific day, per platform. */
+    const confirmedFeeOn = {};
+    const coveredOn = {};
+    for (const p of payouts) {
+      const plat = (p.platform || "").toLowerCase();
+      const days = eachDay(p.period_from, p.period_to);
+      const periodRev = days.reduce((a, day) => a + revOn(day, plat), 0);
+      for (const day of days) (coveredOn[day] ??= new Set()).add(plat);
+      if (periodRev <= 0) continue;
+      const fees = feesOf(p);
+      for (const day of days) {
+        const share = revOn(day, plat) / periodRev;
+        ((confirmedFeeOn[day] ??= {})[plat] ??= 0);
+        confirmedFeeOn[day][plat] += fees * share;
+      }
+    }
+
+    /** A platform's fee on one day, confirmed if a statement covers it. */
+    const platformFeeOn = (day, plat) => {
+      const rev = revOn(day, plat);
+      if (rev <= 0) return { fee: 0, estimated: false };
+      if (coveredOn[day]?.has(plat)) {
+        // Fees can never exceed what the platform actually handled.
+        return { fee: Math.min(confirmedFeeOn[day]?.[plat] ?? 0, rev), estimated: false };
+      }
+      return { fee: Math.min(rev * rateOf(plat), rev), estimated: true };
+    };
+
+    const feeOn = (day) => {
+      let fee = 0;
+      let estimated = false;
+      for (const plat of DELIVERY_IDS) {
+        const f = platformFeeOn(day, plat);
+        fee += f.fee;
+        estimated = estimated || f.estimated;
+      }
+      return { fee, estimated };
+    };
+
+    // ── Buckets for the bar chart.
+    const days = eachDay(range.from, range.to);
+    let buckets;
+    if (interval === "daily") {
+      buckets = days.map((day) => ({ key: day, days: [day] }));
+    } else if (interval === "weekly") {
+      buckets = [];
+      for (let i = days.length; i > 0; i -= 7) {
+        buckets.unshift({ key: days[Math.max(0, i - 7)], days: days.slice(Math.max(0, i - 7), i) });
+      }
+    } else {
+      const byMonth = {};
+      for (const day of days) (byMonth[day.slice(0, 7)] ??= []).push(day);
+      buckets = Object.entries(byMonth).map(([key, ds]) => ({ key: key + "-01", days: ds }));
+    }
+
+    const bars = buckets.map((b) => {
+      const gross = b.days.reduce((a, day) => a + grossOn(day), 0);
+      const fees = b.days.reduce((a, day) => a + feeOn(day).fee, 0);
+      const estimated = b.days.some((day) => feeOn(day).estimated);
+      const date = parseDay(b.key);
+      return {
+        key: b.key,
+        days: b.days,
+        gross,
+        fees,
+        net: gross - fees,
+        orders: b.days.reduce((a, day) => a + ordersOn(day), 0),
+        estimated,
+        label:
+          interval === "daily"
+            ? DOW_SHORT[date.getDay()]
+            : interval === "weekly"
+              ? `${date.getDate()} ${MONTHS[date.getMonth()]}`
+              : MONTHS[date.getMonth()],
+        subLabel:
+          interval === "daily"
+            ? `${date.getDate()} ${MONTHS[date.getMonth()]}`
+            : interval === "weekly"
+              ? `wk`
+              : String(date.getFullYear()),
+      };
+    });
+
+    // ── Totals, this period and the one before.
+    const sumOver = (from, to) => {
+      const list = eachDay(from, to);
+      const gross = list.reduce((a, day) => a + grossOn(day), 0);
+      const fees = list.reduce((a, day) => a + feeOn(day).fee, 0);
+      const orders = list.reduce((a, day) => a + ordersOn(day), 0);
+      const openDays = list.filter((day) => ordersOn(day) > 0).length;
+      return { gross, fees, net: gross - fees, orders, openDays };
+    };
+    const now = sumOver(range.from, range.to);
+    const before = sumOver(range.previous.from, range.previous.to);
+
+    const dailyNet = days.map((day) => grossOn(day) - feeOn(day).fee);
+    const dailyOrders = days.map(ordersOn);
+    const dailyAov = days.map((day, i) =>
+      dailyOrders[i] > 0 ? grossOn(day) / dailyOrders[i] : 0
+    );
+    const dailyFeeRate = days.map((day) => {
+      const g = grossOn(day);
+      return g > 0 ? (feeOn(day).fee / g) * 100 : 0;
+    });
+
+    const feeRate = now.gross > 0 ? (now.fees / now.gross) * 100 : 0;
+    const prevFeeRate = before.gross > 0 ? (before.fees / before.gross) * 100 : 0;
+    const aov = now.orders > 0 ? now.gross / now.orders : 0;
+    const prevAov = before.orders > 0 ? before.gross / before.orders : 0;
+
+    // ── Channel mix.
+    // The rate beside a channel is what it actually cost us over this period —
+    // its share of the prorated fees — not a lifetime average. A period with no
+    // statement yet still shows a number, marked estimated in the bars.
+    const channels = SOURCE_IDS.map((id) => {
+      const revenue = days.reduce((a, day) => a + revOn(day, id), 0);
+      const fees =
+        id === "pos" ? 0 : days.reduce((a, day) => a + platformFeeOn(day, id).fee, 0);
+      const rate = revenue > 0 ? (fees / revenue) * 100 : null;
+      return {
+        id,
+        name: PLATFORM[id].name,
+        color: PLATFORM[id].color,
+        revenue,
+        fee: id === "pos" ? "0%" : rate == null ? "—" : `${rate.toFixed(1)}%`,
+        feeRate: rate ?? 0,
+      };
+    })
+      .filter((c) => c.revenue > 0)
+      .sort((a, b) => b.revenue - a.revenue);
+    const channelTotal = channels.reduce((a, c) => a + c.revenue, 0) || 1;
+    for (const c of channels) c.share = (c.revenue / channelTotal) * 100;
+
+    const dearest = channels
+      .filter((c) => c.id !== "pos" && c.feeRate > 0)
+      .sort((a, b) => b.feeRate - a.feeRate)[0];
+
+    // ── Top dishes, against the same span before.
+    const countDishes = (from, to) => {
+      const counts = {};
+      const within = (ts) => {
+        const day = dayOf(ts);
+        return day >= from && day <= to;
+      };
+      for (const d of sold) {
+        if (!within(d.order_placed)) continue;
+        for (const { qty, name } of parseItems(d.items)) {
+          counts[name] = (counts[name] || 0) + qty;
+        }
+      }
+      for (const p of raw.pos) {
+        if (!within(p.order_placed)) continue;
+        for (const { qty, name } of parseItems(p.items)) {
+          counts[name] = (counts[name] || 0) + qty;
+        }
+      }
+      return counts;
+    };
+    const dishNow = countDishes(range.from, range.to);
+    const dishBefore = countDishes(range.previous.from, range.previous.to);
+    const topDishes = Object.entries(dishNow)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, count], i) => ({
+        rank: i + 1,
+        name,
+        count,
+        delta: dishBefore[name] ? pctChange(count, dishBefore[name]) : null,
+      }));
+    const dishMax = topDishes[0]?.count || 1;
+
+    // ── Reviews.
+    const reviews = [...raw.reviews].sort(
+      (a, b) => new Date(b.review_date) - new Date(a.review_date)
+    );
+    const avgRating = reviews.length
+      ? reviews.reduce((a, r) => a + (r.rating || 0), 0) / reviews.length
+      : 0;
+
+    // ── Social reach. Instagram and Facebook are separate rows; combined
+    // campaigns arrive as their own `facebook_instagram` platform and are
+    // counted once here rather than split between the two.
+    const reachByDay = {};
+    for (const s of raw.social) {
+      if (!s.stat_date) continue;
+      reachByDay[s.stat_date] = (reachByDay[s.stat_date] || 0) + Number(s.total_reach || 0);
+    }
+    const reachBars = buckets.map((b) => ({
+      key: b.key,
+      label:
+        interval === "daily"
+          ? DOW_SHORT[parseDay(b.key).getDay()]
+          : interval === "weekly"
+            ? `${parseDay(b.key).getDate()} ${MONTHS[parseDay(b.key).getMonth()]}`
+            : MONTHS[parseDay(b.key).getMonth()],
+      value: b.days.reduce((a, day) => a + (reachByDay[day] || 0), 0),
+    }));
+    const reachTotal = reachBars.reduce((a, b) => a + b.value, 0);
+    const reachMax = Math.max(1, ...reachBars.map((b) => b.value));
+    const bestReach = reachBars.reduce(
+      (best, b) => (b.value > (best?.value ?? -1) ? b : best),
+      null
+    );
+
+    // ── Orders behind one day, for the drawer.
+    const ordersFor = (day) => {
+      const rows = [];
+      for (const d of raw.deliveries) {
+        if (dayOf(d.order_placed) !== day) continue;
+        const src = (d.delivery_partner || "").toLowerCase();
+        rows.push({
+          time: timeOf(d.order_placed),
+          items: d.items || "—",
+          total: Number(d.price || 0),
+          platform: PLATFORM[src]?.name ?? src,
+          color: PLATFORM[src]?.color ?? "#8f8f8f",
+          status:
+            (d.delivery_status || "").toLowerCase() === "delivered"
+              ? "Delivered"
+              : (d.delivery_status || "").toLowerCase() === "rejected"
+                ? "Rejected by kitchen"
+                : "Cancelled",
+        });
+      }
+      for (const p of raw.pos) {
+        if (dayOf(p.order_placed) !== day) continue;
+        rows.push({
+          time: timeOf(p.order_placed),
+          items: p.items || "—",
+          total: Number(p.price || 0),
+          platform: "In-store POS",
+          color: PLATFORM.pos.color,
+          status: "Collected",
+        });
+      }
+      return rows.sort((a, b) => b.time.localeCompare(a.time));
+    };
+
+    return {
+      bars,
+      now,
+      before,
+      feeRate,
+      prevFeeRate,
+      aov,
+      prevAov,
+      dailyNet,
+      dailyOrders,
+      dailyAov,
+      dailyFeeRate,
+      channels,
+      dearest,
+      topDishes,
+      dishMax,
+      reviews: reviews.slice(0, 3),
+      reviewCount: reviews.length,
+      avgRating,
+      reachBars,
+      reachTotal,
+      reachMax,
+      bestReach,
+      ordersFor,
+      isEmpty: now.orders === 0,
+    };
+  }, [raw, range.from, range.to, range.previous.from, range.previous.to, interval]);
+
+  // ── Render ───────────────────────────────────────────────────────────────
+  if (failure) {
     return (
-      <path
-        d={`M${x},${y + height}V${y + r}Q${x},${y} ${x + r},${y}H${x + width - r}Q${x + width},${y} ${x + width},${y + r}V${y + height}Z`}
-        fill="#1D9E75"
+      <div className="flex flex-col gap-4 md:gap-5">
+        <PageHeader title="Overview" sub={rangeTitle(range.from, range.to)} />
+        <EmptyState
+          icon={TriangleAlert}
+          title="Could not load this period"
+          body={`${failure} The figures are left blank rather than shown half-read — a partial fetch looks exactly like a quiet week.`}
+          action="Try again"
+          onAction={() => range.setRange(range.id)}
+        />
+      </div>
+    );
+  }
+
+  if (loading || !model) {
+    return (
+      <LoadingState
+        kpis={4}
+        shape="chart"
+        line="LOADING ORDERS · 4 SOURCES"
+        columns="repeat(auto-fit, minmax(180px, 1fr))"
       />
     );
   }
-  return <rect x={x} y={y} width={width} height={height} fill="#1D9E75" />;
-}
 
-/** Custom shape for commission bar — solid red if confirmed, light red with dashed border if estimated */
-function CommBarShape({ x, y, width, height, confirmed }) {
-  if (!height || height <= 0) return null;
-  const r = 4;
-  const path = `M${x},${y + height}V${y + r}Q${x},${y} ${x + r},${y}H${x + width - r}Q${x + width},${y} ${x + width},${y + r}V${y + height}Z`;
-  if (confirmed) {
-    return <path d={path} fill="#A32D2D" />;
-  }
-  return (
-    <g>
-      <path d={path} fill="rgba(163, 45, 45, 0.2)" />
-      <path d={path} fill="none" stroke="#A32D2D" strokeWidth={1.5} strokeDasharray="4 3" />
-    </g>
+  const header = (
+    <PageHeader
+      title="Overview"
+      sub={`${rangeTitle(range.from, range.to)} · compared with previous ${range.days} days`}
+      right={<Segmented options={INTERVALS} value={interval} onChange={setIntervalId} />}
+    />
   );
-}
 
-/** Label for net bar: net payout inside green segment */
-function RevNetLabels({ x, y, width, height, value, net }) {
-  const amount = net || value;
-  if (!amount || amount <= 0 || height < 14) return null;
-  return (
-    <text
-      x={x + width / 2}
-      y={y + height / 2 + 3}
-      textAnchor="middle"
-      fill="rgba(255,255,255,0.85)"
-      className="text-[9px] md:text-[10px]"
-    >
-      &euro;{Math.round(amount).toLocaleString()}
-    </text>
-  );
-}
-
-/** Label for commission bar: commission amount inside red/amber segment */
-function RevCommLabel({ x, y, width, height, value }) {
-  if (!value || height < 14) return null;
-  return (
-    <text
-      x={x + width / 2}
-      y={y + height / 2 + 3}
-      textAnchor="middle"
-      fill="rgba(255,255,255,0.85)"
-      className="text-[9px] md:text-[10px]"
-    >
-      {value}
-    </text>
-  );
-}
-
-function ReachLabel({ x, y, width, value }) {
-  if (!value) return null;
-  return (
-    <text
-      x={x + width / 2}
-      y={y - 8}
-      textAnchor="middle"
-      fill="white"
-      fontSize={11}
-    >
-      {value.toLocaleString()}
-    </text>
-  );
-}
-
-// ─── Main page ───────────────────────────────────────────────────────────────
-
-export default function HomePage() {
-  const { profile } = useAuth();
-  const [interval, setInterval] = useState("daily");
-  const [commentOnly, setCommentOnly] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [raw, setRaw] = useState(null);
-  const [quote, setQuote] = useState(null);
-
-  const cyprusNow = getCyprusNow();
-  const greeting = getGreeting(cyprusNow.getHours());
-  const firstName = profile?.full_name
-    ? profile.full_name.split(" ")[0]
-    : "";
-
-  // ── Fetch all data once ─────────────────────────────────────────────────
-  useEffect(() => {
-    async function fetchAll() {
-      setLoading(true);
-
-      // Quote of the day
-      const dayOfYear = Math.floor(
-        (new Date() - new Date(new Date().getFullYear(), 0, 0)) / 86400000
-      );
-      const quoteOffset = dayOfYear % 30;
-
-      // Fetch 7 months of data (broadest range needed for monthly interval)
-      const rangeStart = new Date();
-      rangeStart.setMonth(rangeStart.getMonth() - 7);
-      const rangeStartStr = rangeStart.toISOString().split("T")[0];
-
-      // Paginated fetches for large tables (same as sales page)
-      const [allDel, allPos, socialRes, reviewRes, quoteRes, payoutRows] =
-        await Promise.all([
-          fetchAllRows("delivery_purchases", "order_placed, price, delivery_status, items, delivery_partner", [
-            { op: "gte", col: "order_placed", val: rangeStartStr },
-          ]),
-          fetchAllRows("pos_sales", "order_placed, price", [
-            { op: "gte", col: "order_placed", val: rangeStartStr },
-          ]),
-          supabase
-            .from("social_stats")
-            .select("stat_date, total_reach")
-            .gte("stat_date", rangeStartStr),
-          supabase
-            .from("reviews")
-            .select("rating, review_text, source_platform, review_date")
-            .order("review_date", { ascending: false })
-            .limit(30),
-          supabase
-            .from("quotes")
-            .select("text, author")
-            .range(quoteOffset, quoteOffset),
-          fetchAllRows("platform_payouts", "platform,period_from,period_to,gross_sales,commission_total,ad_spend,other_fees,net_payout", [
-            { op: "gte", col: "period_to", val: rangeStartStr },
-          ]),
-        ]);
-
-      // Only include delivered orders (matches sales page logic)
-      const deliveries = allDel.filter(
-        (r) => (r.delivery_status || "").toLowerCase() === "delivered"
-      );
-      const pos = allPos;
-
-      // Find latest data date — same logic as sales page: parseISO + format in local tz
-      const allDateStrs = [
-        ...deliveries.map((r) => getDateStr(r.order_placed)),
-        ...pos.map((r) => getDateStr(r.order_placed)),
-      ].filter(Boolean);
-      allDateStrs.sort();
-      const latestDateStr = allDateStrs.length > 0
-        ? allDateStrs[allDateStrs.length - 1]
-        : format(new Date(), "yyyy-MM-dd");
-
-      setRaw({
-        deliveries,
-        pos,
-        social: socialRes.data || [],
-        reviews: reviewRes.data || [],
-        payouts: payoutRows,
-        latestDateStr,
-      });
-      setQuote(quoteRes.data?.[0] || null);
-      setLoading(false);
-    }
-    fetchAll();
-  }, []);
-
-  // ── Derive chart data based on interval ─────────────────────────────────
-  const chartData = useMemo(() => {
-    if (!raw) return null;
-
-    // Anchor everything to the business date string (no timezone issues)
-    const latestStr = raw.latestDateStr;
-    const [ly, lm, ld] = latestStr.split("-").map(Number);
-
-    // Helper: Date(y,m,d) → "YYYY-MM-DD" (pure calendar math, no timezone)
-    const fmtD = (d) =>
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    const DAY_NAMES = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
-    const MONTH_NAMES = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
-
-    // Helper to build 7 buckets anchored to a given date
-    function buildBuckets(anchorY, anchorM, anchorD) {
-      const b = [];
-      if (interval === "daily") {
-        for (let i = 6; i >= 0; i--) {
-          const d = new Date(anchorY, anchorM - 1, anchorD - i);
-          b.push({ key: fmtD(d), label: DAY_NAMES[d.getDay()], value: 0 });
-        }
-      } else if (interval === "weekly") {
-        for (let i = 6; i >= 0; i--) {
-          const endD = new Date(anchorY, anchorM - 1, anchorD - i * 7);
-          const startD = new Date(anchorY, anchorM - 1, anchorD - i * 7 - 6);
-          // ISO week number of the bucket's end date
-          const thu = new Date(endD);
-          thu.setDate(thu.getDate() - ((thu.getDay() + 6) % 7) + 3);
-          const jan4 = new Date(thu.getFullYear(), 0, 4);
-          const wk = 1 + Math.round(((thu - jan4) / 86400000 - 3 + ((jan4.getDay() + 6) % 7)) / 7);
-          b.push({ startStr: fmtD(startD), endStr: fmtD(endD), label: `W${wk}`, value: 0 });
-        }
-      } else {
-        for (let i = 6; i >= 0; i--) {
-          const d = new Date(anchorY, anchorM - 1 - i, 1);
-          const y = d.getFullYear();
-          const m = d.getMonth();
-          const lastDay = new Date(y, m + 1, 0).getDate();
-          b.push({
-            startStr: `${y}-${String(m + 1).padStart(2, "0")}-01`,
-            endStr: `${y}-${String(m + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`,
-            label: MONTH_NAMES[m],
-            value: 0,
-          });
-        }
-      }
-      return b;
-    }
-
-    function addToBuckets(bkts, dateStr, val) {
-      if (!dateStr) return;
-      if (interval === "daily") {
-        const b = bkts.find((b) => b.key === dateStr);
-        if (b) b.value += val;
-      } else {
-        const b = bkts.find((b) => dateStr >= b.startStr && dateStr <= b.endStr);
-        if (b) b.value += val;
-      }
-    }
-
-    // ── Revenue buckets (anchored to revenue latest date)
-    // For daily: pick the last 7 dates that actually had orders (skip closed days)
-    let revBuckets;
-    if (interval === "daily") {
-      const activeDates = new Set();
-      for (const d of raw.deliveries) { const ds = getDateStr(d.order_placed); if (ds) activeDates.add(ds); }
-      for (const p of raw.pos) { const ds = getDateStr(p.order_placed); if (ds) activeDates.add(ds); }
-      const last7 = [...activeDates].sort().slice(-7);
-      revBuckets = last7.map((key) => {
-        const [y, m, d] = key.split("-").map(Number);
-        return { key, label: DAY_NAMES[new Date(y, m - 1, d).getDay()], value: 0 };
-      });
-    } else {
-      revBuckets = buildBuckets(ly, lm, ld);
-    }
-    for (const b of revBuckets) { b.deliveryRev = 0; b.posRev = 0; b.deliveryByPlatform = {}; }
-
-    for (const d of raw.deliveries) {
-      const ds = getDateStr(d.order_placed);
-      if (!ds) continue;
-      const b = interval === "daily"
-        ? revBuckets.find((x) => x.key === ds)
-        : revBuckets.find((x) => ds >= x.startStr && ds <= x.endStr);
-      if (b) {
-        const price = Number(d.price || 0);
-        b.value += price;
-        b.deliveryRev += price;
-        const plat = (d.delivery_partner || "").toLowerCase();
-        if (plat) b.deliveryByPlatform[plat] = (b.deliveryByPlatform[plat] || 0) + price;
-      }
-    }
-    for (const p of raw.pos) {
-      const ds = getDateStr(p.order_placed);
-      if (!ds) continue;
-      const b = interval === "daily"
-        ? revBuckets.find((x) => x.key === ds)
-        : revBuckets.find((x) => ds >= x.startStr && ds <= x.endStr);
-      if (b) {
-        const price = Number(p.price || 0);
-        b.value += price;
-        b.posRev += price;
-      }
-    }
-
-    // ── Payout data for stacked revenue chart
-    const payouts = raw.payouts || [];
-
-    // Build daily per-platform revenue lookup from delivery data
-    const dailyPlatformRev = {};
-    for (const d of raw.deliveries) {
-      const ds = getDateStr(d.order_placed);
-      if (!ds) continue;
-      const plat = (d.delivery_partner || "").toLowerCase();
-      if (!plat) continue;
-      if (!dailyPlatformRev[ds]) dailyPlatformRev[ds] = {};
-      dailyPlatformRev[ds][plat] = (dailyPlatformRev[ds][plat] || 0) + Number(d.price || 0);
-    }
-
-    // Sum a platform's delivery revenue within a date range
-    function platformRevInRange(platform, fromStr, toStr) {
-      let total = 0;
-      const [fy, fm, fd] = fromStr.split("-").map(Number);
-      const [ty, tm, td] = toStr.split("-").map(Number);
-      const endDate = new Date(ty, tm - 1, td);
-      const d = new Date(fy, fm - 1, fd);
-      while (d <= endDate) {
-        total += (dailyPlatformRev[fmtD(d)]?.[platform] || 0);
-        d.setDate(d.getDate() + 1);
-      }
-      return total;
-    }
-
-    function getBucketRange(b) {
-      return interval === "daily"
-        ? { start: b.key, end: b.key }
-        : { start: b.startStr, end: b.endStr };
-    }
-    function payoutsForBucket(b) {
-      const { start, end } = getBucketRange(b);
-      return payouts.filter(
-        (p) => p.period_from && p.period_to && p.period_from <= end && p.period_to >= start
-      );
-    }
-
-    // Count days between two YYYY-MM-DD strings (inclusive)
-    function dayCount(fromStr, toStr) {
-      const [fy, fm, fd] = fromStr.split("-").map(Number);
-      const [ty, tm, td] = toStr.split("-").map(Number);
-      return Math.round((new Date(ty, tm - 1, td) - new Date(fy, fm - 1, fd)) / 86400000) + 1;
-    }
-
-    // Sales-weighted commission: fees are scaled by the data-available fraction of the
-    // payout period, then distributed by each platform's actual revenue in the bucket.
-    function proratedCommForBucket(b) {
-      const { start, end } = getBucketRange(b);
-      const overlapping = payoutsForBucket(b);
-      let total = 0;
-      for (const p of overlapping) {
-        const fees = Number(p.commission_total || 0) + Number(p.ad_spend || 0) + Number(p.other_fees || 0);
-        const plat = (p.platform || "").toLowerCase();
-        // Clip payout end to available data range so payouts extending into the
-        // future don't dump all fees onto the last day with data
-        const dataEnd = p.period_to <= latestStr ? p.period_to : latestStr;
-        if (dataEnd < p.period_from) continue;
-        const fullDays = dayCount(p.period_from, p.period_to);
-        const dataDays = dayCount(p.period_from, dataEnd);
-        const scaledFees = fullDays > 0 ? fees * (dataDays / fullDays) : fees;
-        // Sales-weight within the data-available portion
-        const periodRev = platformRevInRange(plat, p.period_from, dataEnd);
-        if (periodRev <= 0) continue;
-        const oStart = start > p.period_from ? start : p.period_from;
-        const oEnd = end < dataEnd ? end : dataEnd;
-        if (oEnd < oStart) continue;
-        const bucketRev = platformRevInRange(plat, oStart, oEnd);
-        total += scaledFees * (bucketRev / periodRev);
-      }
-      return total;
-    }
-
-    // Per-platform average fee rate from all unique payouts overlapping the displayed periods
-    const seenPK = new Set();
-    const platGross = {};
-    const platFees = {};
-    for (const b of revBuckets) {
-      for (const p of payoutsForBucket(b)) {
-        const k = `${p.platform}-${p.period_from}-${p.period_to}`;
-        if (seenPK.has(k)) continue;
-        seenPK.add(k);
-        const plat = (p.platform || "").toLowerCase();
-        platGross[plat] = (platGross[plat] || 0) + Number(p.gross_sales || 0);
-        platFees[plat] = (platFees[plat] || 0) + Number(p.commission_total || 0) + Number(p.ad_spend || 0) + Number(p.other_fees || 0);
-      }
-    }
-    const totalGross = Object.values(platGross).reduce((a, v) => a + v, 0);
-    const totalFeesSum = Object.values(platFees).reduce((a, v) => a + v, 0);
-    const blendedFeeRate = totalGross > 0 ? totalFeesSum / totalGross : 0;
-
-    // Compute net / commission per bucket — commission only from delivery, never POS
-    for (const b of revBuckets) {
-      b.value = Math.round(b.value * 100) / 100;
-      b.gross = b.value;
-
-      const bp = payoutsForBucket(b);
-
-      // Confirmed commission from platforms with payouts (sales-weighted)
-      const confirmedComm = bp.length > 0 ? proratedCommForBucket(b) : 0;
-
-      // Walk each day in the bucket to find platform/day gaps without payout coverage
-      const { start, end } = getBucketRange(b);
-      const [sy, sm, sd] = start.split("-").map(Number);
-      const [ey, em, ed] = end.split("-").map(Number);
-      const endDate = new Date(ey, em - 1, ed);
-      let estimatedComm = 0;
-      let hasUncovered = false;
-      for (let d = new Date(sy, sm - 1, sd); d <= endDate; d.setDate(d.getDate() + 1)) {
-        const ds = fmtD(d);
-        const dayPlats = dailyPlatformRev[ds];
-        if (!dayPlats) continue;
-        for (const plat of Object.keys(dayPlats)) {
-          const covered = payouts.some(
-            (p) => (p.platform || "").toLowerCase() === plat && p.period_from <= ds && p.period_to >= ds
-          );
-          if (!covered) {
-            const rate = platGross[plat] > 0 ? platFees[plat] / platGross[plat] : blendedFeeRate;
-            estimatedComm += dayPlats[plat] * rate;
-            hasUncovered = true;
-          }
-        }
-      }
-
-      const totalComm = confirmedComm + estimatedComm;
-      b.commission = Math.round(Math.min(totalComm, b.deliveryRev) * 100) / 100;
-      b.net = Math.round((b.deliveryRev - b.commission + b.posRev) * 100) / 100;
-      b.confirmed = !hasUncovered;
-      b.commDisplay = b.confirmed
-        ? `€${Math.round(b.commission).toLocaleString()}`
-        : `~€${Math.round(b.commission).toLocaleString()}`;
-    }
-
-    // ── Social buckets (anchored to social latest date)
-    const socialDates = raw.social.map((s) => s.stat_date).filter(Boolean);
-    socialDates.sort();
-    const socialLatestStr = socialDates.length > 0 ? socialDates[socialDates.length - 1] : latestStr;
-    const [sy, sm, sd] = socialLatestStr.split("-").map(Number);
-    const socialBuckets = buildBuckets(sy, sm, sd);
-    for (const s of raw.social) {
-      addToBuckets(socialBuckets, s.stat_date, Number(s.total_reach || 0));
-    }
-    for (const b of socialBuckets) b.value = Math.round(b.value);
-
-    // ── Top dishes — use the revenue buckets' date range
-    const rangeStart = interval === "daily" ? revBuckets[0].key : revBuckets[0].startStr;
-    const rangeEnd = interval === "daily"
-      ? revBuckets[revBuckets.length - 1].key
-      : revBuckets[revBuckets.length - 1].endStr;
-
-    const dishCount = {};
-    for (const d of raw.deliveries) {
-      const ds = getDateStr(d.order_placed);
-      if (ds < rangeStart || ds > rangeEnd) continue;
-      if (!d.items) continue;
-      const tokens = d.items.split(",").map((t) => t.trim()).filter(Boolean);
-      for (const token of tokens) {
-        const match = token.match(/^(\d+)\s+(.+)$/);
-        if (match) {
-          const name = match[2].trim();
-          // Skip unit-only tokens like "330 ml", "500 ml" etc.
-          if (/^(ml|g|kg|cl|l|oz|pcs)$/i.test(name)) continue;
-          const qty = parseInt(match[1], 10);
-          dishCount[name] = (dishCount[name] || 0) + qty;
-        }
-      }
-    }
-    const topDishes = Object.entries(dishCount)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([name, count]) => ({ name, count }));
-
-    // Period labels
-    let periodLabel;
-    if (interval === "daily") periodLabel = "Last 7 days";
-    else if (interval === "weekly") periodLabel = "Last 7 weeks";
-    else periodLabel = "Last 7 months";
-
-    return { revBuckets, socialBuckets, topDishes, latestStr, socialLatestStr, periodLabel };
-  }, [raw, interval]);
-
-  // ── Reviews (always latest, not interval-filtered) ──────────────────────
-  const reviews = useMemo(() => {
-    if (!raw) return [];
-    let list = raw.reviews;
-    if (commentOnly) list = list.filter((r) => r.review_text?.trim());
-    return list.slice(0, 5);
-  }, [raw, commentOnly]);
-
-  // ── Loading skeleton ────────────────────────────────────────────────────
-  if (loading) {
+  if (model.isEmpty) {
     return (
-      <div className="space-y-6">
-        <SkeletonBlock className="h-3 w-64 mb-1" />
-        <SkeletonBlock className="h-3 w-40 mb-4" />
-        <div className="border-t border-neutral-800" />
-        <SkeletonBlock className="h-8 w-72 mb-1" />
-        <SkeletonBlock className="h-4 w-96" />
-        <div className="flex gap-1">
-          <SkeletonBlock className="h-9 w-20 rounded-full" />
-          <SkeletonBlock className="h-9 w-20 rounded-full" />
-          <SkeletonBlock className="h-9 w-24 rounded-full" />
-        </div>
-        <SkeletonBlock className="h-[160px] md:h-[220px] rounded-2xl" />
-        <SkeletonBlock className="h-[160px] md:h-[220px] rounded-2xl" />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <SkeletonBlock className="h-56 rounded-2xl" />
-          <SkeletonBlock className="h-56 rounded-2xl" />
-        </div>
+      <div className="flex flex-col gap-4 md:gap-5">
+        {header}
+        <EmptyState
+          title={`No orders between ${rangeTitle(range.from, range.to)}`}
+          body="Nothing is broken — there is simply nothing to show for this range. The most recent orders may also be older than the window you picked."
+          action="Jump to the last 28 days"
+          onAction={() => range.setRange("28d")}
+        />
       </div>
     );
   }
 
-  if (!chartData) return null;
-
-  const fullDate = cyprusNow.toLocaleDateString("en-GB", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    timeZone: "Europe/Nicosia",
-  });
+  const barMax = Math.max(1, ...model.bars.map((b) => b.gross));
+  const showBarValues = model.bars.length <= 8;
+  const labelEvery = Math.ceil(model.bars.length / 8);
+  // The column is sized in CSS so it can differ between phone and desktop; the
+  // segments are percentages of it rather than pixels, which is what keeps the
+  // bars inside the plot on a 390px screen.
+  const pctOf = (v) => `${((v / barMax) * 100).toFixed(2)}%`;
 
   return (
-    <div className="space-y-6">
-      {/* ── Greeting ──────────────────────────────────────────────────────── */}
-      <div>
-        <h1 className="text-[18px] md:text-2xl font-bold text-white tracking-tight">
-          {greeting}, {firstName}
-        </h1>
-        {quote && (
-          <div className="flex items-baseline gap-1.5 mt-1.5">
-            <span className="text-emerald-500 font-serif leading-none" style={{ fontSize: 18, opacity: 0.35 }}>&ldquo;</span>
-            <p className="text-neutral-500 italic text-[11px] md:text-xs">
-              {quote.text} <span className="text-neutral-600 not-italic">&mdash; {quote.author}</span>
-            </p>
-          </div>
-        )}
+    <div className="flex flex-col gap-4 md:gap-5">
+      {header}
+
+      {/* KPIs */}
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+        <KpiCard
+          label="NET REVENUE"
+          value={euro(model.now.net)}
+          sub={`after ${euro(model.now.fees)} in platform fees`}
+          delta={pctChange(model.now.net, model.before.net)}
+          series={model.dailyNet}
+        />
+        <KpiCard
+          label="ORDERS"
+          value={num(model.now.orders)}
+          sub={`⌀ ${Math.round(model.now.orders / Math.max(1, model.now.openDays))} per open day`}
+          delta={pctChange(model.now.orders, model.before.orders)}
+          series={model.dailyOrders}
+        />
+        <KpiCard
+          label="AVERAGE ORDER"
+          value={euro2(model.aov)}
+          sub={
+            model.prevAov > 0
+              ? `${euro2(Math.abs(model.aov - model.prevAov))} ${
+                  model.aov >= model.prevAov ? "higher" : "lower"
+                } than last period`
+              : "no comparable period before"
+          }
+          delta={pctChange(model.aov, model.prevAov)}
+          series={model.dailyAov}
+        />
+        <KpiCard
+          label="FEE RATE"
+          value={`${model.feeRate.toFixed(1)}%`}
+          sub={model.dearest ? `${model.dearest.name} is the expensive one` : "no platform fees in this range"}
+          delta={model.feeRate - model.prevFeeRate}
+          deltaLabel={`${Math.abs(model.feeRate - model.prevFeeRate).toFixed(1)}pp`}
+          positiveIsGood={false}
+          series={model.dailyFeeRate}
+        />
       </div>
 
-      {/* ── Interval toggle ───────────────────────────────────────────────── */}
-      <div className="flex gap-1 bg-neutral-900 p-1 rounded-full w-fit border border-neutral-800">
-        {["daily", "weekly", "monthly"].map((v) => (
-          <button
-            key={v}
-            onClick={() => setInterval(v)}
-            className={`px-3 md:px-4 py-1.5 text-[11px] md:text-xs font-medium rounded-full transition-colors capitalize ${
-              interval === v
-                ? "bg-emerald-500 text-white"
-                : "text-neutral-400 hover:text-white hover:bg-white/5"
-            }`}
-          >
-            {v}
-          </button>
+      {/* Revenue + the right rail */}
+      <div className="grid gap-3 items-start md:grid-cols-[minmax(0,1.9fr)_minmax(280px,1fr)]">
+        <Card>
+          <div className="border-b border-line">
+            <CardHeader
+              title="Revenue after platform fees"
+              sub="Select a bar to open that day's orders"
+              right={
+                <div className="flex flex-wrap gap-3 text-[11px] text-muted">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-[9px] h-[9px] rounded-[2px] bg-ink-strong" />
+                    Net payout
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span
+                      className="w-[9px] h-[9px] rounded-[2px]"
+                      style={{
+                        background:
+                          "repeating-linear-gradient(45deg,#d4d4d4 0 1px,#f2f2f2 1px 4px)",
+                      }}
+                    />
+                    Fees (confirmed)
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-[9px] h-[9px] rounded-[2px] bg-surface border border-dashed border-line-strong" />
+                    Fees (estimated)
+                  </span>
+                </div>
+              }
+            />
+          </div>
+
+          <div className="px-4 pt-5 pb-3">
+            <div className="flex items-end gap-0.5 md:gap-1.5">
+              {model.bars.map((bar, i) => {
+                const selected = openDay === bar.key;
+                const clickable = bar.days.length === 1;
+                return (
+                  <div
+                    key={bar.key}
+                    onClick={() => clickable && setOpenDay(bar.key)}
+                    className={`flex-1 min-w-0 flex flex-col items-center gap-2 rounded-lg py-1.5 px-0.5 ${
+                      clickable ? "cursor-pointer hover:bg-wash-light" : ""
+                    } ${selected ? "bg-wash-light" : ""}`}
+                  >
+                    {showBarValues && (
+                      <span
+                        className="text-[11px] font-medium whitespace-nowrap"
+                        style={{ color: selected ? "var(--color-accent)" : "var(--color-ink)" }}
+                      >
+                        {euro(bar.gross)}
+                      </span>
+                    )}
+                    <div className="w-full flex flex-col justify-end h-[104px] md:h-[154px]">
+                      <div
+                        className="rounded-t"
+                        style={{
+                          height: pctOf(bar.fees),
+                          background: bar.estimated
+                            ? "#fff"
+                            : "repeating-linear-gradient(45deg,#d4d4d4 0 1px,#f2f2f2 1px 4px)",
+                          border: bar.estimated ? "1px dashed #d4d4d4" : "0",
+                        }}
+                      />
+                      <div
+                        className="rounded-b"
+                        style={{
+                          height: pctOf(bar.net),
+                          background: selected ? "var(--color-accent)" : "var(--color-ink-strong)",
+                        }}
+                      />
+                    </div>
+                    <div className="text-center min-w-0">
+                      {(i % labelEvery === 0 || model.bars.length <= 8) && (
+                        <>
+                          <div
+                            className="text-[11px] font-medium"
+                            style={{ color: selected ? "var(--color-ink)" : "var(--color-muted)" }}
+                          >
+                            {bar.label}
+                          </div>
+                          {interval === "daily" && (
+                            <div className="text-[11px] text-muted">{bar.subLabel}</div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="border-t border-line px-4 py-2.5 flex flex-wrap gap-4 text-[12px] text-muted">
+            <span>
+              Gross <strong className="font-mono text-ink font-medium">{euro(model.now.gross)}</strong>
+            </span>
+            <span>
+              Fees <strong className="font-mono text-ink font-medium">{euro(model.now.fees)}</strong>{" "}
+              <span className="text-subtle">({model.feeRate.toFixed(1)}%)</span>
+            </span>
+            <span>
+              Net <strong className="font-mono text-ink font-medium">{euro(model.now.net)}</strong>
+            </span>
+          </div>
+        </Card>
+
+        <div className="flex flex-col gap-3 min-w-0">
+          <UpcomingCard title="Needs attention">
+            Fee jumps, unconfirmed payouts and items that sold out mid-service will be
+            flagged here. The rules are still being worked out — likely read by a model
+            rather than hand-written thresholds.
+          </UpcomingCard>
+
+          <Card className="px-4 py-3.5">
+            <h2 className="text-[14px] font-semibold tracking-[-0.01em] mb-3">Channel mix</h2>
+            <div className="flex h-2 rounded-full overflow-hidden gap-0.5 mb-3.5">
+              {model.channels.map((c) => (
+                <div key={c.id} style={{ width: `${c.share}%`, background: c.color }} />
+              ))}
+            </div>
+            <div className="flex flex-col gap-2.5">
+              {model.channels.map((c) => (
+                <div key={c.id} className="flex items-center gap-2.5">
+                  <span
+                    className="w-2 h-2 rounded-[2px] shrink-0"
+                    style={{ background: c.color }}
+                  />
+                  <span className="text-[13px] flex-1 min-w-0 truncate">{c.name}</span>
+                  <span className="font-mono text-[12px] text-subtle">{c.fee}</span>
+                  <span className="font-mono text-[12px] tabular-nums w-[60px] text-right">
+                    {euro(c.revenue)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      </div>
+
+      {/* Digest row */}
+      <div className="grid gap-3 grid-cols-1 md:grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
+        <Card>
+          <div className="px-4 py-3.5 flex items-center justify-between">
+            <h2 className="text-[14px] font-semibold tracking-[-0.01em]">Top dishes</h2>
+            <Link href="/products" className="text-[12px] font-medium text-accent">
+              All products
+            </Link>
+          </div>
+          {model.topDishes.map((dish) => (
+            <div
+              key={dish.name}
+              className="px-4 py-[9px] border-t border-line flex items-center gap-2.5 hover:bg-wash-light"
+            >
+              <span className="font-mono text-[11px] text-muted w-3.5">{dish.rank}</span>
+              <span className="text-[13px] flex-1 min-w-0 truncate">{dish.name}</span>
+              <div className="w-[70px] h-1 bg-wash rounded-full overflow-hidden shrink-0">
+                <div
+                  className="h-full bg-ink-strong"
+                  style={{ width: `${(dish.count / model.dishMax) * 100}%` }}
+                />
+              </div>
+              <span className="font-mono text-[12px] tabular-nums w-[34px] text-right">
+                {dish.count}
+              </span>
+              <span
+                className="font-mono text-[11px] w-[46px] text-right"
+                style={{
+                  color:
+                    dish.delta == null
+                      ? "var(--color-subtle)"
+                      : dish.delta >= 0
+                        ? "var(--color-accent)"
+                        : "var(--color-danger)",
+                }}
+              >
+                {dish.delta == null ? "new" : signedPct(dish.delta, 0)}
+              </span>
+            </div>
+          ))}
+        </Card>
+
+        <Card>
+          <div className="px-4 py-3.5 flex items-center justify-between gap-3">
+            <div className="flex items-baseline gap-2 min-w-0">
+              <h2 className="text-[14px] font-semibold tracking-[-0.01em]">Reviews</h2>
+              <span className="font-mono text-[12px] text-subtle truncate">
+                {model.reviewCount
+                  ? `${model.avgRating.toFixed(1)} · ${model.reviewCount} this period`
+                  : "none this period"}
+              </span>
+            </div>
+            <Link href="/reviews" className="text-[12px] font-medium text-accent shrink-0">
+              All reviews
+            </Link>
+          </div>
+          {model.reviews.length === 0 && (
+            <p className="px-4 pb-4 text-[12px] text-muted border-t border-line pt-3">
+              Nobody left a rating in this range.
+            </p>
+          )}
+          {model.reviews.map((r, i) => {
+            const plat = PLATFORM[(r.source_platform || "").toLowerCase()];
+            return (
+              <div key={i} className="px-4 py-[11px] border-t border-line">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <Stars rating={r.rating || 0} />
+                  <span
+                    className="font-mono text-[10px] tracking-[0.04em] uppercase"
+                    style={{ color: plat?.color ?? "#8f8f8f" }}
+                  >
+                    {plat?.name ?? r.source_platform}
+                  </span>
+                  <span className="text-[11px] text-muted">
+                    {r.review_date ? shortDay(r.review_date) : ""}
+                  </span>
+                </div>
+                <p
+                  className="text-[12px] text-pretty"
+                  style={{
+                    color: r.review_text ? "var(--color-muted)" : "var(--color-faint)",
+                    fontStyle: r.review_text ? "normal" : "italic",
+                  }}
+                >
+                  {r.review_text || "No comment left"}
+                </p>
+              </div>
+            );
+          })}
+        </Card>
+
+        <Card className="px-4 py-3.5">
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="text-[14px] font-semibold tracking-[-0.01em]">Social reach</h2>
+            <span className="font-mono text-[12px] text-subtle">{kfmt(model.reachTotal)}</span>
+          </div>
+          {model.reachTotal === 0 ? (
+            <p className="mt-4 text-[12px] text-muted text-pretty">
+              No reach recorded in this range. Social stats are imported separately and
+              currently lag behind the order data.
+            </p>
+          ) : (
+            <>
+              <div className="flex items-end gap-1.5 h-24 mt-4">
+                {model.reachBars.map((bar, i) => (
+                  <div key={bar.key} className="flex-1 min-w-0 flex flex-col items-center gap-1.5">
+                    <div
+                      className="w-full rounded-t"
+                      style={{
+                        height: `${Math.round((bar.value / model.reachMax) * 78)}px`,
+                        background:
+                          bar.key === model.bestReach?.key ? "var(--color-accent)" : "#e5e5e5",
+                      }}
+                    />
+                    {(i % labelEvery === 0 || model.reachBars.length <= 8) && (
+                      <span className="text-[11px] text-muted truncate">{bar.label}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {model.bestReach && (
+                <p className="mt-3 text-[12px] text-muted text-pretty">
+                  {model.bestReach.label} reached{" "}
+                  <strong className="font-medium text-ink">{kfmt(model.bestReach.value)}</strong> —
+                  the best in this range.
+                </p>
+              )}
+            </>
+          )}
+        </Card>
+      </div>
+
+      <DayDrawer
+        day={openDay}
+        model={model}
+        onClose={() => setOpenDay(null)}
+      />
+    </div>
+  );
+}
+
+const shortDay = (timestamp) => {
+  const d = new Date(timestamp);
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+};
+
+function DayDrawer({ day, model, onClose }) {
+  if (!day) return null;
+  const bar = model.bars.find((b) => b.key === day);
+  if (!bar) return null;
+  const orders = model.ordersFor(day);
+  const date = parseDay(day);
+
+  return (
+    <SidePanel
+      open
+      eyebrow="DAY DETAIL"
+      title={`${date.toLocaleDateString("en-GB", { weekday: "long" })} ${date.getDate()} ${MONTHS[date.getMonth()]}`}
+      onClose={onClose}
+    >
+      <div className="grid grid-cols-3 border-b border-line">
+        {[
+          ["GROSS", euro(bar.gross), "text-ink"],
+          ["FEES", euro(bar.fees), "text-muted"],
+          ["NET", euro(bar.net), "text-ink"],
+        ].map(([label, value, tone], i) => (
+          <div key={label} className={`px-4 py-3 ${i < 2 ? "border-r border-line" : ""}`}>
+            <div className="font-mono text-[10px] tracking-[0.06em] text-subtle">{label}</div>
+            <div className={`text-[18px] font-semibold tracking-[-0.02em] mt-[3px] ${tone}`}>
+              {value}
+            </div>
+          </div>
         ))}
       </div>
 
-      {/* ── Section 1: Revenue chart (stacked) ──────────────────────────── */}
-      <div className="bg-neutral-900 p-3.5 md:p-6 rounded-2xl border border-neutral-800">
-        <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-          Revenue
-        </h3>
-        <p className="text-[11px] text-neutral-600 mt-0.5 mb-4">
-          {chartData.periodLabel} &middot; up to{" "}
-          {formatShortDate(chartData.latestStr)}
-        </p>
-        <div className="h-[160px] md:h-[220px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={chartData.revBuckets}
-              margin={{ top: 28, right: 4, bottom: 0, left: 4 }}
-            >
-              <XAxis
-                dataKey="label"
-                axisLine={false}
-                tickLine={false}
-                tick={{ fill: "#737373", fontSize: 11 }}
-              />
-              <YAxis hide />
-              <Bar
-                dataKey="net"
-                stackId="rev"
-                shape={<NetBarShape />}
-                label={<RevNetLabels />}
-              />
-              <Bar
-                dataKey="commission"
-                stackId="rev"
-                shape={<CommBarShape />}
-              >
-                <LabelList dataKey="commDisplay" content={<RevCommLabel />} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-        {/* Legend */}
-        <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3 text-[10px] md:text-xs text-neutral-400">
-          <span className="flex items-center gap-1.5">
-            <span className="inline-block w-2.5 h-2.5 rounded-sm bg-[#1D9E75]" />
-            Net payout
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="inline-block w-2.5 h-2.5 rounded-sm bg-[#A32D2D]" />
-            Commission (confirmed)
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="inline-block w-2.5 h-2.5 rounded-sm bg-[rgba(163,45,45,0.2)] border border-dashed border-[#A32D2D]" />
-            Commission (estimated)
-          </span>
-        </div>
+      <div className="flex items-center justify-between px-4 py-2.5 font-mono text-[10px] tracking-[0.06em] text-subtle border-b border-line">
+        <span>{orders.length} ORDERS</span>
+        <span>NEWEST FIRST</span>
       </div>
 
-      {/* ── Section 2: Social media reach chart ───────────────────────────── */}
-      <div className="bg-neutral-900 p-3.5 md:p-6 rounded-2xl border border-neutral-800">
-        <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-          Social media reach
-        </h3>
-        <p className="text-[11px] text-neutral-600 mt-0.5 mb-4">
-          {chartData.periodLabel} &middot; up to{" "}
-          {formatShortDate(chartData.socialLatestStr)}
+      {orders.length === 0 && (
+        <p className="px-4 py-6 text-[13px] text-muted text-center">
+          No orders logged for this day.
         </p>
-        <div className="h-[160px] md:h-[220px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={chartData.socialBuckets}
-              margin={{ top: 28, right: 4, bottom: 0, left: 4 }}
-            >
-              <XAxis
-                dataKey="label"
-                axisLine={false}
-                tickLine={false}
-                tick={{ fill: "#737373", fontSize: 11 }}
-              />
-              <YAxis hide />
-              <Bar
-                dataKey="value"
-                fill="#1D9E75"
-                radius={[4, 4, 0, 0]}
-                label={<ReachLabel />}
-                minPointSize={2}
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+      )}
 
-      {/* ── Section 3: Two-column grid ────────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Left: Top dishes */}
-        <div className="bg-neutral-900 p-3.5 md:p-6 rounded-2xl border border-neutral-800">
-          <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-            Top dishes
-          </h3>
-          <p className="text-[11px] text-neutral-600 mt-0.5 mb-4">
-            {chartData.periodLabel}
-          </p>
-          {chartData.topDishes.length === 0 ? (
-            <p className="text-sm text-neutral-500 italic">
-              No dish data available
-            </p>
-          ) : (
-            <div className="space-y-2.5">
-              {chartData.topDishes.map((dish, i) => {
-                const maxCount = chartData.topDishes[0]?.count || 1;
-                const widthPct = (dish.count / maxCount) * 100;
-                return (
-                  <div key={i} className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-neutral-600 w-4 shrink-0">
-                      {i + 1}
-                    </span>
-                    <span className="text-sm text-neutral-300 truncate flex-1 min-w-0">
-                      {dish.name}
-                    </span>
-                    <div className="w-16 md:w-20 h-1.5 bg-neutral-800 rounded-full overflow-hidden shrink-0">
-                      <div
-                        className="h-full bg-emerald-500 rounded-full"
-                        style={{ width: `${widthPct}%` }}
-                      />
-                    </div>
-                    <span className="text-xs text-neutral-400 w-8 text-right shrink-0">
-                      {dish.count}
-                    </span>
-                  </div>
-                );
-              })}
+      {orders.map((o, i) => (
+        <div
+          key={i}
+          className="px-4 py-2.5 border-b border-wash flex items-center gap-2.5 hover:bg-wash-light"
+        >
+          <span className="font-mono text-[12px] text-subtle w-[38px] shrink-0">{o.time}</span>
+          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: o.color }} />
+          <div className="flex-1 min-w-0">
+            <div className="text-[13px] truncate">{o.items}</div>
+            <div className="text-[11px] text-subtle">
+              {o.platform} · {o.status}
             </div>
-          )}
-        </div>
-
-        {/* Right: Latest reviews */}
-        <div className="bg-neutral-900 p-3.5 md:p-6 rounded-2xl border border-neutral-800">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-              Latest reviews
-            </h3>
-            <button
-              onClick={() => setCommentOnly(!commentOnly)}
-              className={`text-[10px] md:text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                commentOnly
-                  ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
-                  : "border-neutral-700 text-neutral-500 hover:text-neutral-300"
-              }`}
-            >
-              With comment only
-            </button>
           </div>
-          {reviews.length === 0 ? (
-            <p className="text-sm text-neutral-500 italic">No reviews found</p>
-          ) : (
-            <div className="space-y-3">
-              {reviews.map((review, i) => {
-                const platform = (
-                  review.source_platform || ""
-                ).toLowerCase();
-                const badgeClass =
-                  PLATFORM_BADGE[platform] ||
-                  "bg-neutral-700/50 text-neutral-400";
-                return (
-                  <div
-                    key={i}
-                    className={`${i > 0 ? "border-t border-neutral-800 pt-3" : ""}`}
-                  >
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <div className="flex gap-0.5">
-                        {[1, 2, 3, 4, 5].map((s) => (
-                          <Star
-                            key={s}
-                            size={12}
-                            className={
-                              s <= review.rating
-                                ? "text-yellow-500"
-                                : "text-neutral-700"
-                            }
-                            fill={
-                              s <= review.rating ? "currentColor" : "none"
-                            }
-                          />
-                        ))}
-                      </div>
-                      <span
-                        className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${badgeClass}`}
-                      >
-                        {review.source_platform}
-                      </span>
-                      <span className="text-[10px] text-neutral-600">
-                        {formatShortDate(review.review_date)}
-                      </span>
-                    </div>
-                    {review.review_text?.trim() ? (
-                      <p className="text-xs text-neutral-400 line-clamp-2">
-                        {review.review_text}
-                      </p>
-                    ) : (
-                      <p className="text-xs text-neutral-600 italic">
-                        No comment left
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <span className="font-mono text-[13px] tabular-nums shrink-0">{euro2(o.total)}</span>
         </div>
-      </div>
-    </div>
+      ))}
+    </SidePanel>
   );
 }
