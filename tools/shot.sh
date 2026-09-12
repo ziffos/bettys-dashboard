@@ -14,6 +14,9 @@
 # The dev server is started in demo mode if it is not already up, because the
 # real database stops in August 2026 and leaves most screens empty. A server
 # that is already running on PORT is reused as-is.
+#
+# /login is the one route this cannot photograph: demo mode signs you in, so the
+# route redirects. Shoot it against a plain `npx next dev` instead.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
