@@ -23,7 +23,7 @@ const HISTORY_DAYS = 430;
 const SHIFT_WINDOW_DAYS = 240;
 
 const STAFF = [
-  { name: "Alex Rivera", role: "admin", job: "Owner", rate: 0, bonus: 0 },
+  { name: "Alex Rivera", role: "admin", job: "Owner", rate: 12.0, bonus: 0 },
   { name: "Sam Chen", role: "employee", job: "Kitchen manager", rate: 9.5, bonus: 120 },
   { name: "Jordan Okafor", role: "employee", job: "Cook", rate: 8.75, bonus: 80 },
   { name: "Nina Kovacs", role: "employee", job: "Cook", rate: 9.0, bonus: 100 },
@@ -175,6 +175,10 @@ function build() {
     created_at: iso(firstDay),
   }));
   const employees = profiles.filter((p) => p.role === "employee");
+  // Who can appear on the rota. The owner takes a couple of shifts a week like
+  // everyone else, which is also what gives My Payroll something to show for
+  // the person demo mode signs you in as.
+  const rosterable = profiles;
   const rateOf = Object.fromEntries(
     profiles.map((p, i) => [p.id, { rate: STAFF[i].rate, bonus: STAFF[i].bonus }])
   );
@@ -191,7 +195,7 @@ function build() {
   const shifts = [];
   const rosterDay = (d) => {
     if (!isOpen(d)) return;
-    const onDuty = [...employees].sort(() => rnd() - 0.5).slice(0, intBetween(3, 4));
+    const onDuty = [...rosterable].sort(() => rnd() - 0.5).slice(0, intBetween(3, 4));
     for (const e of onDuty) {
       const [start, end, brk] = pick(SHIFT_PATTERNS);
       shifts.push({
@@ -422,7 +426,7 @@ function build() {
     return (eh * 60 + em - (sh * 60 + sm) - s.break_minutes) / 60;
   };
 
-  const rate_changes = employees.map((e, i) => ({
+  const rate_changes = rosterable.map((e, i) => ({
     id: `demo-rate-${i + 1}`,
     employee_id: e.id,
     hourly_rate: rateOf[e.id].rate,

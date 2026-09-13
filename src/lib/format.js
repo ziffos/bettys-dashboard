@@ -11,8 +11,13 @@ export const DOW_TITLE = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"
 /** €7,959 — whole euros, for totals. */
 export const euro = (n) => "€" + Math.round(n || 0).toLocaleString("en-GB");
 
-/** €20.11 — cents, for prices and averages. */
-export const euro2 = (n) => "€" + (Number(n) || 0).toFixed(2);
+/** €20.11 / €1,029.96 — cents, for prices, averages and exact balances. */
+export const euro2 = (n) =>
+  "€" +
+  (Number(n) || 0).toLocaleString("en-GB", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
 /** 118.7k — compact, for reach and follower counts. */
 export const kfmt = (n) => {

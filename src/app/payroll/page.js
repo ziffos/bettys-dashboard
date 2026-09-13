@@ -144,8 +144,9 @@ export default function PayrollPage() {
       return applicable[0] ?? null;
     };
 
+    // Everyone who worked, whatever their role. An owner who takes shifts is
+    // owed for them, and excluding them by title would quietly lose the hours.
     const rows = store.staff
-      .filter((p) => p.role !== "admin")
       .map((person) => {
         const shifts = store.shifts.filter(
           (s) => s.employee_id === person.id && String(s.shift_date || "").slice(0, 7) === active.key

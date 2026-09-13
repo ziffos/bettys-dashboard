@@ -43,7 +43,7 @@ conventions in "Legacy UI" still apply to it.
 | Platform Payouts | `/platform-payouts` | **done** |
 | Calendar | `/calendar` | **done** |
 | Payroll | `/payroll` | **done** |
-| My Payroll | `/my-payroll` | todo |
+| My Payroll | `/my-payroll` | **done** |
 | Settings | `/settings` | todo |
 | TV Displays | `/tv-displays` | todo |
 
