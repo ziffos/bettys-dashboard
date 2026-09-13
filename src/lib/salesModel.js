@@ -39,12 +39,32 @@ export const LOST_COLOR = {
   failed: "#7928ca",
 };
 
-/** Everything a platform takes off the top of one statement. */
-export const feesOf = (payout) =>
-  Number(payout.commission_total || 0) +
-  Number(payout.ad_spend || 0) +
-  Number(payout.other_fees || 0) +
-  Number(payout.customer_deductions || 0);
+/**
+ * Everything a platform takes off the top of one statement.
+ *
+ * The four fee columns are the platform's own explanation, and on 33 of 118
+ * production statements they do not add up to the difference between the gross
+ * and the net that actually landed — Foody in particular charges a flat €71.40
+ * that appears in no column. What left the account is gross minus net, so that
+ * is the figure, and the columns are treated as a breakdown of it rather than
+ * as its definition.
+ *
+ * Falls back to the columns when a statement states no net, and ignores a net
+ * that would imply a negative or impossible fee.
+ */
+export const feesOf = (payout) => {
+  const columns =
+    Number(payout.commission_total || 0) +
+    Number(payout.ad_spend || 0) +
+    Number(payout.other_fees || 0) +
+    Number(payout.customer_deductions || 0);
+
+  const gross = Number(payout.gross_sales || 0);
+  if (payout.net_payout == null || gross <= 0) return columns;
+
+  const fromBank = gross - Number(payout.net_payout);
+  return fromBank >= 0 && fromBank <= gross ? fromBank : columns;
+};
 
 /**
  * Both order tables store Cyprus wall-clock time — but only one of them says so.

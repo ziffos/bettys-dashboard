@@ -52,7 +52,7 @@ looking at it in a screenshot with real data, not demo data.
 - [x] Products — units, revenue, per-platform split, price flags
 - [x] Reviews — counts, average, distribution, per-platform
 - [x] Menu — prices vs `menu_item_price_history`, alias coverage
-- [ ] Platform Payouts — statement totals vs computed sales for the same period
+- [x] Platform Payouts — statement totals vs computed sales for the same period
 - [ ] Calendar — 53 shifts, Feb–Mar only. Check the empty months read as empty
 - [ ] Payroll / My Payroll — 2 records, Feb 2026. Same
 - [ ] Settings — 3 profiles, permissions matrix
@@ -356,3 +356,34 @@ Reconciled with `tools/sql.sh`.
   Burger with no till name at all. Verified after the change that Products still
   matches everything except the deliberate long drink names, and Overview's top
   dishes still resolve to canonical names.
+
+### Platform Payouts (task 5)
+
+Reconciled with `tools/audit-payouts.mjs` and `tools/sql.sh`.
+
+- **The variance flag was measuring the wrong thing, and fired on two thirds of
+  statements.** Each platform sits at its own steady offset against our order
+  log — median reported/ours is **Bolt 1.0000, Wolt 1.0377, Foody 0.8256**, and
+  Foody's is that tight on *every single statement* (0.754–0.885). Against a
+  2% tolerance from zero, 77 of 118 were "wrong". The check is now drift from
+  the platform's **own median**, at 15%, which flags **9 of 118** — a list worth
+  reading. The tooltip says what normal is for that platform so the number can
+  be interpreted.
+- **The outliers it now finds are real.** Worst is **Bolt 29 Dec – 4 Jan,
+  reported €187.55 against €78.95 in our log, 138% above Bolt's normal**
+  (CY1426-891). Then three more Bolt weeks around +36%, and **Wolt 21–25 July,
+  €1,672.30 against €1,266.63, +27%** (invoice …125164).
+- **`net_payout` did not agree with the four fee columns on 33 of 118
+  statements.** Foody in particular charges a flat **€71.40** that appears in no
+  column; the worst single gap was €181.47. So "fees" is now defined as **gross
+  minus the net that actually landed** — every statement states a net, none
+  implies a negative or impossible fee — and the four columns are shown as a
+  breakdown of it, with the remainder as its own **"Not itemised"** slice so the
+  panel always adds up. Across all statements that moves total fees from
+  €23,660.98 to €23,787.58: **€126.60 more actually left the account than the
+  columns admit.**
+- **Demo could not have shown either problem.** Its `net_payout` was defined as
+  gross minus the four columns, so there was never a remainder, and its reported
+  gross was always exactly our own, so nothing ever drifted. Demo now carries a
+  flat unlisted Foody charge and the occasional statement reporting well away
+  from its orders.

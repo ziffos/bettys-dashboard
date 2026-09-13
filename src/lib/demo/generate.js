@@ -347,18 +347,28 @@ function build() {
     // here too — but they are their own line on the statement, so Payouts
     // shows them as their own band rather than folding them into "other".
     const deductions = rnd() < 0.25 ? round2(gross * between(0.005, 0.03)) : 0;
+    // The fee columns do not explain the whole gap between gross and net on
+    // about a quarter of real statements — Foody charges a flat €71.40 that
+    // appears in no column at all. Payouts shows the remainder as "Not
+    // itemised", so demo has to produce some.
+    const unlisted = platform === "foody" && rnd() < 0.3 ? 71.4 : 0;
+    // And now and then a platform reports a gross well away from what its own
+    // orders came to. Those are the statements worth a ticket, and the drift
+    // check exists to find them.
+    const odd = rnd() < 0.06 ? between(1.2, 1.5) : 1;
+    const reported = round2(gross * odd);
     payoutN++;
     platform_payouts.push({
       id: `demo-payout-${payoutN}`,
       platform,
       period_from: iso(from),
       period_to: iso(to),
-      gross_sales: round2(gross),
+      gross_sales: reported,
       commission_total: commission,
       ad_spend: ads,
       other_fees: other,
       customer_deductions: deductions,
-      net_payout: round2(gross - commission - ads - other - deductions),
+      net_payout: round2(reported - commission - ads - other - deductions - unlisted),
       invoice_number: `${platform.slice(0, 2).toUpperCase()}-${iso(from).replace(/-/g, "")}-${String(payoutN).padStart(4, "0")}`,
       notes: deductions > 0 ? `Includes \u20ac${deductions.toFixed(2)} of refunds and promo discounts charged back.` : null,
     });
