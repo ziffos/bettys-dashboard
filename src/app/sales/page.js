@@ -321,7 +321,7 @@ export default function SalesPage() {
       ),
       isEmpty: now.orders === 0,
     };
-  }, [raw, range.from, range.to, range.previous.from, range.previous.to, interval, on, active]);
+  }, [raw, range, interval, on, active]);
 
   if (failure) {
     return (

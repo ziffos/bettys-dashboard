@@ -284,6 +284,14 @@ Agreed with the owner before the rebuild started. Do not "fix" these back.
     on Sundays; counting a shut day among the days that are "short at peak"
     makes the headline useless. Fewer than two on at 19:00/20:00 only counts as
     a gap on a day that has shifts at all.
+19. **On a phone the four TV slots go 2×2, not 4×1.** The design keeps four
+    columns at 390px, which cuts every dish to two clipped lines ("Betty's
+    Bucket…", "Crispy Chicken…") — the one thing the slot needs to tell you.
+    Two columns fit the whole name.
+20. **The preview iframe is read-only and remounts after an edit.** It is
+    `pointer-events: none` and keyed on the reload counter, so moving a dish
+    re-renders the board rather than leaving a stale wall on screen. Nothing in
+    `/tv-display-*` is ever written to.
 
 ## Out of scope — do not touch
 

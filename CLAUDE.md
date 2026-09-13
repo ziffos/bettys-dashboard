@@ -17,42 +17,30 @@ NEXT_PUBLIC_DEMO=1 npm run dev      # Same app on synthetic data, logged in as a
 ./tools/shot.sh --stop              # Stop the demo-mode dev server
 ```
 
-No test framework is configured — there are no tests. `npm run lint` has ~25
-pre-existing errors (mostly `react-hooks/set-state-in-effect`); they are not a
-regression signal.
+No test framework is configured — there are no tests. `npm run lint` is clean
+for every dashboard screen; the handful of remaining problems are all in the
+out-of-scope files (`/qr-menu`, `src/components/tv/`, the design export) plus one
+pre-existing `exhaustive-deps` warning in `AuthContext`. A new error in
+`src/app/` or `src/components/ui/` is a regression.
 
-## Redesign in progress
+## The redesign
 
-The dashboard is being rebuilt screen by screen against a light Geist design.
-**Read `design/DESIGN.md` before touching any UI** — it has the palette, type
-scale, component patterns and the list of places where we deliberately differ
-from the design. Rendered reference images live in `design/reference/`.
+Every screen has been rebuilt against the light Geist design. **Read
+`design/DESIGN.md` before touching any UI** — it has the palette, type scale,
+component patterns and, at the end, the numbered list of places where the built
+app deliberately differs from the design and why. Rendered reference images of
+the design live in `design/reference/`, named to match the screenshots
+`./tools/shot.sh` writes.
 
-Until a screen appears as done below, it is still the old dark UI, and the old
-conventions in "Legacy UI" still apply to it.
-
-| Screen | Route | Status |
-|---|---|---|
-| Shell (rail, header, mobile nav, theme) + Login | — | **done** |
-| Overview | `/` | **done** |
-| Sales | `/sales` | **done** |
-| Marketing | `/marketing` | **done** |
-| Products | `/products` | **done** |
-| Reviews | `/reviews` | **done** |
-| Menu | `/menu` | **done** |
-| Platform Payouts | `/platform-payouts` | **done** |
-| Calendar | `/calendar` | **done** |
-| Payroll | `/payroll` | **done** |
-| My Payroll | `/my-payroll` | **done** |
-| Settings | `/settings` | **done** |
-| TV Displays | `/tv-displays` | todo |
-
-Update this table at the end of every screen, so an interrupted rebuild can be
-picked up without guessing from the git log.
+Screens, in rail order: `/` Overview, `/sales`, `/marketing`, `/products`,
+`/reviews`, `/menu`, `/platform-payouts`, `/calendar`, `/payroll`,
+`/my-payroll`, `/tv-displays`, `/settings`, plus `/login` and the shell.
 
 **Out of scope, do not modify:** `/qr-menu`, `/tv-display-1..4`,
 `/tv-display-menu-*`, `/tv-display-motion-*`, `src/components/tv/`. These render
-on the four physical screens in the shop.
+on the four physical screens in the shop. `/tv-displays` embeds
+`/tv-display-1..4` in a read-only iframe to preview them — it never changes
+them; it only moves dishes between `menu_items.tv_number` / `position`.
 
 ## Verifying UI changes
 
@@ -152,21 +140,14 @@ not set `job_title` — it is filled in afterwards from the Settings panel.
   localStorage under `bettys-rail-pinned`.
 - `RangeContext` holds the one date range the header owns. It is relative to
   **today**, and carries the equal-length previous period for comparisons.
-  Migrated screens read it with `useRange()` instead of owning a picker.
+  Screens read it with `useRange()` instead of owning a picker.
 - `CommandPalette` is ⌘K: pages, dishes, people, and orders matched on their
   reference or item string.
 - Design tokens are Tailwind v4 `@theme` variables in `globals.css`, so a screen
   writes `text-subtle` / `border-line` / `font-mono`, not raw hex.
 
-## Legacy UI (screens not yet migrated)
+## Conventions
 
-`ClientLayout` keeps a `MIGRATED` set. A route not in it renders inside
-`.legacy-surface`, which restores the dark backdrop the page was written
-against — otherwise its white headings would sit on the new light canvas and
-vanish. **Add the route to `MIGRATED` in the same commit that rebuilds it.**
-When the last screen lands, delete both the set and the CSS class.
-
-- Dark theme: `neutral-950` background, emerald accents
 - Recharts for charts, Lucide React for icons
 - Path alias: `@/*` → `./src/*`
 - Mobile breakpoint at `md` (768px)

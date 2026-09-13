@@ -86,17 +86,6 @@
   }
 }
 
-/* Scaffolding for the rebuild: a not-yet-rebuilt page keeps the dark backdrop
-   it was written against, so the shell can go light before every screen has.
-   Deleted along with MIGRATED in ClientLayout once the last screen lands. */
-.legacy-surface {
-  background: #0a0a0a;
-  color: #e5e5e5;
-  border-radius: 12px;
-  padding: 16px;
-  min-height: 100%;
-}
-
 @layer utilities {
   /* The skeleton block used by every loading state. */
   .shimmer {

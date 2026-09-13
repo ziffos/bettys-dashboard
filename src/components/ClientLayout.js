@@ -16,18 +16,6 @@ function isBare(pathname) {
   );
 }
 
-/**
- * Routes already rebuilt against design/DESIGN.md.
- *
- * Everything else still assumes the old dark body — white headings sitting
- * straight on the page background, which on the new canvas are white on white.
- * Until a page is rebuilt it gets its old backdrop back as a panel, so master
- * stays shippable screen by screen instead of only at the end. Add a route here
- * in the same commit that rebuilds it; when the list is complete, this whole
- * mechanism and the `legacy-surface` class go away.
- */
-const MIGRATED = new Set(["/", "/sales", "/marketing", "/products", "/reviews", "/menu", "/platform-payouts", "/calendar", "/payroll", "/my-payroll", "/settings"]);
-
 export default function ClientLayout({ children }) {
   const pathname = usePathname();
   const { loading, toast } = useAuth();
@@ -49,13 +37,7 @@ export default function ClientLayout({ children }) {
       {/* min-w-0 so a wide table inside a page cannot stretch the whole shell */}
       <div className="flex-1 min-w-0 flex flex-col">
         <AppHeader />
-        <main className="flex-1 px-3 md:px-6 pt-4 pb-6 md:py-6">
-          {MIGRATED.has(pathname) ? (
-            children
-          ) : (
-            <div className="legacy-surface">{children}</div>
-          )}
-        </main>
+        <main className="flex-1 px-3 md:px-6 pt-4 pb-6 md:py-6">{children}</main>
         <MobileNav />
       </div>
 
