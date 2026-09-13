@@ -40,7 +40,7 @@ conventions in "Legacy UI" still apply to it.
 | Products | `/products` | **done** |
 | Reviews | `/reviews` | **done** |
 | Menu | `/menu` | **done** |
-| Platform Payouts | `/platform-payouts` | todo |
+| Platform Payouts | `/platform-payouts` | **done** |
 | Calendar | `/calendar` | todo |
 | Payroll | `/payroll` | todo |
 | My Payroll | `/my-payroll` | todo |

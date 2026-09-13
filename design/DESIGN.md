@@ -273,7 +273,9 @@ Agreed with the owner before the rebuild started. Do not "fix" these back.
     `sort_order` drive the QR menu and the TV boards.
 15. **Payouts filters by statement, not by week.** Real periods are not week
     aligned: Bolt settles every 7 days, Wolt mostly every 5, Foody anywhere
-    from 1 to 9. Show each statement's real period.
+    from 1 to 9. The table follows the header range and shows each statement's
+    real period and length; the trend uses the last 12 statements per platform,
+    since a seven-day window cannot show one.
 16. **`customer_deductions` is a fourth fee segment**, alongside commission,
     ads and other.
 17. **The calendar axis fits the week** — earliest start to latest end — rather

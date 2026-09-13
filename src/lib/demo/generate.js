@@ -320,6 +320,11 @@ function build() {
     const commission = round2(gross * f.commission * between(0.97, 1.03));
     const ads = round2(gross * f.ads * between(0.6, 1.5));
     const other = round2(gross * f.other * between(0.8, 1.2));
+    // Refunds and promo discounts the platform charged back. Only about a
+    // quarter of real statements carry any, which is why they are occasional
+    // here too — but they are their own line on the statement, so Payouts
+    // shows them as their own band rather than folding them into "other".
+    const deductions = rnd() < 0.25 ? round2(gross * between(0.005, 0.03)) : 0;
     payoutN++;
     platform_payouts.push({
       id: `demo-payout-${payoutN}`,
@@ -330,9 +335,10 @@ function build() {
       commission_total: commission,
       ad_spend: ads,
       other_fees: other,
-      net_payout: round2(gross - commission - ads - other),
+      customer_deductions: deductions,
+      net_payout: round2(gross - commission - ads - other - deductions),
       invoice_number: `${platform.slice(0, 2).toUpperCase()}-${iso(from).replace(/-/g, "")}-${String(payoutN).padStart(4, "0")}`,
-      notes: null,
+      notes: deductions > 0 ? `Includes \u20ac${deductions.toFixed(2)} of refunds and promo discounts charged back.` : null,
     });
   }
   platform_payouts.sort((a, b) => (a.period_from < b.period_from ? 1 : -1));
