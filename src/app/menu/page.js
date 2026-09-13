@@ -163,18 +163,22 @@ export default function MenuPage() {
 
   const toggleActive = async (item) => {
     const next = !item.is_active;
+    // Hiding a dish that holds a TV slot takes it off the wall — the boards
+    // filter on is_active — so the slot has to be given up with it. Leaving it
+    // behind kept the row invisible everywhere while it still owned the slot,
+    // and the next dish dropped there hit the unique index with no explanation.
+    const wasOnScreen = !next && item.tv_number != null;
+    const patch = wasOnScreen
+      ? { is_active: next, tv_number: null, position: null }
+      : { is_active: next };
+
     // Move the switch immediately; put it back if the write is refused.
     setItems((list) =>
-      list.map((it) => (it.id === item.id ? { ...it, is_active: next } : it))
+      list.map((it) => (it.id === item.id ? { ...it, ...patch } : it))
     );
-    const { error } = await supabase
-      .from("menu_items")
-      .update({ is_active: next })
-      .eq("id", item.id);
+    const { error } = await supabase.from("menu_items").update(patch).eq("id", item.id);
     if (error) {
-      setItems((list) =>
-        list.map((it) => (it.id === item.id ? { ...it, is_active: !next } : it))
-      );
+      setItems((list) => list.map((it) => (it.id === item.id ? item : it)));
       setToast({ type: "error", message: "Could not change availability" });
       return;
     }
@@ -182,7 +186,9 @@ export default function MenuPage() {
       type: "ok",
       message: next
         ? `${item.canonical_name} is orderable again`
-        : `${item.canonical_name} is hidden from customers`,
+        : wasOnScreen
+          ? `${item.canonical_name} is hidden, and off TV ${item.tv_number}`
+          : `${item.canonical_name} is hidden from customers`,
     });
   };
 

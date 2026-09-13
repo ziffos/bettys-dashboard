@@ -99,10 +99,12 @@ export default function TvDisplaysPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // Hidden items are fetched too. One that still holds a slot has to be
+      // visible here — it is occupying a place on the wall that nothing else
+      // can take — even though it is not offered to the library.
       const { data, error } = await supabase
         .from("menu_items")
-        .select("id, canonical_name, category, pos_price, image_url, tv_number, position")
-        .eq("is_active", true)
+        .select("id, canonical_name, category, pos_price, image_url, tv_number, position, is_active")
         .order("canonical_name", { ascending: true });
       if (cancelled) return;
       if (error) {
@@ -223,7 +225,7 @@ export default function TvDisplaysPage() {
     return <LoadingState kpis={0} shape="list" line="LOADING 4 DISPLAYS" />;
   }
 
-  const library = items.filter((it) => it.tv_number == null);
+  const library = items.filter((it) => it.tv_number == null && it.is_active);
   const emptySlots = SLOT_DISPLAYS.flatMap((tv) =>
     Array.from({ length: SLOTS_PER_DISPLAY }, (_, i) => slotItem(tv, i + 1))
   ).filter((x) => !x).length;
@@ -335,6 +337,11 @@ export default function TvDisplaysPage() {
                             <div className="text-[12px] font-medium leading-[1.25] text-pretty line-clamp-2">
                               {item.canonical_name}
                             </div>
+                            {!item.is_active && (
+                              <div className="font-mono text-[10px] text-danger">
+                                HIDDEN · NOT ON THE WALL
+                              </div>
+                            )}
                             <div className="font-mono text-[11px] text-subtle mt-0.5 truncate">
                               {item.pos_price != null ? euro2(item.pos_price) : "—"} ·{" "}
                               {CATEGORY_SHORT[item.category] ?? item.category}

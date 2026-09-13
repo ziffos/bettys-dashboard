@@ -41,7 +41,7 @@ re-derive them.
 - [x] Surface it on `/platform-payouts` — a statement gap is money not received
 - [x] Give the owner the list (also in "Payout gaps" below)
 
-## 5 · Data audit against Supabase
+## 5 · Data audit against Supabase — **done**
 
 Per screen: compute the headline numbers independently in SQL, compare with what
 the page renders, and write down every disagreement. Tick a screen only after
@@ -56,7 +56,7 @@ looking at it in a screenshot with real data, not demo data.
 - [x] Calendar — 53 shifts, Feb–Mar only. Check the empty months read as empty
 - [x] Payroll / My Payroll — 2 records, Feb 2026. Same
 - [x] Settings — 3 profiles, permissions matrix
-- [ ] TV Displays — slots vs `menu_items.tv_number` / `position`
+- [x] TV Displays — slots vs `menu_items.tv_number` / `position`
 
 ## 6 · Charts across every filter, both widths
 
@@ -461,3 +461,27 @@ Checked with `tools/sql.sh`.
   Maria Test has none; no grant points at a profile that does not exist.
 - **Someone with no rate reads "—" here too**, matching what Payroll now shows,
   and Payroll's banner points at this screen to fix it.
+
+### TV Displays (task 5)
+
+Checked with `tools/sql.sh`.
+
+- **The slot data is clean and the database enforces every rule the screen
+  assumes.** All twelve slots filled, nothing half-assigned, nothing inactive on
+  a screen, every `tv_number` 1–3 and every `position` 1–4, 28 items off-screen.
+  The constraints: `menu_items_tv_slot_unique` (partial unique on
+  `(tv_number, position)`), `menu_items_tv_slot_paired` (both set or both null),
+  and range checks matching `SLOT_DISPLAYS` and `SLOTS_PER_DISPLAY`. So the
+  three-step swap in `placeAt` is **required**, not defensive.
+- **Hiding a dish took it off the wall but left it holding the slot.** The
+  boards filter on `is_active`, so a hidden dish stops rendering and the wall
+  shows a gap — while its row still owned `(tv_number, position)`. TV Displays
+  filtered on `is_active` too, so the slot looked empty in the editor, and
+  dropping anything into it would have hit the unique index with nothing to
+  explain why. Hiding a dish now clears its slot in the same write and the toast
+  says so ("… is hidden, and off TV 1"), and the editor fetches hidden items as
+  well so an occupant left over from before is visible and clearable, marked
+  HIDDEN · NOT ON THE WALL. The library still only offers active dishes.
+- Verified end to end in one page load: hide `Betty's Classic` on Menu → toast
+  reads "hidden, and off TV 1" → slot 1 of display 1 reads **Empty slot** →
+  library holds 25, the hidden dish correctly not among them.
