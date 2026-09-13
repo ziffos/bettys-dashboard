@@ -241,20 +241,24 @@ function build() {
     return "wolt";
   };
 
-  const buildBasket = (priceKey) => {
+  // An order line carries the platform's own spelling, not ours.
+  const nameFor = (item, platform) => item[`${platform}_name`] ?? item.canonical_name;
+
+  const buildBasket = (platform) => {
+    const priceKey = `${platform}_price`;
     const lines = [];
     let total = 0;
     const mains = intBetween(1, 2);
     for (let i = 0; i < mains; i++) {
       const item = pick(weighted);
       const qty = rnd() < 0.85 ? 1 : 2;
-      lines.push(`${qty} ${item.canonical_name}`);
+      lines.push(`${qty} ${nameFor(item, platform)}`);
       total += (item[priceKey] ?? item.pos_price) * qty;
     }
     if (rnd() < 0.45) {
       const dip = pick(dips);
       const qty = intBetween(1, 2);
-      lines.push(`${qty} ${dip.canonical_name}`);
+      lines.push(`${qty} ${nameFor(dip, platform)}`);
       total += (dip[priceKey] ?? dip.pos_price) * qty;
     }
     if (rnd() < 0.3) {
@@ -266,7 +270,7 @@ function build() {
       lines.push(
         rnd() < 0.04
           ? `1 Chilled ${drink.canonical_name} Regular Can, 330 ml`
-          : `1 ${drink.canonical_name}`
+          : `1 ${nameFor(drink, platform)}`
       );
       total += drink[priceKey] ?? drink.pos_price;
     }
@@ -282,7 +286,7 @@ function build() {
 
     const posCount = Math.round(between(18, 26) * f);
     for (let n = 0; n < posCount; n++) {
-      const { items, price } = buildBasket("pos_price");
+      const { items, price } = buildBasket("pos");
       pos_sales.push({
         id: `demo-pos-${pos_sales.length + 1}`,
         order_placed: stamp(d, randomHour()),
@@ -294,7 +298,7 @@ function build() {
     const delCount = Math.round(between(26, 38) * f);
     for (let n = 0; n < delCount; n++) {
       const partner = pickPlatform();
-      const { items, price } = buildBasket(`${partner}_price`);
+      const { items, price } = buildBasket(partner);
       // ~4% fall over, so the Rejected/Cancelled KPI has something real.
       // Production carries five statuses, not three — "failed" and "courier
       // near pick up" are rare enough that the dashboard dropped them silently

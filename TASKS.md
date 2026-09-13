@@ -51,7 +51,7 @@ looking at it in a screenshot with real data, not demo data.
 - [x] Sales — gross/orders/avg/per-day/lost, platform table, fee rates, heatmap
 - [x] Products — units, revenue, per-platform split, price flags
 - [x] Reviews — counts, average, distribution, per-platform
-- [ ] Menu — prices vs `menu_item_price_history`, alias coverage
+- [x] Menu — prices vs `menu_item_price_history`, alias coverage
 - [ ] Platform Payouts — statement totals vs computed sales for the same period
 - [ ] Calendar — 53 shifts, Feb–Mar only. Check the empty months read as empty
 - [ ] Payroll / My Payroll — 2 records, Feb 2026. Same
@@ -326,3 +326,33 @@ Reconciled with `tools/audit-reviews.mjs` and `tools/sql.sh`.
   decide the platform (so the reference always resolves and the platforms always
   agree), never sets a name, writes text on 16%, and stalls Foody's feed partway
   through — so the screen looks like what the owner will actually see.
+
+### Menu (task 5)
+
+Reconciled with `tools/sql.sh`.
+
+- **Prices agree.** For all 38 items × 4 platforms the newest
+  `menu_item_price_history` row equals the matching `menu_items.*_price`
+  column — zero disagreements — so what Menu shows is what Products values
+  orders at. 150 history rows, 149 still open; the single closed one is
+  Halloumi Burger's POS price moving off €9.50 on 31 March.
+- **A dish priced on a platform with no name for it can never be counted
+  there.** Its orders end up in Products' "could not be matched" banner and the
+  dish itself looks like it sells nothing. Menu now names them: **Halloumi
+  Burger has no till name**, **Sweet Potatoes has none of the four** despite
+  being priced on all of them, and **Vegetable Burger has no till name**. A
+  dish with no *price* on a platform is simply not sold there and wants no
+  name, so it is not flagged.
+- **The price flag is right and catches one real thing.** Halloumi Burger is
+  €8.00 on Foody and €8.00 in store — Foody's ~48% cut comes straight out of
+  the margin.
+- **Vegetable Burger is a ghost.** Active, priced in store only, no aliases, and
+  it appears in no order ever placed (checked on Products). Worth deactivating.
+- **Demo never exercised the name matcher.** It gave all four alias columns the
+  identical canonical name, so `buildMenuMatcher` had nothing to do and the
+  Overview bug — counting raw spellings — could not have shown up in a
+  screenshot. Demo now writes what the platforms really write: the till in
+  capitals, Foody lower-case with a backtick, Wolt and Bolt as-is, and Halloumi
+  Burger with no till name at all. Verified after the change that Products still
+  matches everything except the deliberate long drink names, and Overview's top
+  dishes still resolve to canonical names.

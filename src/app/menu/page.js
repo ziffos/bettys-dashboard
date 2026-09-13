@@ -10,6 +10,7 @@ import {
   FIELD_LABEL,
   LoadingState,
   PageHeader,
+  PLATFORM,
   Segmented,
   SidePanel,
   Toast,
@@ -124,6 +125,22 @@ export default function MenuPage() {
 
     const flagged = sorted.filter(isFlagged);
 
+    // A dish priced on a platform but with no name for it can never be matched
+    // to an order there — its sales land in Products' "could not be matched"
+    // banner instead of on its own row. A dish with no price on a platform is
+    // simply not sold there, and wants no name.
+    const CHANNELS = [
+      { label: "POS", price: "pos_price", alias: "pos_name" },
+      ...DELIVERY.map((d) => ({ label: PLATFORM[d.id].name, price: d.price, alias: d.alias })),
+    ];
+    const unnamed = sorted
+      .filter((it) => it.is_active)
+      .map((it) => ({
+        item: it,
+        channels: CHANNELS.filter((c) => it[c.price] != null && !it[c.alias]).map((c) => c.label),
+      }))
+      .filter((u) => u.channels.length > 0);
+
     const q = query.trim().toLowerCase();
     const visible = sorted
       .filter((it) => category === "All" || it.category === category)
@@ -139,7 +156,7 @@ export default function MenuPage() {
       })).filter((c) => c.count > 0),
     ];
 
-    return { sorted, visible, flagged, isFlagged, chips, total: sorted.length };
+    return { sorted, visible, flagged, unnamed, isFlagged, chips, total: sorted.length };
   }, [items, category, query, flaggedOnly]);
 
   // ── Writes ───────────────────────────────────────────────────────────────
@@ -345,6 +362,29 @@ export default function MenuPage() {
   return (
     <div className="flex flex-col gap-4 md:gap-5">
       {header}
+
+      {model.unnamed.length > 0 && (
+        <div className="flex items-start gap-2.5 px-4 py-3 border border-line rounded-[10px] bg-wash-light">
+          <CircleAlert size={15} strokeWidth={2} className="text-warn-ink shrink-0 mt-px" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] text-pretty">
+              {model.unnamed.length} item{model.unnamed.length > 1 ? "s are" : " is"} priced
+              on a platform but has no name there, so orders for{" "}
+              {model.unnamed.length > 1 ? "them" : "it"} cannot be matched and{" "}
+              {model.unnamed.length > 1 ? "they look" : "it looks"} like{" "}
+              {model.unnamed.length > 1 ? "they sell" : "it sells"} nothing. Fill the name in
+              under Advanced.
+            </p>
+            <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
+              {model.unnamed.map((u) => (
+                <span key={u.item.id} className="font-mono text-[11px] text-subtle">
+                  {u.item.canonical_name} · no {u.channels.join(", ")} name
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {model.flagged.length > 0 && !flaggedOnly && (
         <div className="flex items-center gap-2.5 px-4 py-3 border border-line rounded-[10px] bg-wash-light flex-wrap">

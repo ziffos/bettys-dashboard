@@ -56,9 +56,16 @@ export const MENU_ITEMS = raw.map(
     category,
     description,
     // The alias columns /products matches incoming order lines against.
-    pos_name: name,
+    //
+    // In production the three platforms genuinely disagree: Wolt keeps the
+    // name as written, Foody lower-cases it and swaps the apostrophe for a
+    // backtick, the till shouts it in capitals. Demo used to give all four the
+    // identical canonical name, which meant it never exercised the matcher at
+    // all. And Halloumi Burger really has no till name, which is what the
+    // Menu screen's "priced but unnamed" warning is for.
+    pos_name: name === "Halloumi Burger" ? null : name.toUpperCase(),
     wolt_name: name,
-    foody_name: name,
+    foody_name: name.toLowerCase().replace(/'/g, "`"),
     bolt_name: name,
     wolt_price: deliveryPrice,
     foody_price: deliveryPrice,
