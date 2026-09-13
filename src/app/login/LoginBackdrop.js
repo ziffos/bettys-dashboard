@@ -171,16 +171,16 @@ export default function LoginBackdrop() {
                   d={s.d}
                   pathLength="1"
                   fill="none"
-                  stroke="rgba(23,23,23,.22)"
+                  stroke="rgba(23,23,23,.14)"
                   strokeWidth="5"
                   strokeLinecap="round"
-                  style={{ strokeDasharray: s.dash, animation: s.anim, filter: "blur(4px)", opacity: 0.6 }}
+                  style={{ strokeDasharray: s.dash, animation: s.anim, filter: "blur(4px)", opacity: 0.45 }}
                 />
                 <path
                   d={s.d}
                   pathLength="1"
                   fill="none"
-                  stroke="rgba(23,23,23,.22)"
+                  stroke="rgba(23,23,23,.14)"
                   strokeWidth="1.25"
                   strokeLinecap="round"
                   style={{ strokeDasharray: s.dash, animation: s.anim }}
