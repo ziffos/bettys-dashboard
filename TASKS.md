@@ -49,7 +49,7 @@ looking at it in a screenshot with real data, not demo data.
 
 - [x] Overview — KPIs, per-day bars, top dishes, day drawer
 - [x] Sales — gross/orders/avg/per-day/lost, platform table, fee rates, heatmap
-- [ ] Products — units, revenue, per-platform split, price flags
+- [x] Products — units, revenue, per-platform split, price flags
 - [ ] Reviews — counts, average, distribution, per-platform
 - [ ] Menu — prices vs `menu_item_price_history`, alias coverage
 - [ ] Platform Payouts — statement totals vs computed sales for the same period
@@ -268,3 +268,35 @@ Reconciled with `tools/audit-sales.mjs` and `tools/sql.sh`.
   from the per-day average.
 - **The heatmap axis now reads 11:00 → 22:00**, twelve columns, twelve dead
   hours dropped, Sunday row empty. Peak Fri 20:00.
+
+### Products (task 5)
+
+Reconciled with `tools/audit-products.mjs` and `tools/sql.sh`.
+
+- **Order lines that matched no menu item were dropped without a trace.** 8
+  lines, 9 units, 0.8% of the 28-day window — small, but it is exactly how a
+  missing alias becomes a dish that looks like it never sold. They now appear in
+  a banner naming the platform, the exact spelling and the count, with the fix
+  (add it to that dish's platform name in Menu).
+- **`parseItems` broke any item name containing a comma.** Wolt sells a "Chilled
+  Coca Cola Regular Can, 330 ml"; splitting on commas stranded the size, the
+  unit guard dropped it, and the name was truncated — which cost the line its
+  match. Six of the nine dropped units were this. The stranded token is
+  reattached now. SQL counts 5 such tokens in the window, 1,048 item lines and
+  1,241 units in total, which the parser agrees with exactly.
+- **The Coke still will not match, and that is the owner's data.** The Wolt
+  alias is `Coca-Cola`; Wolt writes `Chilled Coca Cola Regular Can, 330 ml`.
+  Also unmatched: `Coca Cola Zero Can 330ml` (Wolt), `Chicken` (Bolt),
+  `MAYONNAISE` (POS). The banner now says so.
+- **Item revenue is a reconstruction and runs above what was charged.** It is
+  priced from `menu_item_price_history`, not from the order, because no per-line
+  price exists anywhere. Over the 28-day window that is €9,267.70 against
+  €8,881.00 actually taken — **4.4% high**, which is discounts and promotions
+  the price list does not know about. The KPI already reads "at menu price,
+  before fees", which is the honest label.
+- **Three active items carry no aliases at all** — Vegetable Burger, Vegetable
+  Burger Combo, Sweet Potatoes — and Halloumi Burger has no `pos_name`. Not a
+  false zero in any case: `Sweet Potatoes` appears in 19 orders spelled exactly
+  as its canonical name and matches on the fallback, POS writes Halloumi Burger
+  normalisably, and the two Vegetable Burger rows appear in no order ever
+  placed. They really do sell nothing.

@@ -265,7 +265,15 @@ function build() {
     }
     if (rnd() < 0.3) {
       const drink = pick(drinks);
-      lines.push(`1 ${drink.canonical_name}`);
+      // Now and then a platform writes a drink under a name the menu has never
+      // heard of, comma and all — Wolt really does sell a "Chilled Coca Cola
+      // Regular Can, 330 ml". Production runs about 1% of lines like this, and
+      // they used to vanish from Products without trace, so demo carries a few.
+      lines.push(
+        rnd() < 0.04
+          ? `1 Chilled ${drink.canonical_name} Regular Can, 330 ml`
+          : `1 ${drink.canonical_name}`
+      );
       total += drink[priceKey] ?? drink.pos_price;
     }
     return { items: lines.join(", "), price: round2(total) };

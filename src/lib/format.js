@@ -118,6 +118,8 @@ export function niceScale(maxValue, steps = 4) {
  * fragments like "330 ml" survive the split as their own token and have to be
  * dropped, or the top dishes list fills up with measurements.
  */
+const UNIT_ONLY = /^(ml|g|kg|cl|l|oz|pcs)$/i;
+
 export function parseItems(itemsString) {
   if (!itemsString) return [];
   const out = [];
@@ -125,7 +127,14 @@ export function parseItems(itemsString) {
     const match = token.trim().match(/^(\d+)\s+(.+)$/);
     if (!match) continue;
     const name = match[2].trim();
-    if (/^(ml|g|kg|cl|l|oz|pcs)$/i.test(name)) continue;
+    // Some names contain a comma of their own — Wolt sells a "Chilled Coca Cola
+    // Regular Can, 330 ml" — so splitting on commas strands the size. Give it
+    // back to the item it came from instead of dropping it, which used to
+    // truncate the name and cost the line its match against the menu.
+    if (UNIT_ONLY.test(name)) {
+      if (out.length > 0) out[out.length - 1].name += `, ${match[1]} ${name}`;
+      continue;
+    }
     out.push({ qty: parseInt(match[1], 10), name });
   }
   return out;

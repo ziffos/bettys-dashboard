@@ -152,6 +152,8 @@ export default function ProductsPage() {
       return stats.get(item.canonical_name);
     };
 
+    const unmatched = new Map();
+
     // Orders, so items-per-order and attach rate have a denominator.
     let ordersNow = 0;
     let ordersBefore = 0;
@@ -173,7 +175,19 @@ export default function ProductsPage() {
 
         for (const { qty, name } of parseItems(row.items)) {
           const item = match(platform, name);
-          if (!item) continue;
+          if (!item) {
+            // No menu item answers to this name on this platform, so there is
+            // no row to put it in — but dropping it silently is how a missing
+            // alias turns into a dish that looks like it never sold. Keep it
+            // and show it.
+            if (inNow) {
+              const key = `${platform}\u0000${name}`;
+              const seen = unmatched.get(key);
+              if (seen) seen.qty += qty;
+              else unmatched.set(key, { platform, name, qty });
+            }
+            continue;
+          }
           const row2 = touch(item);
           const value = qty * priceOn(item, platform, day);
           if (inNow) {
@@ -203,6 +217,9 @@ export default function ProductsPage() {
     for (const item of raw.menuItems) {
       if (item.is_active) touch(item);
     }
+
+    const unmatchedRows = [...unmatched.values()].sort((a, b) => b.qty - a.qty);
+    const unmatchedUnits = unmatchedRows.reduce((a, r) => a + r.qty, 0);
 
     const allRows = [...stats.values()].map((r) => ({
       ...r,
@@ -287,6 +304,8 @@ export default function ProductsPage() {
       maxRevenue,
       chips,
       activeCount,
+      unmatchedRows,
+      unmatchedUnits,
       matchedNone: itemsSold === 0 && ordersNow > 0,
       isEmpty: ordersNow === 0,
     };
@@ -385,6 +404,32 @@ export default function ProductsPage() {
             </Link>{" "}
             are missing or out of date for this channel.
           </p>
+        </div>
+      )}
+
+      {model.unmatchedUnits > 0 && (
+        <div className="flex items-start gap-2.5 px-4 py-3 border border-line rounded-[10px] bg-wash-light">
+          <CircleAlert size={15} strokeWidth={2} className="text-warn-ink shrink-0 mt-px" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] text-pretty">
+              {model.unmatchedUnits} item{model.unmatchedUnits === 1 ? "" : "s"} sold under
+              a name no menu entry answers to, so {model.unmatchedUnits === 1 ? "it is" : "they are"}{" "}
+              missing from every figure here. Add the spelling to that dish&rsquo;s platform
+              name in Menu and {model.unmatchedUnits === 1 ? "it" : "they"} will come back.
+            </p>
+            <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
+              {model.unmatchedRows.slice(0, 6).map((u) => (
+                <span key={`${u.platform}-${u.name}`} className="font-mono text-[11px] text-subtle">
+                  {u.qty}× {PLATFORM[u.platform]?.name ?? u.platform} · {u.name}
+                </span>
+              ))}
+              {model.unmatchedRows.length > 6 && (
+                <span className="font-mono text-[11px] text-faint">
+                  +{model.unmatchedRows.length - 6} more
+                </span>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
