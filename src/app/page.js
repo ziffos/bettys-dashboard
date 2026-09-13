@@ -37,6 +37,7 @@ import {
   bucketLabel,
 } from "../lib/format";
 import { SOURCE_IDS, buildSalesModel, dayOf } from "../lib/salesModel";
+import { buildMenuMatcher } from "../lib/menuMatch";
 
 const INTERVALS = [
   { id: "daily", label: "Daily" },
@@ -63,7 +64,7 @@ export default function OverviewPage() {
       const windowFrom = range.previous.from;
       const until = `${range.to}T23:59:59.999`;
       try {
-        const [deliveries, pos, payouts, social, reviews] = await Promise.all([
+        const [deliveries, pos, payouts, menuItems, social, reviews] = await Promise.all([
           fetchAllRows(
             supabase,
             "delivery_purchases",
@@ -86,6 +87,7 @@ export default function OverviewPage() {
               { op: "lte", col: "period_from", val: range.to },
             ]
           ),
+          fetchAllRows(supabase, "menu_items", "canonical_name, wolt_name, foody_name, bolt_name, pos_name", []),
           fetchAllRows(supabase, "social_stats", "stat_date, platform, total_reach", [
             { op: "gte", col: "stat_date", val: range.from },
             { op: "lte", col: "stat_date", val: range.to },
@@ -103,7 +105,7 @@ export default function OverviewPage() {
         if (cancelled) return;
         setStore({
           key: rangeKey,
-          raw: { deliveries, pos, payouts, social, reviews },
+          raw: { deliveries, pos, payouts, menuItems, social, reviews },
           failure: null,
         });
       } catch (err) {
@@ -176,19 +178,32 @@ export default function OverviewPage() {
       .sort((a, b) => b.feeRate - a.feeRate)[0];
 
     // Top dishes, against the same span before.
+    //
+    // Counted by canonical name rather than by whatever each platform typed.
+    // The three of them genuinely disagree — Wolt writes "Betty's Classic",
+    // Foody writes it with a backtick, the till shouts it in capitals — so
+    // counting raw strings splits one dish into three and ranks fragments.
+    // An unmatched line keeps its raw name rather than disappearing.
+    const match = buildMenuMatcher(raw.menuItems);
     const countDishes = (from, to) => {
       const counts = {};
       const within = (ts) => {
         const day = dayOf(ts);
         return day >= from && day <= to;
       };
+      const add = (platform, items) => {
+        for (const { qty, name } of parseItems(items)) {
+          const key = match(platform, name)?.canonical_name ?? name;
+          counts[key] = (counts[key] || 0) + qty;
+        }
+      };
       for (const d of s.sold) {
         if (!within(d.order_placed)) continue;
-        for (const { qty, name } of parseItems(d.items)) counts[name] = (counts[name] || 0) + qty;
+        add((d.delivery_partner || "").toLowerCase(), d.items);
       }
       for (const p of raw.pos) {
         if (!within(p.order_placed)) continue;
-        for (const { qty, name } of parseItems(p.items)) counts[name] = (counts[name] || 0) + qty;
+        add("pos", p.items);
       }
       return counts;
     };

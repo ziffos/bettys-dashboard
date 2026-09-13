@@ -47,7 +47,7 @@ Per screen: compute the headline numbers independently in SQL, compare with what
 the page renders, and write down every disagreement. Tick a screen only after
 looking at it in a screenshot with real data, not demo data.
 
-- [ ] Overview — KPIs, per-day bars, top dishes, day drawer
+- [x] Overview — KPIs, per-day bars, top dishes, day drawer
 - [ ] Sales — gross/orders/avg/per-day/lost, platform table, fee rates, heatmap
 - [ ] Products — units, revenue, per-platform split, price flags
 - [ ] Reviews — counts, average, distribution, per-platform
@@ -206,3 +206,41 @@ off here with a reason.
 - **Two-step fetch keeps it cheap.** Coverage alone tells you where the gaps
   are, so the order query starts at the first uncovered day instead of pulling
   all 3,695 deliveries. It shrinks as statements arrive.
+
+### Overview (task 5)
+
+Reconciled with `tools/audit-overview.mjs`, which runs the real model over live
+rows, plus `tools/sql.sh` for the independent numbers.
+
+- **Top dishes ranked spellings, not dishes.** It counted the raw `items`
+  string, and the three platforms disagree: `Hungry Hero` / `HUNGRY HERO`,
+  `Betty's Classic` / `BETTY'S CLASSIC` / `Betty\`s Classic`. Over the last 7
+  days that split 324 units across **76** "dishes" instead of 35, and pushed
+  **Betty's Classic — 24 units, joint fourth — out of the top five entirely**.
+  Fixed by routing every line through `buildMenuMatcher`, the same matcher
+  Products already used; an unmatched line keeps its raw name rather than
+  vanishing (3 units of 324 in that window). SQL agrees with the corrected list
+  exactly: Hungry Hero 36, Wicked Wings 29, Crispy Chicken 25, Betty's Classic
+  24, Double Delight 24.
+- **Verified sound:** gross, orders and average order match SQL for all five
+  ranges; the per-day bars sum to the headline for every range; the channel
+  rates sum back to the headline fee; each statement's fees spread across its
+  days to the cent (worst drift 0.000000) and a day's fee never exceeds that
+  day's revenue.
+- **Our order log and the platforms' reported gross disagree systematically**,
+  and by platform: our delivered revenue averages **94.9%** of Wolt's reported
+  gross, **94.9%** of Bolt's — rejected orders account for nearly all of that —
+  but **121.3%** of Foody's, every statement, min 113% max 133%. So any rate of
+  the form *statement fees ÷ our revenue* is overstated for Wolt and Bolt and
+  understated for Foody. Overview's FEE RATE and the Payouts variance check both
+  rest on it. → carry into the Platform Payouts row.
+- **The 2% variance flag fires on 79 of 118 statements (67%).** A warning that
+  is on two thirds of the time is not a warning. It is measuring the
+  definitional gap above, not a data error. → fix on the Platform Payouts row,
+  by flagging drift from that platform's own normal rather than from zero.
+- **A 67% fee week is real, not a bug.** Wolt 6–10 Sep took €181.47 of customer
+  deductions on €646.85 of gross. The model is right to show it.
+- **Some Wolt item names contain a comma** — "Chilled Coca Cola Regular Can,
+  330 ml" — so the comma split breaks them in two. `parseItems`' unit guard
+  drops the orphan "330 ml", so the drink still counts, just under a name
+  without its size. 32 lines in all of history; left alone.
