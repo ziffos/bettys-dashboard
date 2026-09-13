@@ -307,7 +307,12 @@ export default function ProductsPage() {
       activeCount,
       unmatchedRows,
       unmatchedUnits,
-      matchedNone: itemsSold === 0 && ordersNow > 0,
+      // A matching failure is "orders came in and not one line found a menu
+      // item" — which is about the aliases, not about the filters. Judged on
+      // every row rather than the visible ones, or switching all the category
+      // chips off would send you to Menu to fix something that is not broken.
+      matchedNone: ordersNow > 0 && allRows.every((r) => r.qty === 0),
+      noCategories: CATEGORIES.every((c) => offCats[c.name]),
       isEmpty: ordersNow === 0,
     };
   }, [raw, range.from, range.to, range.previous.from, range.previous.to, offCats, channel, query, sortKey, sortDir]);
@@ -477,6 +482,13 @@ export default function ProductsPage() {
           <p className="mt-[3px] mb-3.5 text-[12px] text-subtle">
             Share of item revenue by category
           </p>
+          {model.catRows.length === 0 && (
+            <p className="text-[13px] text-muted text-pretty">
+              {model.noCategories
+                ? "Every category is switched off, so there is nothing to divide up."
+                : "Nothing sold in this range."}
+            </p>
+          )}
           <div className="flex h-2 rounded-full overflow-hidden gap-0.5">
             {model.catRows.map((c) => (
               <div key={c.name} style={{ width: `${c.share}%`, background: c.color }} />

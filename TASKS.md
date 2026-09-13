@@ -68,7 +68,7 @@ sentence, and a filter combination that produces `NaN` or an infinite axis.
 
 - [x] Overview
 - [x] Sales
-- [ ] Products
+- [x] Products
 - [ ] Reviews
 - [ ] Platform Payouts
 - [ ] Calendar
@@ -509,3 +509,12 @@ in `.shots/sweep/`.
   a closed month — but said nothing, so four greyed chips sat above a full
   chart with no way to tell the two states apart. It now says "No source
   selected — showing all four" beside them.
+- **Products — 42 combinations, clean.** The sweep steps a radio-style channel
+  picker option by option now, rather than treating it as toggle chips.
+- **Switching every category off blamed the menu aliases.** `matchedNone` was
+  "nothing visible sold anything", so an empty category filter raised "none of
+  their lines matched a menu item — the per-platform names on Menu are missing
+  or out of date", sending you to fix something that was not broken. It is now
+  judged on every row rather than the visible ones, which is what a matching
+  failure actually means, and the category card says "Every category is switched
+  off, so there is nothing to divide up" instead of rendering as a titled blank.

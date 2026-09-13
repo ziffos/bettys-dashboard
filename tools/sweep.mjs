@@ -11,6 +11,9 @@ import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
 
 const route = process.argv[2] || "/";
+// Which toggle group to exercise, if the screen has one. Products has category
+// chips as well as a channel picker, so the caller says which.
+const chipPattern = new RegExp(process.argv[3] || "^(Wolt|Foody|Bolt|POS)");
 const BASE = "http://127.0.0.1:3007";
 const OUT = ".shots/sweep";
 mkdirSync(OUT, { recursive: true });
@@ -78,15 +81,28 @@ for (const [label, width, height] of [["desktop", 1440, 1000], ["phone", 390, 84
         await p.waitForTimeout(900);
       }
 
-      // Source chips, when the screen has them: all on, one on, none on. The
-      // last is the one worth checking — a chart with every series switched off
-      // still has to draw something honest.
-      const chipBar = p.locator("main button").filter({ hasText: /^(Wolt|Foody|Bolt|POS)/ });
-      const chipCount = await chipBar.count();
-      const chipStates = chipCount ? ["all", "one", "none"] : ["all"];
+      // A radio-style channel picker (Products) is stepped option by option;
+      // toggle chips (Sales) are exercised all on, one on, and none on — the
+      // last being the one worth checking, since a chart with every series
+      // switched off still has to draw something honest.
+      const radio = p.locator("main button").filter({ hasText: /^All$/ }).first();
+      const isRadio = (await radio.count()) > 0;
+      const chipBar = p.locator("main button").filter({ hasText: chipPattern });
+      const chipCount = isRadio ? 0 : await chipBar.count();
+      const chipStates = isRadio
+        ? ["All", "Wolt", "Foody", "Bolt", "POS"]
+        : chipCount
+          ? ["all", "one", "none"]
+          : ["all"];
 
       for (const chips of chipStates) {
-        if (chipCount) {
+        if (isRadio) {
+          const opt = p.locator("main button").filter({ hasText: new RegExp(`^${chips}$`) }).first();
+          if (await opt.count()) {
+            await opt.click();
+            await p.waitForTimeout(900);
+          }
+        } else if (chipCount) {
           // reset to all on
           for (let i = 0; i < chipCount; i++) {
             const pressed = await chipBar.nth(i).evaluate((el) => !el.className.includes("text-subtle"));
@@ -104,7 +120,7 @@ for (const [label, width, height] of [["desktop", 1440, 1000], ["phone", 390, 84
       errs.length = 0;
       const problems = await p.evaluate(audit);
       checks++;
-      const tag = `${route.replace(/\//g, "") || "overview"}-${label}-${range.replace(/ /g, "")}${interval ? "-" + interval : ""}${chipCount ? "-" + chips : ""}`;
+      const tag = `${route.replace(/\//g, "") || "overview"}-${label}-${range.replace(/ /g, "")}${interval ? "-" + interval : ""}${isRadio || chipCount ? "-" + chips : ""}`;
       if (problems.length || errs.length) {
         found.push({ tag, problems, errs: [...new Set(errs)].slice(0, 2) });
         await p.screenshot({ path: `${OUT}/${tag}.png`, fullPage: true });
@@ -115,7 +131,7 @@ for (const [label, width, height] of [["desktop", 1440, 1000], ["phone", 390, 84
   await p.close();
 }
 
-console.log(`${route}: ${checks} combinations checked`);
+console.log(`${route} [${chipPattern.source}]: ${checks} combinations checked`);
 if (found.length === 0) console.log("clean");
 for (const f of found) console.log(`  ${f.tag}\n    ${[...f.problems, ...f.errs].join("\n    ")}`);
 await b.close();
