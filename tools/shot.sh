@@ -30,16 +30,22 @@ mkdir -p "$OUT"
 # also match the shell running this script, which kills the run itself — so the
 # pid is written down and only that pid is signalled.
 stop_server() {
-  if [ -f "$PIDFILE" ]; then
-    local pid
-    pid="$(cat "$PIDFILE" 2>/dev/null || true)"
-    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-      kill "$pid" 2>/dev/null || true
-      sleep 2
-      kill -9 "$pid" 2>/dev/null || true
-    fi
-    rm -f "$PIDFILE"
-  fi
+  local pids=""
+  [ -f "$PIDFILE" ] && pids="$(cat "$PIDFILE" 2>/dev/null || true)"
+  # Also whoever is actually holding the port — a server started before this
+  # script existed has no pidfile, and it is the one blocking the new bind.
+  # `|| true` because grep exits 1 when the port is already free, and pipefail
+  # would otherwise take the whole script down without printing anything.
+  pids="$pids $( { ss -lptnH "sport = :$PORT" 2>/dev/null |
+    grep -oP 'pid=\K[0-9]+' | sort -u | tr '\n' ' '; } || true)"
+  for pid in $pids; do
+    kill -0 "$pid" 2>/dev/null && kill "$pid" 2>/dev/null || true
+  done
+  sleep 2
+  for pid in $pids; do
+    kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null || true
+  done
+  rm -f "$PIDFILE"
 }
 
 if [ "${1:-}" = "--stop" ]; then
@@ -88,8 +94,18 @@ if healthy; then
   echo "using dev server already on :$PORT"
 else
   stop_server
+  # Wait for the port to actually come free — a server told to stop can still
+  # hold its listener for a moment, and the replacement then fails to bind.
+  for _ in $(seq 1 15); do
+    ss -lntH "sport = :$PORT" 2>/dev/null | grep -q . || break
+    sleep 1
+  done
+
   echo "starting dev server on :$PORT (demo mode)…"
-  (cd "$REPO" && NEXT_PUBLIC_DEMO=1 exec npx next dev -p "$PORT" > /tmp/bettys-shot-dev.log 2>&1 &
+  # The local binary rather than npx: npx stays alive as a parent, so the pid
+  # written here would not be the server and killing it would leave it running.
+  (cd "$REPO" && NEXT_PUBLIC_DEMO=1 exec "$REPO/node_modules/.bin/next" dev -p "$PORT" \
+     > /tmp/bettys-shot-dev.log 2>&1 &
    echo $! > "$PIDFILE")
   for _ in $(seq 1 45); do
     healthy && break

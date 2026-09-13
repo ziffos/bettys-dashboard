@@ -151,3 +151,30 @@ export async function fetchAllRows(supabase, table, select, filters = []) {
   }
   return all;
 }
+
+/**
+ * Group a run of days into the buckets the Daily / Weekly / Monthly toggle asks
+ * for. Weeks are counted back from the end of the range, so the most recent
+ * week is always whole and any short week is the oldest one.
+ */
+export function bucketDays(days, interval) {
+  if (interval === "daily") return days.map((day) => ({ key: day, days: [day] }));
+  if (interval === "weekly") {
+    const out = [];
+    for (let i = days.length; i > 0; i -= 7) {
+      const start = Math.max(0, i - 7);
+      out.unshift({ key: days[start], days: days.slice(start, i) });
+    }
+    return out;
+  }
+  const byMonth = {};
+  for (const day of days) (byMonth[day.slice(0, 7)] ??= []).push(day);
+  return Object.entries(byMonth).map(([key, ds]) => ({ key: `${key}-01`, days: ds }));
+}
+
+export function bucketLabel(key, interval) {
+  const d = parseDay(key);
+  if (interval === "daily") return DOW_SHORT[d.getDay()];
+  if (interval === "weekly") return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  return MONTHS[d.getMonth()];
+}

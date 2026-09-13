@@ -1,927 +1,752 @@
 "use client";
-import { useEffect, useState, useMemo } from "react";
+
+import { useEffect, useMemo, useState } from "react";
+import { TriangleAlert } from "lucide-react";
 import { supabase } from "../../lib/supabase";
-import SkeletonBlock from "../../components/SkeletonBlock";
+import { useRange } from "../../lib/RangeContext";
+import DayDrawer from "../../components/DayDrawer";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
-  PieChart, Pie, Cell
-} from "recharts";
-import { 
-  Calendar, Filter, RefreshCw, DollarSign, Layers,
-  ArrowUpRight, ArrowDownRight, Minus, User, ShoppingBag, ChevronDown
-} from "lucide-react";
-import { parseISO, subDays, differenceInDays, format, getDay, getHours } from "date-fns";
+  Card,
+  CardHeader,
+  EmptyState,
+  KpiCard,
+  LoadingState,
+  PageHeader,
+  Segmented,
+  PLATFORM,
+} from "../../components/ui";
+import {
+  MONTHS,
+  euro,
+  euro2,
+  eachDay,
+  fetchAllRows,
+  niceScale,
+  num,
+  parseDay,
+  pctChange,
+  rangeTitle,
+  signedPct,
+  bucketDays,
+  bucketLabel,
+} from "../../lib/format";
+import {
+  SOURCE_IDS,
+  buildSalesModel,
+  dayOf,
+  hourOf,
+} from "../../lib/salesModel";
 
-const getFormattedDate = (date) => format(date, "yyyy-MM-dd");
+const INTERVALS = [
+  { id: "daily", label: "Daily" },
+  { id: "weekly", label: "Weekly" },
+  { id: "monthly", label: "Monthly" },
+];
 
-const COLORS = {
-    bolt: "#10b981", 
-    wolt: "#3b82f6", 
-    foody: "#f97316", 
-    pos: "#ef4444",   
-};
+const DOW_LABEL = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const DOW_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
-export default function AnalyticsPage() {
-  const [loading, setLoading] = useState(true);
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [activePreset, setActivePreset] = useState("1M");
-  const [oldestAvailableDate, setOldestAvailableDate] = useState(null);
-  const [lastUpdatedDate, setLastUpdatedDate] = useState(null);
-  const [granularity, setGranularity] = useState("daily");
-  const [selectedSources, setSelectedSources] = useState({
-    pos: true,
-    wolt: true,
-    bolt: true,
-    foody: true,
-  });
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [activeBottomChart, setActiveBottomChart] = useState("dow");
-
-  const [rawPosData, setRawPosData] = useState([]);
-  const [rawDelData, setRawDelData] = useState([]);
-
-  async function fetchAllRows(table, select, filters) {
-    const PAGE_SIZE = 1000;
-    let allRows = [];
-    let from = 0;
-    while (true) {
-      let query = supabase.from(table).select(select).range(from, from + PAGE_SIZE - 1);
-      for (const f of filters) {
-        query = query[f.op](f.col, f.val);
-      }
-      const { data, error } = await query;
-      if (error || !data) break;
-      allRows = allRows.concat(data);
-      if (data.length < PAGE_SIZE) break;
-      from += PAGE_SIZE;
-    }
-    return allRows;
-  }
-
-  async function fetchSalesData(start, end) {
-    if (!start || !end) return;
-    setLoading(true);
-
-    const startD = parseISO(start);
-    const endD = parseISO(end);
-    const days = differenceInDays(endD, startD) + 1;
-    const prevStartD = subDays(startD, days);
-
-    const prevStartStr = getFormattedDate(prevStartD);
-    const endDateTime = `${end}T23:59:59.999Z`;
-
-    const posSales = await fetchAllRows("pos_sales", "order_placed, price", [
-      { op: "gte", col: "order_placed", val: prevStartStr },
-      { op: "lte", col: "order_placed", val: endDateTime },
-    ]);
-
-    const deliveryPurchases = await fetchAllRows("delivery_purchases", "order_placed, price, delivery_partner, delivery_status", [
-      { op: "gte", col: "order_placed", val: prevStartStr },
-      { op: "lte", col: "order_placed", val: endDateTime },
-    ]);
-
-    setRawPosData(posSales);
-    setRawDelData(deliveryPurchases);
-    setLoading(false);
-  }
+export default function SalesPage() {
+  const range = useRange();
+  const [interval, setInterval] = useState("daily");
+  const [active, setActive] = useState({ wolt: true, foody: true, bolt: true, pos: true });
+  // The fetched data is tagged with the range it belongs to, so "loading" is a
+  // derived fact rather than a second piece of state flipped inside the effect.
+  const rangeKey = `${range.from}|${range.to}`;
+  const [store, setStore] = useState({ key: null, raw: null, failure: null });
+  const loading = store.key !== rangeKey;
+  const raw = loading ? null : store.raw;
+  const failure = loading ? null : store.failure;
+  const [hover, setHover] = useState(-1);
+  const [heatHover, setHeatHover] = useState(null);
+  const [openDay, setOpenDay] = useState(null);
 
   useEffect(() => {
-    async function initializeDashboard() {
-      const { data: latestPos } = await supabase.from("pos_sales").select("order_placed").order("order_placed", { ascending: false }).limit(1).single();
-      const { data: latestDel } = await supabase.from("delivery_purchases").select("order_placed").order("order_placed", { ascending: false }).limit(1).single();
+    let cancelled = false;
 
-      let latestDateObj = new Date();
-      let lastSyncObj = null;
-
-      if (latestPos && latestDel) {
-        const p = new Date(latestPos.order_placed);
-        const d = new Date(latestDel.order_placed);
-        latestDateObj = p > d ? p : d;
-        // The last fully synced date across all platforms is the minimum of the latest dates
-        lastSyncObj = p < d ? p : d;
-      } else if (latestPos) {
-        latestDateObj = new Date(latestPos.order_placed);
-        lastSyncObj = new Date(latestPos.order_placed);
-      } else if (latestDel) {
-        latestDateObj = new Date(latestDel.order_placed);
-        lastSyncObj = new Date(latestDel.order_placed);
-      } else {
-        setLoading(false);
-        return;
+    (async () => {
+      const windowFrom = range.previous.from;
+      const until = `${range.to}T23:59:59.999`;
+      try {
+        const [deliveries, pos, payouts] = await Promise.all([
+          fetchAllRows(
+            supabase,
+            "delivery_purchases",
+            "order_placed, price, delivery_status, delivery_partner, items",
+            [
+              { op: "gte", col: "order_placed", val: windowFrom },
+              { op: "lte", col: "order_placed", val: until },
+            ]
+          ),
+          fetchAllRows(supabase, "pos_sales", "order_placed, price, items", [
+            { op: "gte", col: "order_placed", val: windowFrom },
+            { op: "lte", col: "order_placed", val: until },
+          ]),
+          fetchAllRows(
+            supabase,
+            "platform_payouts",
+            "platform, period_from, period_to, gross_sales, commission_total, ad_spend, other_fees, customer_deductions",
+            [
+              { op: "gte", col: "period_to", val: windowFrom },
+              { op: "lte", col: "period_from", val: range.to },
+            ]
+          ),
+        ]);
+        if (cancelled) return;
+        setStore({ key: rangeKey, raw: { deliveries, pos, payouts }, failure: null });
+      } catch (err) {
+        if (cancelled) return;
+        console.error("Sales fetch failed:", err);
+        setStore({
+          key: rangeKey,
+          raw: null,
+          failure: err.message || "Could not load this period.",
+        });
       }
-      
-      setLastUpdatedDate(getFormattedDate(lastSyncObj));
+    })();
 
-      const { data: oldestPos } = await supabase.from("pos_sales").select("order_placed").order("order_placed", { ascending: true }).limit(1).single();
-      const { data: oldestDel } = await supabase.from("delivery_purchases").select("order_placed").order("order_placed", { ascending: true }).limit(1).single();
+    return () => {
+      cancelled = true;
+    };
+  }, [rangeKey, range.from, range.to, range.previous.from]);
 
-      let oldestDateObj = new Date(latestDateObj);
-      if (oldestPos && oldestDel) {
-         const p = new Date(oldestPos.order_placed);
-         const d = new Date(oldestDel.order_placed);
-         oldestDateObj = p < d ? p : d;
-      } else if (oldestPos) {
-         oldestDateObj = new Date(oldestPos.order_placed);
-      } else if (oldestDel) {
-         oldestDateObj = new Date(oldestDel.order_placed);
+  const on = useMemo(() => SOURCE_IDS.filter((id) => active[id]), [active]);
+
+  const model = useMemo(() => {
+    if (!raw) return null;
+    const s = buildSalesModel(raw);
+    const days = eachDay(range.from, range.to);
+    const buckets = bucketDays(days, interval);
+
+    // With every source switched off the page would read as a closed month
+    // rather than an empty filter, so fall back to all of them for the maths
+    // and let the chips show what is off.
+    const srcs = on.length ? on : SOURCE_IDS;
+
+    const now = s.sumOver(range.from, range.to, srcs);
+    const before = s.sumOver(range.previous.from, range.previous.to, srcs);
+
+    const bars = buckets.map((b) => {
+      const gross = b.days.reduce((a, day) => a + s.grossOn(day, srcs), 0);
+      const fees = b.days.reduce((a, day) => a + s.feeOn(day, srcs).fee, 0);
+      const segments = srcs
+        .map((id) => ({
+          id,
+          color: PLATFORM[id].color,
+          value: b.days.reduce((a, day) => a + s.revOn(day, id), 0),
+        }))
+        .filter((seg) => seg.value > 0);
+      return {
+        key: b.key,
+        days: b.days,
+        label: bucketLabel(b.key, interval),
+        total: segments.reduce((a, seg) => a + seg.value, 0),
+        segments,
+        gross,
+        fees,
+        net: gross - fees,
+      };
+    });
+    const scale = niceScale(Math.max(...bars.map((b) => b.total), 1), 4);
+
+    // Rejected and cancelled orders. The platforms never tell us *why* — there
+    // is no reason field anywhere — so this counts what was lost rather than
+    // pretending to explain it.
+    const lost = { rejected: { count: 0, value: 0 }, cancelled: { count: 0, value: 0 } };
+    for (const d of raw.deliveries) {
+      const day = dayOf(d.order_placed);
+      if (day < range.from || day > range.to) continue;
+      const src = (d.delivery_partner || "").toLowerCase();
+      if (!srcs.includes(src)) continue;
+      const status = (d.delivery_status || "").toLowerCase();
+      if (status === "rejected" || status === "cancelled") {
+        lost[status].count += 1;
+        lost[status].value += Number(d.price || 0);
       }
-      setOldestAvailableDate(oldestDateObj);
-
-      const startObj = new Date(lastSyncObj);
-      startObj.setMonth(lastSyncObj.getMonth() - 1);
-      
-      setEndDate(getFormattedDate(lastSyncObj));
-      setStartDate(getFormattedDate(startObj));
-      setActivePreset("1M");
     }
-    initializeDashboard();
-  }, []);
+    const lostCount = lost.rejected.count + lost.cancelled.count;
+    const lostValue = lost.rejected.value + lost.cancelled.value;
+    const lostRate = now.orders + lostCount > 0 ? (lostCount / (now.orders + lostCount)) * 100 : 0;
 
-  useEffect(() => {
-    if (startDate && endDate) {
-        fetchSalesData(startDate, endDate);
+    // Previous period's loss rate, for the KPI's delta.
+    let prevLost = 0;
+    for (const d of raw.deliveries) {
+      const day = dayOf(d.order_placed);
+      if (day < range.previous.from || day > range.previous.to) continue;
+      if (!srcs.includes((d.delivery_partner || "").toLowerCase())) continue;
+      const status = (d.delivery_status || "").toLowerCase();
+      if (status === "rejected" || status === "cancelled") prevLost += 1;
     }
-  }, [startDate, endDate]);
+    const prevLostRate =
+      before.orders + prevLost > 0 ? (prevLost / (before.orders + prevLost)) * 100 : 0;
 
-  const handleSourceToggle = (source) => setSelectedSources(p => ({ ...p, [source]: !p[source] }));
-  const handleSelectAll = () => setSelectedSources({ pos: true, wolt: true, bolt: true, foody: true });
-  const handleSelectNone = () => setSelectedSources({ pos: false, wolt: false, bolt: false, foody: false });
-
-  const handleDatePreset = (preset) => {
-    const end = lastUpdatedDate ? parseISO(lastUpdatedDate) : new Date();
-    const start = lastUpdatedDate ? parseISO(lastUpdatedDate) : new Date();
-    switch (preset) {
-        case "1M": start.setMonth(end.getMonth() - 1); break;
-        case "3M": start.setMonth(end.getMonth() - 3); break;
-        case "6M": start.setMonth(end.getMonth() - 6); break;
-        case "1Y": start.setFullYear(end.getFullYear() - 1); break;
-        default: return;
-    }
-    setStartDate(getFormattedDate(start));
-    setEndDate(getFormattedDate(end));
-    setActivePreset(preset);
-  };
-
-  const processedData = useMemo(() => {
-    if (!startDate || !endDate) return null;
-
-    const startObj = parseISO(startDate);
-    const endObj = parseISO(endDate);
-    endObj.setHours(23, 59, 59, 999);
-    
-    const startObjMidnight = new Date(startObj);
-    startObjMidnight.setHours(0,0,0,0);
-    const endObjMidnight = parseISO(endDate);
-    endObjMidnight.setHours(0,0,0,0);
-    
-    const days = differenceInDays(endObjMidnight, startObjMidnight) + 1;
-    const prevStartObj = subDays(startObjMidnight, days);
-
-    const isCurrent = (dStr) => {
-        const d = parseISO(dStr);
-        return d >= startObjMidnight && d <= endObj;
-    };
-    const isPrev = (dStr) => {
-        const d = parseISO(dStr);
-        return d >= prevStartObj && d < startObjMidnight;
-    };
-
-    let currRev = 0, prevRev = 0;
-    let currOrders = 0, prevOrders = 0;
-    const currDaysWithOrders = new Set();
-    const prevDaysWithOrders = new Set();
-    let prevDailyRevMap = {};
-
-    const platforms = {
-        pos: { revenue: 0, orders: 0, prevRevenue: 0, prevOrders: 0 },
-        wolt: { revenue: 0, orders: 0, prevRevenue: 0, prevOrders: 0 },
-        foody: { revenue: 0, orders: 0, prevRevenue: 0, prevOrders: 0 },
-        bolt: { revenue: 0, orders: 0, prevRevenue: 0, prevOrders: 0 }
-    };
-
-    const dailyMap = {};
-    const dowMap = { 0: {name:"Sun"}, 1: {name:"Mon"}, 2: {name:"Tue"}, 3: {name:"Wed"}, 4: {name:"Thu"}, 5: {name:"Fri"}, 6: {name:"Sat"} };
-    [0,1,2,3,4,5,6].forEach(d => {
-        dowMap[d].pos = 0; dowMap[d].wolt = 0; dowMap[d].foody = 0; dowMap[d].bolt = 0; dowMap[d].total = 0;
-    });
-
-    const hodMap = {};
-    for(let i=0; i<24; i++) {
-        hodMap[i] = { name: `${i.toString().padStart(2, '0')}:00`, revenue: 0 };
-    }
-
-    const processRecord = (rec, source) => {
-        if (!selectedSources[source]) return;
-        const dStr = rec.order_placed;
-        if (!dStr) return;
-
-        const price = Number(rec.price || 0);
-        const parsedDate = parseISO(dStr);
-        const dateOnly = format(parsedDate, "yyyy-MM-dd");
-
-        if (isCurrent(dStr)) {
-            currRev += price;
-            currOrders += 1;
-            platforms[source].revenue += price;
-            platforms[source].orders += 1;
-
-            currDaysWithOrders.add(dateOnly);
-            if (!dailyMap[dateOnly]) {
-                dailyMap[dateOnly] = { report_date: dateOnly, pos_sales: 0, wolt_sales: 0, foody_sales: 0, bolt_sales: 0, pos_orders: 0, wolt_orders: 0, foody_orders: 0, bolt_orders: 0 };
-            }
-            dailyMap[dateOnly][`${source}_sales`] += price;
-            dailyMap[dateOnly][`${source}_orders`] += 1;
-
-            const dow = getDay(parsedDate);
-            dowMap[dow][source] += price;
-            dowMap[dow].total += price;
-
-            const hod = getHours(parsedDate);
-            hodMap[hod].revenue += price;
-
-        } else if (isPrev(dStr)) {
-            prevRev += price;
-            prevOrders += 1;
-            platforms[source].prevRevenue += price;
-            platforms[source].prevOrders += 1;
-            prevDaysWithOrders.add(dateOnly);
-            prevDailyRevMap[dateOnly] = (prevDailyRevMap[dateOnly] || 0) + price;
-        }
-    };
-
-    rawPosData.forEach(r => processRecord(r, 'pos'));
-    rawDelData.forEach(r => {
-        const partner = (r.delivery_partner || "").toLowerCase();
-        const status = (r.delivery_status || "").toLowerCase();
-        if (['wolt', 'bolt', 'foody'].includes(partner) && status === 'delivered') {
-            processRecord(r, partner);
-        }
-    });
-
-    let rejectedValue = 0;
-    let rejectedCount = 0;
-    rawDelData.forEach(r => {
-        const partner = (r.delivery_partner || "").toLowerCase();
-        const status = (r.delivery_status || "").toLowerCase();
-        if (['wolt', 'bolt', 'foody'].includes(partner) && selectedSources[partner] && status !== 'delivered') {
-            const dStr = r.order_placed;
-            if (dStr && isCurrent(dStr)) {
-                rejectedValue += Number(r.price || 0);
-                rejectedCount += 1;
-            }
-        }
-    });
-
-    const dailyTrend = [];
-    if (days > 0 && days <= 365) {
-        let tempD = new Date(startObjMidnight);
-        
-        // Use an object to group data based on selected granularity
-        const groupedData = {};
-
-        for(let i = 0; i < days; i++) {
-            const dStr = getFormattedDate(tempD);
-            if (dailyMap[dStr]) {
-                const dayData = dailyMap[dStr];
-                
-                let groupKey = dStr;
-                let displayLabel = dStr;
-
-                if (granularity === "weekly") {
-                    // Group by year-week (ISO week)
-                    const tempDate = new Date(tempD);
-                    const dayNum = tempDate.getUTCDay() || 7;
-                    tempDate.setUTCDate(tempDate.getUTCDate() + 4 - dayNum);
-                    const yearStart = new Date(Date.UTC(tempDate.getUTCFullYear(),0,1));
-                    const weekNo = Math.ceil((((tempDate - yearStart) / 86400000) + 1)/7);
-                    groupKey = `${tempDate.getUTCFullYear()}-W${weekNo}`;
-                    // For display, use the start date of the week
-                    const startOfWeek = new Date(tempD);
-                    const currentDay = startOfWeek.getDay();
-                    const diff = startOfWeek.getDate() - currentDay + (currentDay === 0 ? -6 : 1);
-                    startOfWeek.setDate(diff);
-                    displayLabel = format(startOfWeek, "MMM dd");
-                } else if (granularity === "monthly") {
-                    // Group by year-month
-                    groupKey = format(tempD, "yyyy-MM");
-                    displayLabel = format(tempD, "MMM yyyy");
-                }
-
-                if (!groupedData[groupKey]) {
-                    groupedData[groupKey] = {
-                        report_date: displayLabel,
-                        pos_sales: 0, wolt_sales: 0, foody_sales: 0, bolt_sales: 0,
-                        pos_orders: 0, wolt_orders: 0, foody_orders: 0, bolt_orders: 0
-                    };
-                }
-
-                groupedData[groupKey].pos_sales += dayData.pos_sales;
-                groupedData[groupKey].wolt_sales += dayData.wolt_sales;
-                groupedData[groupKey].foody_sales += dayData.foody_sales;
-                groupedData[groupKey].bolt_sales += dayData.bolt_sales;
-                groupedData[groupKey].pos_orders += dayData.pos_orders;
-                groupedData[groupKey].wolt_orders += dayData.wolt_orders;
-                groupedData[groupKey].foody_orders += dayData.foody_orders;
-                groupedData[groupKey].bolt_orders += dayData.bolt_orders;
-            }
-            tempD.setDate(tempD.getDate() + 1);
-        }
-
-        // Convert the grouped object back to an array
-        for (const key in groupedData) {
-            dailyTrend.push(groupedData[key]);
-        }
-    }
-
-    const dowCount = [0,0,0,0,0,0,0];
-    let tempD2 = new Date(startObjMidnight);
-    for(let i=0; i<days; i++) {
-        dowCount[getDay(tempD2)]++;
-        tempD2.setDate(tempD2.getDate() + 1);
-    }
-
-    const dowIndices = [1, 2, 3, 4, 5, 6, 0];
-    const dowChart = dowIndices.map(dow => {
-        const d = dowMap[dow];
-        const pKeys = ['pos', 'wolt', 'foody', 'bolt'];
-        let max = 0; let dom = 'pos';
-        pKeys.forEach(x => { if (d[x] > max) { max = d[x]; dom = x; } });
-        return { 
-            name: d.name, 
-            avgRevenue: dowCount[dow] ? Number((d.total / dowCount[dow]).toFixed(2)) : 0, 
-            dominant: dom 
+    // Per-platform table.
+    const platforms = srcs
+      .map((id) => {
+        const revenue = days.reduce((a, day) => a + s.revOn(day, id), 0);
+        const orders = days.reduce((a, day) => a + s.ordOn(day, id), 0);
+        const fees = days.reduce((a, day) => a + s.platformFeeOn(day, id).fee, 0);
+        const prevRevenue = eachDay(range.previous.from, range.previous.to).reduce(
+          (a, day) => a + s.revOn(day, id),
+          0
+        );
+        return {
+          id,
+          name: PLATFORM[id].name,
+          color: PLATFORM[id].color,
+          revenue,
+          orders,
+          aov: orders > 0 ? revenue / orders : 0,
+          fee: id === "pos" ? "—" : revenue > 0 ? `${((fees / revenue) * 100).toFixed(1)}%` : "—",
+          net: revenue - fees,
+          delta: pctChange(revenue, prevRevenue),
         };
-    });
+      })
+      .filter((p) => p.revenue > 0)
+      .sort((a, b) => b.revenue - a.revenue);
+    const platTotal = platforms.reduce((a, p) => a + p.revenue, 0) || 1;
+    const platformRows = platforms.map((p) => ({ ...p, share: (p.revenue / platTotal) * 100 }));
 
-    const hodChart = Object.values(hodMap).map(h => ({ name: h.name, revenue: Number(h.revenue.toFixed(2)) })).filter(h => h.revenue > 0);
+    // Share label on each source chip, computed over every source so the
+    // percentages still add up when some are switched off.
+    const allTotal = days.reduce((a, day) => a + s.grossOn(day), 0) || 1;
+    const chips = SOURCE_IDS.map((id) => ({
+      id,
+      name: PLATFORM[id].name === "In-store POS" ? "POS" : PLATFORM[id].name,
+      color: PLATFORM[id].color,
+      on: !!active[id],
+      share: `${Math.round((days.reduce((a, day) => a + s.revOn(day, id), 0) / allTotal) * 100)}%`,
+    }));
 
-    const currAOV = currOrders > 0 ? currRev / currOrders : 0;
-    const prevAOV = prevOrders > 0 ? prevRev / prevOrders : 0;
-    
-    const calcChange = (curr, prev) => prev > 0 ? ((curr - prev) / prev) * 100 : (curr > 0 ? 100 : 0);
+    // ── Hour-of-day heatmap.
+    //
+    // The hours shown are the ones the kitchen actually traded in, not a fixed
+    // 10–23 window: a shop that opens at 08:00 or serves past midnight would
+    // otherwise have its takings silently cropped off the chart.
+    const heat = {};
+    const hourTotals = Array(24).fill(0);
+    const addHeat = (ts, price, src) => {
+      const day = dayOf(ts);
+      if (day < range.from || day > range.to) return;
+      if (!srcs.includes(src)) return;
+      const h = hourOf(ts);
+      if (h == null) return;
+      const dow = parseDay(day).getDay();
+      heat[`${dow}-${h}`] = (heat[`${dow}-${h}`] || 0) + Number(price || 0);
+      hourTotals[h] += Number(price || 0);
+    };
+    for (const d of s.sold) {
+      addHeat(d.order_placed, d.price, (d.delivery_partner || "").toLowerCase());
+    }
+    for (const p of raw.pos) addHeat(p.order_placed, p.price, "pos");
 
-    let hasValidPrevPeriod = true;
-    if (oldestAvailableDate) {
-        const oldestMidnight = new Date(oldestAvailableDate);
-        oldestMidnight.setHours(0,0,0,0);
-        if (prevStartObj < oldestMidnight) {
-            hasValidPrevPeriod = false;
-        }
+    // The axis follows the trading day, not the clock. Betty's serves past
+    // midnight, so a plain 0–23 axis puts the evening peak and the small hours
+    // at opposite ends with half a day of dead columns between them. Find the
+    // longest stretch the kitchen is shut and start the axis where it reopens.
+    let quietStart = 0;
+    let quietLen = 0;
+    for (let start = 0; start < 24; start++) {
+      if (hourTotals[start] > 0) continue;
+      let len = 0;
+      while (len < 24 && hourTotals[(start + len) % 24] === 0) len++;
+      if (len > quietLen) {
+        quietLen = len;
+        quietStart = start;
+      }
+    }
+    const opensAt = quietLen > 0 ? (quietStart + quietLen) % 24 : 0;
+    const hours = Array.from({ length: 24 - quietLen }, (_, i) => (opensAt + i) % 24);
+    const weeksInRange = Math.max(1, days.length / 7);
+    const heatRows = DOW_ORDER.map((dow) => ({
+      dow,
+      label: DOW_LABEL[dow],
+      cells: hours.map((h) => ({
+        hour: h,
+        // Averaged per occurrence of that weekday, so a 28-day range and a
+        // 7-day one are read on the same scale.
+        value: (heat[`${dow}-${h}`] || 0) / weeksInRange,
+      })),
+    }));
+    const heatMax = Math.max(1, ...heatRows.flatMap((r) => r.cells.map((c) => c.value)));
+    let peak = null;
+    for (const row of heatRows) {
+      for (const cell of row.cells) {
+        if (!peak || cell.value > peak.value) peak = { ...cell, day: row.label };
+      }
     }
 
-    const currDailyCount = currDaysWithOrders.size;
-    const prevDailyCount = prevDaysWithOrders.size;
-    const currAvgDailyOrderValue = currDailyCount > 0 ? currRev / currDailyCount : 0;
-    const prevAvgDailyOrderValue = prevDailyCount > 0 ? prevRev / prevDailyCount : 0;
+    // When the order feed last caught up, measured against the end of the
+    // period rather than the wall clock — a quiet-looking week and a stalled
+    // import are indistinguishable without it.
+    let lastOrderAt = null;
+    let lastOrderDay = null;
+    for (const row of [...raw.deliveries, ...raw.pos]) {
+      if (!row.order_placed) continue;
+      const day = dayOf(row.order_placed);
+      if (!lastOrderDay || day > lastOrderDay) {
+        lastOrderDay = day;
+        lastOrderAt = row.order_placed;
+      } else if (day === lastOrderDay && row.order_placed > lastOrderAt) {
+        lastOrderAt = row.order_placed;
+      }
+    }
+    const daysBehind = lastOrderDay
+      ? Math.round((parseDay(range.to) - parseDay(lastOrderDay)) / 86400000)
+      : null;
 
-    const kpis = {
-        revenue: { val: currRev, change: calcChange(currRev, prevRev) },
-        orders: { val: currOrders, change: calcChange(currOrders, prevOrders) },
-        aov: { val: currAOV, change: calcChange(currAOV, prevAOV) },
-        avgDailyOrderValue: { val: currAvgDailyOrderValue, change: calcChange(currAvgDailyOrderValue, prevAvgDailyOrderValue) },
-        rejected: {
-            value: rejectedValue,
-            count: rejectedCount,
-            pct: (currRev + rejectedValue) > 0 ? (rejectedValue / (currRev + rejectedValue)) * 100 : 0
-        },
-        hasValidPrevPeriod
+    return {
+      bars,
+      scale,
+      now,
+      before,
+      lastOrderAt,
+      daysBehind,
+      chips,
+      platforms: platformRows,
+      lost,
+      lostCount,
+      lostValue,
+      lostRate,
+      prevLostRate,
+      hours,
+      heatRows,
+      heatMax,
+      peak,
+      weeksInRange,
+      dailyGross: days.map((day) => s.grossOn(day, srcs)),
+      dailyOrders: days.map((day) => s.ordersOn(day, srcs)),
+      dailyAov: days.map((day) =>
+        s.ordersOn(day, srcs) > 0 ? s.grossOn(day, srcs) / s.ordersOn(day, srcs) : 0
+      ),
+      isEmpty: now.orders === 0,
     };
+  }, [raw, range.from, range.to, range.previous.from, range.previous.to, interval, on, active]);
 
-    const platformTable = Object.entries(platforms)
-        .filter(([key]) => selectedSources[key])
-        .map(([key, data]) => {
-            const share = currRev > 0 ? (data.revenue / currRev) * 100 : 0;
-            const aov = data.orders > 0 ? data.revenue / data.orders : 0;
-            const change = calcChange(data.revenue, data.prevRevenue);
-            return { id: key, name: key === 'pos' ? 'POS' : key.charAt(0).toUpperCase() + key.slice(1), revenue: data.revenue, orders: data.orders, aov, share, change, hasValidPrevPeriod };
-        })
-        .filter(p => p.orders > 0 || p.revenue > 0)
-        .sort((a,b) => b.revenue - a.revenue);
-
-    return { kpis, dailyTrend, dowChart, hodChart, platformTable };
-  }, [rawPosData, rawDelData, startDate, endDate, selectedSources, oldestAvailableDate, granularity]);
-
-  const renderTrend = (change) => {
-      const isPositive = change > 0;
-      const isNegative = change < 0;
-      if (isPositive) return <span className="flex items-center gap-1 text-emerald-500 font-bold text-xs"><ArrowUpRight size={14}/> {change.toFixed(1)}%</span>;
-      if (isNegative) return <span className="flex items-center gap-1 text-red-500 font-bold text-xs"><ArrowDownRight size={14}/> {Math.abs(change).toFixed(1)}%</span>;
-      return <span className="flex items-center gap-1 text-neutral-500 font-bold text-xs"><Minus size={14}/> 0%</span>;
-  };
-
-  const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
-    const RADIAN = Math.PI / 180;
-    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-    const x = cx + radius * Math.cos(-midAngle * RADIAN);
-    const y = cy + radius * Math.sin(-midAngle * RADIAN);
-    if (percent < 0.05) return null;
-    return <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight="bold" pointerEvents="none">{`${(percent * 100).toFixed(0)}%`}</text>;
-  };
-
-  if (loading && (!processedData || processedData.dailyTrend.length === 0)) {
+  if (failure) {
     return (
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div>
-            <SkeletonBlock className="h-7 w-48 mb-2" />
-            <SkeletonBlock className="h-4 w-80" />
-          </div>
-          <SkeletonBlock className="h-7 w-44 rounded-full" />
-        </div>
-        {/* Filter bar */}
-        <SkeletonBlock className="h-16 w-full rounded-2xl" />
-        {/* 5 KPI cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="bg-neutral-900 p-4 md:p-5 rounded-2xl border border-neutral-800">
-              <SkeletonBlock className="h-3 w-28 mb-3" />
-              <SkeletonBlock className="h-8 w-36 mb-3" />
-              <SkeletonBlock className="h-4 w-24" />
-            </div>
-          ))}
-        </div>
-        {/* 2 charts side by side */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-4 md:p-6 h-[250px] md:h-[400px]">
-            <SkeletonBlock className="h-5 w-32 mb-4" />
-            <SkeletonBlock className="h-full w-full rounded-xl" />
-          </div>
-          <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-4 md:p-6 h-[300px] md:h-[400px]">
-            <SkeletonBlock className="h-5 w-40 mb-4" />
-            <SkeletonBlock className="h-full w-full rounded-xl" />
-          </div>
-        </div>
-        {/* Table placeholder */}
-        <SkeletonBlock className="h-64 w-full rounded-2xl" />
-        {/* 2 bottom charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-4 md:p-6 h-[250px] md:h-[350px]">
-            <SkeletonBlock className="h-5 w-44 mb-4" />
-            <SkeletonBlock className="h-full w-full rounded-xl" />
-          </div>
-          <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-4 md:p-6 h-[250px] md:h-[350px]">
-            <SkeletonBlock className="h-5 w-44 mb-4" />
-            <SkeletonBlock className="h-full w-full rounded-xl" />
-          </div>
-        </div>
+      <div className="flex flex-col gap-4 md:gap-5">
+        <PageHeader title="Sales" sub={rangeTitle(range.from, range.to)} />
+        <EmptyState
+          icon={TriangleAlert}
+          title="Could not load this period"
+          body={`${failure} The figures are left blank rather than shown half-read — a partial fetch looks exactly like a quiet week.`}
+          action="Try again"
+          onAction={() => range.setRange(range.id)}
+        />
       </div>
     );
   }
 
-  const pd = processedData || { kpis: { revenue:{val:0, change:0}, orders:{val:0, change:0}, aov:{val:0, change:0}, avgDailyOrderValue:{val:0, change:0}, rejected:{value:0, count:0, pct:0}, hasValidPrevPeriod: true }, dailyTrend: [], dowChart: [], hodChart: [], platformTable: [] };
-  const pieData = pd.platformTable.map(p => ({ name: p.name, value: p.revenue, color: COLORS[p.id] }));
+  if (loading || !model) {
+    return <LoadingState kpis={5} shape="chart" line="LOADING ORDERS · 4 SOURCES" />;
+  }
+
+  const header = (
+    <PageHeader
+      title="Sales"
+      sub={`${rangeTitle(range.from, range.to)} · ${range.days} days · compared with the ${range.days} days before`}
+      right={
+        model?.lastOrderAt && (
+          <div className="flex items-center gap-[7px] h-[26px] px-2.5 border border-line rounded-full font-mono text-[11px] text-subtle whitespace-nowrap">
+            <span
+              className="w-1.5 h-1.5 rounded-full shrink-0"
+              style={{
+                background:
+                  model.daysBehind > 2
+                    ? "#ee0000"
+                    : model.daysBehind > 0
+                      ? "#f5a623"
+                      : "#50e3c2",
+              }}
+            />
+            SYNCED{" "}
+            {new Date(model.lastOrderAt)
+              .toLocaleString("en-GB", {
+                day: "numeric",
+                month: "short",
+                hour: "2-digit",
+                minute: "2-digit",
+                timeZone: "Europe/Nicosia",
+              })
+              .toUpperCase()}
+          </div>
+        )
+      }
+    />
+  );
+
+  if (model.isEmpty) {
+    return (
+      <div className="flex flex-col gap-4 md:gap-5">
+        {header}
+        <EmptyState
+          title={`No sales between ${rangeTitle(range.from, range.to)}`}
+          body="No order reached any platform in this range. If that looks wrong, the import may not have caught up yet — the most recent orders can be older than the window you picked."
+          action="Jump to the last 28 days"
+          onAction={() => range.setRange("28d")}
+        />
+      </div>
+    );
+  }
+
+  const aov = model.now.orders > 0 ? model.now.gross / model.now.orders : 0;
+  const prevAov = model.before.orders > 0 ? model.before.gross / model.before.orders : 0;
+  const labelEvery = Math.ceil(model.bars.length / (model.bars.length > 14 ? 7 : 8));
+  const hovered = hover >= 0 ? model.bars[hover] : null;
+  const openBar = model.bars.find((b) => b.key === openDay);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-            <h1 className="text-2xl font-bold text-white tracking-tight">Sales Overview</h1>
-            <p className="text-sm text-neutral-400 mt-1">Performance metrics, sales breakdown, and insights.</p>
-        </div>
-        <div className="flex items-center gap-2 text-xs text-neutral-500 bg-neutral-900/50 px-3 py-1.5 rounded-full border border-neutral-800">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
-            Last updated: {lastUpdatedDate ? format(parseISO(lastUpdatedDate), "MMM dd, yyyy") : "..."}
-        </div>
+    <div className="flex flex-col gap-4 md:gap-5">
+      {header}
+
+      {/* Source filters + granularity */}
+      <div className="flex flex-wrap items-center gap-2">
+        {model.chips.map((chip) => (
+          <button
+            key={chip.id}
+            onClick={() => setActive((a) => ({ ...a, [chip.id]: !a[chip.id] }))}
+            className={`flex items-center gap-[7px] h-8 px-[11px] rounded-lg border text-[13px] whitespace-nowrap ${
+              chip.on
+                ? "border-ink-strong bg-surface text-ink"
+                : "border-line bg-wash-light text-subtle"
+            }`}
+          >
+            <span
+              className="w-2 h-2 rounded-[2px] shrink-0"
+              style={{ background: chip.on ? chip.color : "#e5e5e5" }}
+            />
+            {chip.name}
+            <span className={`font-mono text-[11px] ${chip.on ? "text-subtle" : "text-faint"}`}>
+              {chip.share}
+            </span>
+          </button>
+        ))}
+        <div className="flex-1 min-w-1" />
+        <Segmented options={INTERVALS} value={interval} onChange={setInterval} />
       </div>
 
-      {/* Mobile Filter Bar */}
-      <div className="md:hidden">
-        <button
-          onClick={() => setFiltersOpen(!filtersOpen)}
-          className="w-full flex items-center justify-between px-4 py-3 bg-neutral-900 border border-neutral-800 rounded-lg filter-pattern"
-        >
-          <div className="flex items-center gap-2">
-            <Filter size={16} className="text-emerald-500" />
-            <span className="text-sm font-semibold text-white">Filters</span>
-          </div>
-          <ChevronDown size={16} className={`text-neutral-400 transition-transform duration-200 ${filtersOpen ? "rotate-180" : ""}`} />
-        </button>
-        {filtersOpen && (
-          <div className="mt-1 bg-neutral-900 border border-neutral-800 rounded-lg p-4 space-y-3 filter-pattern">
-            {/* Date Range */}
-            <div>
-              <p className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">Date Range</p>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[10px] text-neutral-500 mb-1 block">From</label>
-                  <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setActivePreset(null); }} className="w-full bg-neutral-950 border border-neutral-800 rounded-lg text-neutral-200 text-xs px-3 py-2 focus:outline-none focus:border-emerald-500/50" />
-                </div>
-                <div>
-                  <label className="text-[10px] text-neutral-500 mb-1 block">To</label>
-                  <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setActivePreset(null); }} className="w-full bg-neutral-950 border border-neutral-800 rounded-lg text-neutral-200 text-xs px-3 py-2 focus:outline-none focus:border-emerald-500/50" />
-                </div>
+      {/* KPIs */}
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
+        <KpiCard
+          label="GROSS"
+          value={euro(model.now.gross)}
+          sub="before platform fees"
+          delta={pctChange(model.now.gross, model.before.gross)}
+          series={model.dailyGross}
+        />
+        <KpiCard
+          label="ORDERS"
+          value={num(model.now.orders)}
+          sub={`across ${on.length || SOURCE_IDS.length} sources`}
+          delta={pctChange(model.now.orders, model.before.orders)}
+          series={model.dailyOrders}
+        />
+        <KpiCard
+          label="AVG ORDER"
+          value={euro2(aov)}
+          sub={
+            prevAov > 0
+              ? `${euro2(Math.abs(aov - prevAov))} ${aov >= prevAov ? "more" : "less"} than last period`
+              : "no comparable period before"
+          }
+          delta={pctChange(aov, prevAov)}
+          series={model.dailyAov}
+        />
+        <KpiCard
+          label="PER DAY"
+          value={euro(model.now.gross / Math.max(1, model.now.openDays))}
+          sub={`${model.now.openDays} open day${model.now.openDays === 1 ? "" : "s"} in ${range.days}`}
+          delta={pctChange(
+            model.now.gross / Math.max(1, model.now.openDays),
+            model.before.gross / Math.max(1, model.before.openDays)
+          )}
+          series={model.dailyGross}
+        />
+        <KpiCard
+          label="LOST"
+          value={`${model.lostRate.toFixed(1)}%`}
+          sub={`${euro(model.lostValue)} · ${model.lostCount} order${model.lostCount === 1 ? "" : "s"}`}
+          delta={model.lostRate - model.prevLostRate}
+          deltaLabel={`${Math.abs(model.lostRate - model.prevLostRate).toFixed(1)}pp`}
+          positiveIsGood={false}
+          series={model.dailyOrders}
+        />
+      </div>
+
+      {/* Revenue by source */}
+      <Card>
+        <div className="border-b border-line">
+          <CardHeader
+            title="Revenue by source"
+            sub={
+              hovered
+                ? `${hovered.label} · ${hovered.segments
+                    .map((seg) => `${PLATFORM[seg.id].name} ${euro(seg.value)}`)
+                    .join("  ·  ")}  ·  total ${euro(hovered.total)}`
+                : "Hover a bar for the breakdown · click a day to open its orders"
+            }
+            right={
+              <div className="flex flex-wrap gap-3 text-[11px] text-muted">
+                {(on.length ? on : SOURCE_IDS).map((id) => (
+                  <span key={id} className="flex items-center gap-1.5">
+                    <span
+                      className="w-[9px] h-[9px] rounded-[2px]"
+                      style={{ background: PLATFORM[id].color }}
+                    />
+                    {PLATFORM[id].name === "In-store POS" ? "POS" : PLATFORM[id].name}
+                  </span>
+                ))}
               </div>
-            </div>
-            {/* Granularity + Presets */}
-            <div>
-              <p className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">View & Quick Range</p>
-              <div className="flex flex-col gap-2">
-                <div className="flex bg-neutral-950 rounded-lg p-1 border border-neutral-800 w-fit">
-                  {["daily", "weekly", "monthly"].map((g) => (
-                    <button key={g} onClick={() => setGranularity(g)}
-                      className={`capitalize px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${granularity === g ? "bg-emerald-500 text-white shadow-sm" : "text-neutral-400 hover:text-white hover:bg-neutral-800 cursor-pointer"}`}
-                    >{g}</button>
+            }
+          />
+        </div>
+
+        <div className="px-4 pt-4 flex gap-2.5">
+          <div className="w-[34px] md:w-10 shrink-0 flex flex-col justify-between h-[190px] md:h-[250px] text-right">
+            {[4, 3, 2, 1, 0].map((k) => (
+              <span key={k} className="font-mono text-[11px] text-muted leading-none">
+                {euro(model.scale.step * k)}
+              </span>
+            ))}
+          </div>
+          <div className="flex-1 min-w-0 relative h-[190px] md:h-[250px]">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div
+                key={i}
+                className="absolute left-0 right-0 h-px bg-wash"
+                style={{ top: `${i * 25}%` }}
+              />
+            ))}
+            <div className="absolute inset-0 flex items-end gap-0.5 md:gap-1">
+              {model.bars.map((bar, i) => (
+                <div
+                  key={bar.key}
+                  onMouseEnter={() => setHover(i)}
+                  onMouseLeave={() => setHover(-1)}
+                  onClick={() => bar.days.length === 1 && setOpenDay(bar.key)}
+                  className={`flex-1 min-w-0 h-full flex flex-col justify-end rounded ${
+                    bar.days.length === 1 ? "cursor-pointer" : ""
+                  } ${hover === i ? "bg-wash-light" : ""}`}
+                >
+                  {bar.segments.map((seg, si) => (
+                    <div
+                      key={seg.id}
+                      style={{
+                        height: `${(seg.value / model.scale.max) * 100}%`,
+                        background: seg.color,
+                        borderRadius: si === 0 ? "3px 3px 0 0" : 0,
+                      }}
+                    />
                   ))}
                 </div>
-                <div className="flex bg-neutral-950 rounded-lg p-1 border border-neutral-800 w-fit">
-                  {["1M", "3M", "6M", "1Y"].map((preset) => {
-                    const targetStart = lastUpdatedDate ? parseISO(lastUpdatedDate) : new Date();
-                    switch (preset) {
-                      case "1M": targetStart.setMonth(targetStart.getMonth() - 1); break;
-                      case "3M": targetStart.setMonth(targetStart.getMonth() - 3); break;
-                      case "6M": targetStart.setMonth(targetStart.getMonth() - 6); break;
-                      case "1Y": targetStart.setFullYear(targetStart.getFullYear() - 1); break;
-                    }
-                    const isPresetDisabled = oldestAvailableDate ? (targetStart < oldestAvailableDate) : false;
-                    return (
-                      <button key={preset} onClick={() => !isPresetDisabled && handleDatePreset(preset)} disabled={isPresetDisabled}
-                        className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${isPresetDisabled ? "text-neutral-700 cursor-not-allowed bg-transparent" : activePreset === preset ? "bg-emerald-500 text-white shadow-sm" : "text-neutral-400 hover:text-white hover:bg-neutral-800 cursor-pointer"}`}
-                      >{preset}</button>
-                    );
-                  })}
-                </div>
-              </div>
+              ))}
             </div>
-            {/* Sources */}
-            <div>
-              <p className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">Sources</p>
-              <div className="flex flex-wrap gap-1.5">
-                {["pos", "wolt", "bolt", "foody"].map((source) => (
-                  <button key={source} onClick={() => handleSourceToggle(source)}
-                    className={`group flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all duration-200 border cursor-pointer ${selectedSources[source] ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-neutral-950 border-neutral-800 text-neutral-500'}`}
+          </div>
+        </div>
+
+        <div className="px-4 pb-4 pt-2 flex gap-2.5">
+          <div className="w-[34px] md:w-10 shrink-0" />
+          <div className="flex-1 min-w-0 flex">
+            {model.bars.map((bar, i) => (
+              <div key={bar.key} className="flex-1 min-w-0 text-center">
+                {i % labelEvery === 0 && (
+                  <span
+                    // A phone fits about half as many ticks before they collide,
+                    // so the in-between ones are hidden rather than overlapped.
+                    className={`font-mono text-[11px] text-muted whitespace-nowrap ${
+                      i % (labelEvery * 2) === 0 ? "" : "hidden md:inline"
+                    }`}
                   >
-                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: selectedSources[source] ? COLORS[source] : '#525252' }} />
-                    <span className="capitalize">{source === 'pos' ? 'POS' : source}</span>
-                  </button>
-                ))}
+                    {interval === "daily"
+                      ? `${parseDay(bar.key).getDate()} ${MONTHS[parseDay(bar.key).getMonth()].toLowerCase()}`
+                      : bar.label}
+                  </span>
+                )}
               </div>
-            </div>
+            ))}
           </div>
-        )}
+        </div>
+      </Card>
+
+      {/* Platforms + what was lost */}
+      <div className="grid gap-3 items-start md:grid-cols-[minmax(0,1.9fr)_minmax(280px,1fr)]">
+        <Card>
+          <CardHeader title="Platforms" sub="Share of gross, and what each one keeps" />
+          <div className="hidden md:grid px-4 pb-2 gap-2 font-mono text-[11px] tracking-[0.05em] text-muted grid-cols-[minmax(0,1.5fr)_88px_64px_70px_58px_64px]">
+            <span>PLATFORM</span>
+            <span className="text-right">GROSS</span>
+            <span className="text-right">ORDERS</span>
+            <span className="text-right">AVG</span>
+            <span className="text-right">FEE</span>
+            <span className="text-right">VS PREV</span>
+          </div>
+          {model.platforms.map((p) => (
+            <div
+              key={p.id}
+              className="px-4 py-2.5 border-t border-line hover:bg-wash-light grid gap-2 items-center grid-cols-[minmax(0,1fr)_76px_58px] md:grid-cols-[minmax(0,1.5fr)_88px_64px_70px_58px_64px]"
+            >
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="w-2 h-2 rounded-[2px] shrink-0"
+                    style={{ background: p.color }}
+                  />
+                  <span className="text-[13px] font-medium truncate">{p.name}</span>
+                  <span className="font-mono text-[11px] text-subtle">
+                    {Math.round(p.share)}%
+                  </span>
+                </div>
+                <div className="mt-1.5 h-[3px] bg-wash rounded-full overflow-hidden">
+                  <div className="h-full" style={{ width: `${p.share}%`, background: p.color }} />
+                </div>
+              </div>
+              <span className="font-mono text-[13px] tabular-nums text-right">
+                {euro(p.revenue)}
+              </span>
+              <span className="font-mono text-[13px] tabular-nums text-right md:hidden">
+                {signedPct(p.delta, 1)}
+              </span>
+              <span className="hidden md:block font-mono text-[13px] tabular-nums text-right">
+                {num(p.orders)}
+              </span>
+              <span className="hidden md:block font-mono text-[13px] tabular-nums text-right">
+                {euro2(p.aov)}
+              </span>
+              <span className="hidden md:block font-mono text-[13px] tabular-nums text-right text-muted">
+                {p.fee}
+              </span>
+              <span
+                className="hidden md:block font-mono text-[13px] tabular-nums text-right"
+                style={{
+                  color: p.delta >= 0 ? "var(--color-accent)" : "var(--color-danger)",
+                }}
+              >
+                {signedPct(p.delta, 1)}
+              </span>
+            </div>
+          ))}
+        </Card>
+
+        <Card>
+          <CardHeader
+            title="Rejected & cancelled"
+            sub="Orders that never reached a customer"
+          />
+          {model.lostCount === 0 ? (
+            <p className="px-4 pb-4 text-[12px] text-muted border-t border-line pt-3">
+              Every order in this range reached its customer.
+            </p>
+          ) : (
+            <>
+              {[
+                ["Rejected by the kitchen", model.lost.rejected, "#ee0000"],
+                ["Cancelled", model.lost.cancelled, "#f5a623"],
+              ].map(([label, bucket, color]) => (
+                <div
+                  key={label}
+                  className="px-4 py-2.5 border-t border-line flex items-center gap-2.5"
+                >
+                  <span
+                    className="w-2 h-2 rounded-[2px] shrink-0"
+                    style={{ background: color }}
+                  />
+                  <span className="text-[13px] flex-1 min-w-0 truncate">{label}</span>
+                  <span className="font-mono text-[12px] tabular-nums text-subtle">
+                    {bucket.count}
+                  </span>
+                  <span className="font-mono text-[13px] tabular-nums w-[56px] text-right">
+                    {euro(bucket.value)}
+                  </span>
+                </div>
+              ))}
+              <p className="px-4 py-3 border-t border-line text-[12px] text-subtle text-pretty">
+                The platforms do not record a reason, so this is what was lost rather
+                than why.
+              </p>
+            </>
+          )}
+        </Card>
       </div>
 
-      {/* Desktop Filter Bar (unchanged) */}
-      <div className="hidden md:flex bg-neutral-900 p-4 rounded-2xl border border-neutral-800 shadow-lg flex-row items-center justify-between gap-6 filter-pattern">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            <div className="flex items-center gap-2 text-emerald-500 shrink-0"><Calendar size={18} /><span className="font-semibold text-white text-sm">Range</span></div>
-            <div className="flex flex-wrap items-center gap-2">
-                 <div className="flex items-center gap-2 bg-neutral-950 p-1 rounded-xl border border-neutral-800 hover:border-emerald-500/50 transition-colors group">
-                    <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setActivePreset(null); }} className="bg-transparent text-neutral-200 text-xs px-2 py-1 focus:outline-none focus:text-white cursor-pointer" />
-                    <span className="text-neutral-600 text-xs">to</span>
-                    <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setActivePreset(null); }} className="bg-transparent text-neutral-200 text-xs px-2 py-1 focus:outline-none focus:text-white cursor-pointer" />
-                </div>
-                 <div className="flex bg-neutral-950 rounded-lg p-1 border border-neutral-800">
-                    {["daily", "weekly", "monthly"].map((g) => (
-                        <button key={g} onClick={() => setGranularity(g)}
-                            className={`capitalize px-3 py-1 text-[10px] font-medium rounded-md transition-colors ${granularity === g ? "bg-emerald-500 text-white shadow-sm" : "text-neutral-400 hover:text-white hover:bg-neutral-800 cursor-pointer"}`}
-                        >{g}</button>
-                    ))}
-                </div>
-                <div className="flex bg-neutral-950 rounded-lg p-1 border border-neutral-800">
-                    {["1M", "3M", "6M", "1Y"].map((preset) => {
-                        const targetStart = lastUpdatedDate ? parseISO(lastUpdatedDate) : new Date();
-                        switch (preset) {
-                            case "1M": targetStart.setMonth(targetStart.getMonth() - 1); break;
-                            case "3M": targetStart.setMonth(targetStart.getMonth() - 3); break;
-                            case "6M": targetStart.setMonth(targetStart.getMonth() - 6); break;
-                            case "1Y": targetStart.setFullYear(targetStart.getFullYear() - 1); break;
-                        }
-                        const isPresetDisabled = oldestAvailableDate ? (targetStart < oldestAvailableDate) : false;
-                        return (
-                            <button key={preset} onClick={() => !isPresetDisabled && handleDatePreset(preset)} disabled={isPresetDisabled}
-                                className={`px-2 py-1 text-[10px] font-medium rounded-md transition-colors ${isPresetDisabled ? "text-neutral-700 cursor-not-allowed bg-transparent" : activePreset === preset ? "bg-emerald-500 text-white shadow-sm" : "text-neutral-400 hover:text-white hover:bg-neutral-800 cursor-pointer"}`}
-                            >{preset}</button>
-                        );
-                    })}
-                </div>
-            </div>
-        </div>
-        <div className="h-8 w-px bg-neutral-800"></div>
-        <div className="flex flex-wrap items-center gap-4">
-             <div className="flex items-center gap-2 text-emerald-500 shrink-0"><Filter size={18} /><span className="font-semibold text-white text-sm">Sources</span></div>
-            <div className="flex items-center gap-2">
-                {["pos", "wolt", "bolt", "foody"].map((source) => (
-                    <button key={source} onClick={() => handleSourceToggle(source)}
-                        className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 border cursor-pointer ${selectedSources[source] ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-neutral-950 border-neutral-800 text-neutral-500'}`}
-                    >
-                        <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: selectedSources[source] ? COLORS[source] : '#525252' }} />
-                        <span className="capitalize">{source === 'pos' ? 'POS' : source}</span>
-                    </button>
+      {/* Hour heatmap */}
+      <Card>
+        <div className="border-b border-line">
+          <CardHeader
+            title="When the money comes in"
+            sub={
+              heatHover
+                ? `${heatHover.day} ${String(heatHover.hour).padStart(2, "0")}:00 · ${euro(heatHover.value)} on an average ${heatHover.day}`
+                : model.peak
+                  ? `Average takings per hour · ${model.peak.day} ${String(model.peak.hour).padStart(2, "0")}:00 is the peak`
+                  : "Average takings per hour"
+            }
+            right={
+              <div className="flex items-center gap-1.5 font-mono text-[10px] tracking-[0.06em] text-subtle">
+                <span>LOW</span>
+                {[0.1, 0.3, 0.55, 0.8, 1].map((t) => (
+                  <span
+                    key={t}
+                    className="w-4 h-2.5 rounded-[2px]"
+                    style={{ background: `rgba(23,23,23,${(0.04 + 0.92 * t ** 0.85).toFixed(3)})` }}
+                  />
                 ))}
-            </div>
+                <span>HIGH</span>
+              </div>
+            }
+          />
         </div>
-      </div>
-
-       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-          <div className="bg-neutral-900 p-4 md:p-5 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden">
-               <p className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-1">Total Revenue</p>
-               <h3 className="text-xl md:text-3xl font-bold text-white mb-2">€{pd.kpis.revenue.val.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</h3>
-               {pd.kpis.hasValidPrevPeriod ? (
-                   <div className="flex items-center justify-between">
-                       {renderTrend(pd.kpis.revenue.change)}
-                       <span className="text-[10px] text-neutral-500">vs prev period</span>
-                   </div>
-               ) : (
-                   <div className="flex items-center justify-between h-[20px]">
-                       <span className="text-[10px] text-neutral-500">No prior data to compare</span>
-                   </div>
-               )}
-          </div>
-          <div className="bg-neutral-900 p-4 md:p-5 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden">
-               <p className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-1">Total Orders</p>
-               <h3 className="text-xl md:text-3xl font-bold text-white mb-2">{pd.kpis.orders.val.toLocaleString()}</h3>
-               {pd.kpis.hasValidPrevPeriod ? (
-                   <div className="flex items-center justify-between">
-                       {renderTrend(pd.kpis.orders.change)}
-                       <span className="text-[10px] text-neutral-500">vs prev period</span>
-                   </div>
-               ) : (
-                   <div className="flex items-center justify-between h-[20px]">
-                       <span className="text-[10px] text-neutral-500">No prior data to compare</span>
-                   </div>
-               )}
-          </div>
-          <div className="bg-neutral-900 p-4 md:p-5 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden">
-               <p className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-1">Avg Order Value</p>
-               <h3 className="text-xl md:text-3xl font-bold text-white mb-2">€{pd.kpis.aov.val.toFixed(2)}</h3>
-               {pd.kpis.hasValidPrevPeriod ? (
-                   <div className="flex items-center justify-between">
-                       {renderTrend(pd.kpis.aov.change)}
-                       <span className="text-[10px] text-neutral-500">vs prev period</span>
-                   </div>
-               ) : (
-                   <div className="flex items-center justify-between h-[20px]">
-                       <span className="text-[10px] text-neutral-500">No prior data to compare</span>
-                   </div>
-               )}
-          </div>
-          <div className="bg-neutral-900 p-4 md:p-5 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden">
-               <p className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-1">Avg Daily Order Value</p>
-               <h3 className="text-xl md:text-3xl font-bold text-white mb-2">€{pd.kpis.avgDailyOrderValue.val.toFixed(2)}</h3>
-               {pd.kpis.hasValidPrevPeriod ? (
-                   <div className="flex items-center justify-between">
-                       {renderTrend(pd.kpis.avgDailyOrderValue.change)}
-                       <span className="text-[10px] text-neutral-500">vs prev period</span>
-                   </div>
-               ) : (
-                   <div className="flex items-center justify-between h-[20px]">
-                       <span className="text-[10px] text-neutral-500">No prior data to compare</span>
-                   </div>
-               )}
-          </div>
-          <div className="bg-neutral-900 p-4 md:p-5 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden">
-               <p className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-1">Rejected / Cancelled</p>
-               <h3 className="text-xl md:text-3xl font-bold text-red-500 mb-2">{pd.kpis.rejected.pct.toFixed(1)}%</h3>
-               <div className="flex items-center justify-between">
-                   <span className="text-xs text-neutral-400">€{pd.kpis.rejected.value.toFixed(2)} lost</span>
-                   <span className="text-[10px] text-neutral-500">{pd.kpis.rejected.count} orders</span>
-               </div>
-          </div>
-       </div>
-
-       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 bg-neutral-900 p-4 md:p-6 rounded-2xl border border-neutral-800 shadow-lg h-[250px] md:h-[400px] flex flex-col">
-            <h3 className="text-lg font-bold text-white mb-4 shrink-0">Sales Trend</h3>
-            <div className="flex-1 min-h-0">
-                <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={pd.dailyTrend} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#262626" />
-                        <XAxis dataKey="report_date" fontSize={10} axisLine={false} tickLine={false} stroke="#a3a3a3" />
-                        <YAxis fontSize={10} axisLine={false} tickLine={false} stroke="#737373" tickFormatter={(val) => `€${val}`} />
-                        <RechartsTooltip cursor={{ fill: '#ffffff', opacity: 0.05 }} content={({ active, payload, label }) => {
-                            if (active && payload && payload.length > 0) {
-                                const total = payload.reduce((sum, entry) => sum + Number(entry.value || 0), 0);
-                                return (
-                                    <div style={{ backgroundColor: "#171717", border: "1px solid #404040", borderRadius: "12px", padding: "12px 14px", color: "#f5f5f5" }}>
-                                        <p style={{ color: "#a3a3a3", marginBottom: "8px", fontSize: "12px" }}>{label}</p>
-                                        {payload.map((entry, idx) => (
-                                            <p key={idx} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", margin: "4px 0" }}>
-                                                <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: entry.color, display: "inline-block" }}></span>
-                                                <span style={{ color: "#a3a3a3" }}>{entry.name}:</span>
-                                                <span style={{ fontWeight: "600" }}>€{Number(entry.value).toFixed(2)}</span>
-                                            </p>
-                                        ))}
-                                        <div style={{ borderTop: "1px solid #404040", marginTop: "8px", paddingTop: "8px", display: "flex", justifyContent: "space-between", fontSize: "13px", fontWeight: "700" }}>
-                                            <span style={{ color: "#a3a3a3" }}>Total:</span>
-                                            <span>€{total.toFixed(2)}</span>
-                                        </div>
-                                    </div>
-                                );
-                            }
-                            return null;
-                        }} />
-                        {selectedSources.pos && <Bar dataKey="pos_sales" stackId="a" fill={COLORS.pos} name="POS" />}
-                        {selectedSources.wolt && <Bar dataKey="wolt_sales" stackId="a" fill={COLORS.wolt} name="Wolt" />}
-                        {selectedSources.bolt && <Bar dataKey="bolt_sales" stackId="a" fill={COLORS.bolt} name="Bolt" />}
-                        {selectedSources.foody && <Bar dataKey="foody_sales" stackId="a" fill={COLORS.foody} name="Foody" radius={[4, 4, 0, 0]} />}
-                    </BarChart>
-                </ResponsiveContainer>
+        <div className="p-4 overflow-x-auto">
+          <div className="min-w-[560px]">
+            <div
+              className="grid gap-[3px] mb-[5px]"
+              style={{ gridTemplateColumns: `34px repeat(${model.hours.length}, minmax(0,1fr))` }}
+            >
+              <span />
+              {model.hours.map((h) => (
+                <span key={h} className="font-mono text-[11px] text-muted text-center">
+                  {h}
+                </span>
+              ))}
             </div>
-          </div>
-          
-          {/* Mobile: Source Distribution — compact side-by-side */}
-          <div className="md:hidden bg-neutral-900 p-4 rounded-2xl border border-neutral-800 shadow-lg">
-            <h3 className="text-sm font-bold text-white mb-3 shrink-0">Source Distribution</h3>
-            {pieData.length === 0 ? (
-                <p className="text-sm text-neutral-500">No source data</p>
-            ) : (
-                <div className="flex items-center gap-4">
-                    <div className="w-[140px] h-[140px] shrink-0">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie data={pieData} cx="50%" cy="50%" innerRadius={30} outerRadius={55} paddingAngle={2} dataKey="value" nameKey="name" labelLine={false}>
-                                    {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} stroke="rgba(0,0,0,0)" />)}
-                                </Pie>
-                            </PieChart>
-                        </ResponsiveContainer>
-                    </div>
-                    <div className="flex-1 space-y-2">
-                        {pieData.map((entry, idx) => {
-                            const total = pieData.reduce((s, e) => s + e.value, 0);
-                            const pct = total > 0 ? ((entry.value / total) * 100).toFixed(1) : "0.0";
-                            return (
-                                <div key={idx} className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-sm shrink-0" style={{backgroundColor: entry.color}}></div>
-                                        <span className="text-xs text-neutral-300">{entry.name}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xs font-semibold text-white">€{entry.value.toFixed(0)}</span>
-                                        <span className="text-[10px] text-neutral-500">{pct}%</span>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
-          </div>
-
-          {/* Desktop: Source Distribution — full doughnut */}
-          <div className="hidden md:flex bg-neutral-900 p-6 rounded-2xl border border-neutral-800 shadow-lg h-[400px] flex-col">
-            <h3 className="text-lg font-bold text-white mb-4 shrink-0">Source Distribution</h3>
-            {pieData.length === 0 ? (
-                <div className="flex-1 flex flex-col items-center justify-center text-neutral-500"><p className="text-sm">No source data</p></div>
-            ) : (
-                <div className="flex-1 min-h-0 flex flex-col relative">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                            <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={2} dataKey="value" nameKey="name" labelLine={false} label={renderCustomizedLabel}>
-                                {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} stroke="rgba(0,0,0,0)" />)}
-                            </Pie>
-                            <RechartsTooltip content={({active, payload}) => {
-                                if (active && payload?.[0]) {
-                                    const d = payload[0].payload;
-                                    return (
-                                        <div style={{ backgroundColor: "#171717", border: "1px solid #404040", borderRadius: "12px", padding: "12px 14px", color: "#f5f5f5" }}>
-                                            <p style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px" }}>
-                                                <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: d.color, display: "inline-block" }}></span>
-                                                <span style={{ color: "#a3a3a3" }}>{d.name}:</span>
-                                                <span style={{ fontWeight: "600" }}>€{d.value.toFixed(2)}</span>
-                                            </p>
-                                        </div>
-                                    );
-                                } return null;
-                            }} />
-                        </PieChart>
-                    </ResponsiveContainer>
-                    <div className="flex flex-wrap justify-center gap-4 mt-4">
-                        {pieData.map((entry, idx) => (
-                            <div key={idx} className="flex items-center gap-2 text-xs text-neutral-300">
-                                <div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: entry.color}}></div>
-                                <span>{entry.name}</span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-          </div>
-       </div>
-
-
-       {/* Mobile: Tabbed bottom charts */}
-       <div className="md:hidden">
-           <div className="flex bg-neutral-900 rounded-xl p-1 border border-neutral-800 mb-4">
-               <button onClick={() => setActiveBottomChart("dow")} className={`flex-1 px-3 py-2 text-xs font-medium rounded-lg transition-colors ${activeBottomChart === "dow" ? "bg-emerald-500 text-white" : "text-neutral-400"}`}>By Day</button>
-               <button onClick={() => setActiveBottomChart("hod")} className={`flex-1 px-3 py-2 text-xs font-medium rounded-lg transition-colors ${activeBottomChart === "hod" ? "bg-emerald-500 text-white" : "text-neutral-400"}`}>By Hour</button>
-           </div>
-           <div className="bg-neutral-900 p-4 rounded-2xl border border-neutral-800 shadow-lg h-[250px] flex flex-col">
-              <h3 className="text-sm font-bold text-white mb-3 shrink-0">{activeBottomChart === "dow" ? "Revenue by Day of Week" : "Revenue by Hour of Day"}</h3>
-              <div className="flex-1 min-h-0">
-                  <ResponsiveContainer width="100%" height="100%">
-                      {activeBottomChart === "dow" ? (
-                      <BarChart data={pd.dowChart} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#262626" />
-                          <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} stroke="#a3a3a3" />
-                          <YAxis fontSize={10} axisLine={false} tickLine={false} stroke="#737373" tickFormatter={(val) => `€${val}`} />
-                          <RechartsTooltip cursor={{ fill: '#ffffff', opacity: 0.05 }} content={({ active, payload, label }) => {
-                              if (!active || !payload?.length) return null;
-                              return (
-                                  <div style={{ backgroundColor: "#171717", border: "1px solid #404040", borderRadius: "12px", padding: "12px 14px", color: "#f5f5f5" }}>
-                                      <p style={{ color: "#a3a3a3", marginBottom: "8px", fontSize: "12px" }}>{label}</p>
-                                      <p style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px" }}>
-                                          <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: payload[0].color || "#10b981", display: "inline-block" }}></span>
-                                          <span style={{ color: "#a3a3a3" }}>Daily Average:</span>
-                                          <span style={{ fontWeight: "600" }}>€{Number(payload[0].value).toFixed(2)}</span>
-                                      </p>
-                                  </div>
-                              );
-                          }} />
-                          <Bar dataKey="avgRevenue" radius={[4, 4, 0, 0]}>
-                              {pd.dowChart.map((entry, idx) => (
-                                  <Cell key={`cell-${idx}`} fill={COLORS[entry.dominant] || "#ef4444"} />
-                              ))}
-                          </Bar>
-                      </BarChart>
-                      ) : (
-                      <BarChart data={pd.hodChart} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#262626" />
-                          <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} stroke="#a3a3a3" interval={3} />
-                          <YAxis fontSize={10} axisLine={false} tickLine={false} stroke="#737373" tickFormatter={(val) => `€${val}`} />
-                          <RechartsTooltip cursor={{ fill: '#ffffff', opacity: 0.05 }} content={({ active, payload, label }) => {
-                              if (!active || !payload?.length) return null;
-                              return (
-                                  <div style={{ backgroundColor: "#171717", border: "1px solid #404040", borderRadius: "12px", padding: "12px 14px", color: "#f5f5f5" }}>
-                                      <p style={{ color: "#a3a3a3", marginBottom: "8px", fontSize: "12px" }}>{label}</p>
-                                      <p style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px" }}>
-                                          <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#10b981", display: "inline-block" }}></span>
-                                          <span style={{ color: "#a3a3a3" }}>Total Revenue:</span>
-                                          <span style={{ fontWeight: "600" }}>€{Number(payload[0].value).toFixed(2)}</span>
-                                      </p>
-                                  </div>
-                              );
-                          }} />
-                          <Bar dataKey="revenue" fill="#10b981" radius={[2, 2, 0, 0]} />
-                      </BarChart>
-                      )}
-                  </ResponsiveContainer>
+            {model.heatRows.map((row) => (
+              <div
+                key={row.dow}
+                className="grid gap-[3px] mb-[3px] items-center"
+                style={{
+                  gridTemplateColumns: `34px repeat(${model.hours.length}, minmax(0,1fr))`,
+                }}
+              >
+                <span className="text-[11px] text-muted">{row.label}</span>
+                {row.cells.map((cell) => (
+                  <div
+                    key={cell.hour}
+                    onMouseEnter={() => setHeatHover({ ...cell, day: row.label })}
+                    onMouseLeave={() => setHeatHover(null)}
+                    className="h-5 md:h-[22px] rounded-[3px]"
+                    style={{
+                      background: `rgba(23,23,23,${(
+                        0.04 +
+                        0.92 * (cell.value / model.heatMax) ** 0.85
+                      ).toFixed(3)})`,
+                    }}
+                  />
+                ))}
               </div>
-           </div>
-       </div>
+            ))}
+          </div>
+        </div>
+      </Card>
 
-       {/* Desktop: Side-by-side bottom charts */}
-       <div className="hidden md:grid grid-cols-1 lg:grid-cols-2 gap-6">
-           <div className="bg-neutral-900 p-6 rounded-2xl border border-neutral-800 shadow-lg h-[350px] flex flex-col">
-              <h3 className="text-lg font-bold text-white mb-4 shrink-0">Revenue by Day of Week</h3>
-              <div className="flex-1 min-h-0">
-                  <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={pd.dowChart} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#262626" />
-                          <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} stroke="#a3a3a3" />
-                          <YAxis fontSize={10} axisLine={false} tickLine={false} stroke="#737373" tickFormatter={(val) => `€${val}`} />
-                          <RechartsTooltip cursor={{ fill: '#ffffff', opacity: 0.05 }} content={({ active, payload, label }) => {
-                              if (!active || !payload?.length) return null;
-                              return (
-                                  <div style={{ backgroundColor: "#171717", border: "1px solid #404040", borderRadius: "12px", padding: "12px 14px", color: "#f5f5f5" }}>
-                                      <p style={{ color: "#a3a3a3", marginBottom: "8px", fontSize: "12px" }}>{label}</p>
-                                      <p style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px" }}>
-                                          <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: payload[0].color || "#10b981", display: "inline-block" }}></span>
-                                          <span style={{ color: "#a3a3a3" }}>Daily Average:</span>
-                                          <span style={{ fontWeight: "600" }}>€{Number(payload[0].value).toFixed(2)}</span>
-                                      </p>
-                                  </div>
-                              );
-                          }} />
-                          <Bar dataKey="avgRevenue" radius={[4, 4, 0, 0]}>
-                              {pd.dowChart.map((entry, idx) => (
-                                  <Cell key={`cell-${idx}`} fill={COLORS[entry.dominant] || "#ef4444"} />
-                              ))}
-                          </Bar>
-                      </BarChart>
-                  </ResponsiveContainer>
-              </div>
-           </div>
-
-           <div className="bg-neutral-900 p-6 rounded-2xl border border-neutral-800 shadow-lg h-[350px] flex flex-col">
-              <h3 className="text-lg font-bold text-white mb-4 shrink-0">Revenue by Hour of Day</h3>
-              <div className="flex-1 min-h-0">
-                  <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={pd.hodChart} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#262626" />
-                          <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} stroke="#a3a3a3" interval={3} />
-                          <YAxis fontSize={10} axisLine={false} tickLine={false} stroke="#737373" tickFormatter={(val) => `€${val}`} />
-                          <RechartsTooltip cursor={{ fill: '#ffffff', opacity: 0.05 }} content={({ active, payload, label }) => {
-                              if (!active || !payload?.length) return null;
-                              return (
-                                  <div style={{ backgroundColor: "#171717", border: "1px solid #404040", borderRadius: "12px", padding: "12px 14px", color: "#f5f5f5" }}>
-                                      <p style={{ color: "#a3a3a3", marginBottom: "8px", fontSize: "12px" }}>{label}</p>
-                                      <p style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px" }}>
-                                          <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#10b981", display: "inline-block" }}></span>
-                                          <span style={{ color: "#a3a3a3" }}>Total Revenue:</span>
-                                          <span style={{ fontWeight: "600" }}>€{Number(payload[0].value).toFixed(2)}</span>
-                                      </p>
-                                  </div>
-                              );
-                          }} />
-                          <Bar dataKey="revenue" fill="#10b981" radius={[2, 2, 0, 0]} />
-                      </BarChart>
-                  </ResponsiveContainer>
-              </div>
-           </div>
-       </div>
-
+      {openBar && (
+        <DayDrawer
+          day={openDay}
+          totals={openBar}
+          deliveries={raw.deliveries}
+          pos={raw.pos}
+          onClose={() => setOpenDay(null)}
+        />
+      )}
     </div>
   );
 }

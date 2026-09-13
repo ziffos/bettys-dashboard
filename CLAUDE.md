@@ -13,6 +13,8 @@ npm run lint       # ESLint (Next.js Core Web Vitals config)
 NEXT_PUBLIC_DEMO=1 npm run dev      # Same app on synthetic data, logged in as admin
 ./tools/shot.sh --all               # Screenshot every screen at desktop + phone
 ./tools/shot.sh /sales              # One route, both widths
+./tools/shot.sh --restart /sales    # After npm run build clobbered .next
+./tools/shot.sh --stop              # Stop the demo-mode dev server
 ```
 
 No test framework is configured — there are no tests. `npm run lint` has ~25
@@ -33,7 +35,7 @@ conventions in "Legacy UI" still apply to it.
 |---|---|---|
 | Shell (rail, header, mobile nav, theme) + Login | — | **done** |
 | Overview | `/` | **done** |
-| Sales | `/sales` | todo |
+| Sales | `/sales` | **done** |
 | Marketing | `/marketing` | todo |
 | Products | `/products` | todo |
 | Reviews | `/reviews` | todo |
@@ -82,6 +84,7 @@ Chicken" built with **Next.js 16 App Router**, **React 19**, **Supabase** and
 - `src/components/` — The shell (ClientLayout, Sidebar, AppHeader, MobileNav)
 - `src/components/ui/` — The pieces every rebuilt screen composes from
 - `src/lib/format.js` — Money, dates, sparklines, item parsing, paginated reads
+- `src/lib/salesModel.js` — Per-day revenue and the prorated fee model
 - `src/components/tv/` — The in-store display boards (out of scope)
 - `src/lib/` — Supabase client (`supabase.js`) and auth context (`AuthContext.js`)
 - `src/lib/demo/` — In-memory Supabase stand-in for demo mode
