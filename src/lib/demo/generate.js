@@ -393,6 +393,20 @@ function build() {
         ),
       });
     }
+    // Campaigns run across both networks report as one combined row, exactly as
+    // they do in production. They carry no follower count, and they cannot be
+    // split between the two — which is why Marketing counts them under "Both"
+    // only. Without them here the rule would never be exercised.
+    if (rnd() < 0.3) {
+      social_stats.push({
+        id: `demo-social-${social_stats.length + 1}`,
+        stat_date: iso(d),
+        platform: "facebook_instagram",
+        total_reach: Math.round(2200 * (0.7 + growth * 0.9) * between(0.6, 1.4)),
+        ad_spend: round2(between(15, 60)),
+        follower_count: null,
+      });
+    }
   });
 
   // ------------------------------------------------------------- payroll

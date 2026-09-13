@@ -36,7 +36,7 @@ conventions in "Legacy UI" still apply to it.
 | Shell (rail, header, mobile nav, theme) + Login | — | **done** |
 | Overview | `/` | **done** |
 | Sales | `/sales` | **done** |
-| Marketing | `/marketing` | todo |
+| Marketing | `/marketing` | **done** |
 | Products | `/products` | todo |
 | Reviews | `/reviews` | todo |
 | Menu | `/menu` | todo |
