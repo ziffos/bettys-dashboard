@@ -436,6 +436,25 @@ function build() {
     effective_month: firstDay.getMonth() + 1,
   }));
 
+  // A couple of rises already agreed for later. rate_changes is effective-dated
+  // history, so a future row is how a pay change is booked — and without one
+  // Settings has no scheduled change to announce and My Payroll cannot tell
+  // anybody their rate is going up.
+  const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+  const twoMonths = new Date(today.getFullYear(), today.getMonth() + 2, 1);
+  employees.slice(0, 2).forEach((e, i) => {
+    const when = i === 0 ? nextMonth : twoMonths;
+    rate_changes.push({
+      id: `demo-rate-up-${i + 1}`,
+      employee_id: e.id,
+      hourly_rate: round2(rateOf[e.id].rate * 1.06),
+      monthly_bonus: rateOf[e.id].bonus,
+      bonus_description: "Agreed at the annual review",
+      effective_year: when.getFullYear(),
+      effective_month: when.getMonth() + 1,
+    });
+  });
+
   const payroll_records = [];
   const payroll_payments = [];
   const byMonth = new Map();

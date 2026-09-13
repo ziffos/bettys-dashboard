@@ -28,7 +28,7 @@ export function CardHeader({ title, sub, right, className = "" }) {
     >
       <div className="min-w-0">
         <h2 className="text-[14px] font-semibold tracking-[-0.01em]">{title}</h2>
-        {sub && <p className="mt-[3px] text-[12px] text-subtle">{sub}</p>}
+        {sub && <div className="mt-[3px] text-[12px] text-subtle">{sub}</div>}
       </div>
       {right}
     </div>

@@ -44,7 +44,7 @@ conventions in "Legacy UI" still apply to it.
 | Calendar | `/calendar` | **done** |
 | Payroll | `/payroll` | **done** |
 | My Payroll | `/my-payroll` | **done** |
-| Settings | `/settings` | todo |
+| Settings | `/settings` | **done** |
 | TV Displays | `/tv-displays` | todo |
 
 Update this table at the end of every screen, so an interrupted rebuild can be
