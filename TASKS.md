@@ -48,7 +48,7 @@ the page renders, and write down every disagreement. Tick a screen only after
 looking at it in a screenshot with real data, not demo data.
 
 - [x] Overview — KPIs, per-day bars, top dishes, day drawer
-- [ ] Sales — gross/orders/avg/per-day/lost, platform table, fee rates, heatmap
+- [x] Sales — gross/orders/avg/per-day/lost, platform table, fee rates, heatmap
 - [ ] Products — units, revenue, per-platform split, price flags
 - [ ] Reviews — counts, average, distribution, per-platform
 - [ ] Menu — prices vs `menu_item_price_history`, alias coverage
@@ -244,3 +244,27 @@ rows, plus `tools/sql.sh` for the independent numbers.
   330 ml" — so the comma split breaks them in two. `parseItems`' unit guard
   drops the orphan "330 ml", so the drink still counts, just under a name
   without its size. 32 lines in all of history; left alone.
+
+### Sales (task 5)
+
+Reconciled with `tools/audit-sales.mjs` and `tools/sql.sh`.
+
+- **`delivery_status` has five values, and two of them were invisible.**
+  delivered 3,579 · rejected 65 · cancelled 47 · **failed 2** · **courier near
+  pick up 2**. The page counted the first three and silently dropped the rest,
+  so four orders worth €70.80 were neither revenue nor loss, and the loss-rate
+  denominator was short by the same four. CLAUDE.md and DESIGN.md both claimed
+  three statuses; both corrected. The card is now driven by the data — one row
+  per non-delivered status found, so the next unexpected status announces
+  itself. `failed` counts as a loss; anything not terminal is tagged IN FLIGHT
+  and sits in the denominator but not the numerator.
+- **Verified sound:** for the 28-day range the platform table matches SQL
+  exactly — total €8,881.00 / 594 orders / €14.95 average, POS €2,997.69 / 241 /
+  €12.44, Wolt €2,907.56 / 198 / €14.68, Foody €2,231.55 / 115 / €19.40, Bolt
+  €744.20 / 40 / €18.61.
+- **Open days are counted, not assumed.** 22 of 28 in that window: four Sundays
+  plus **Mon 17 and Tue 18 August, which have zero orders on every source** — a
+  real two-day closure (or an import hole), and either way correctly excluded
+  from the per-day average.
+- **The heatmap axis now reads 11:00 → 22:00**, twelve columns, twelve dead
+  hours dropped, Sunday row empty. Peak Fri 20:00.

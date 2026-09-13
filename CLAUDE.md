@@ -104,7 +104,7 @@ All data access is direct client-side Supabase SDK queries (no API routes).
 |---|---|
 | `profiles` | `full_name, email, role, job_title, is_active` |
 | `page_permissions` | `user_id, page_slug, granted_by` |
-| `delivery_purchases` | One row per order. `delivery_partner`, `delivery_status`, `items` as a comma-separated string |
+| `delivery_purchases` | One row per order. `delivery_partner`, `items` as a comma-separated string. `delivery_status` has **five** values, not three: delivered, rejected, cancelled, failed, `courier near pick up` — the last two are two rows each, which is how they went unnoticed. Use `LOST_STATUSES` from `salesModel.js` rather than listing them inline |
 | `pos_sales` | In-store orders. No status column — POS orders are never rejected |
 | `platform_payouts` | Weekly-ish statements. Periods are **not** week aligned: Bolt 7 days, Wolt mostly 5, Foody 1–9 |
 | `reviews` | `source_platform` is wolt/foody/bolt only. `reviewer_name` is always null, and only 40 of 231 rows have `review_text` |
@@ -133,7 +133,9 @@ not set `job_title` — it is filled in afterwards from the Settings panel.
   `WALL_CLOCK`. `RangeContext` still uses Europe/Nicosia, correctly, because
   "today" is a real instant
 - Delivery platforms: Wolt, Foody, Bolt, plus in-store POS
-- Rejected and cancelled orders are filtered out of revenue
+- Only `delivered` counts as revenue. Rejected, cancelled and failed are
+  losses; anything else is still in flight and is shown as its own line rather
+  than dropped
 - Order lines are parsed out of the comma-separated `items` string with a regex,
   then matched to `menu_items` through the per-platform alias columns. The three
   platforms genuinely disagree on names — Wolt writes "Betty's Classic", Foody

@@ -294,14 +294,22 @@ function build() {
       const partner = pickPlatform();
       const { items, price } = buildBasket(`${partner}_price`);
       // ~4% fall over, so the Rejected/Cancelled KPI has something real.
+      // Production carries five statuses, not three — "failed" and "courier
+      // near pick up" are rare enough that the dashboard dropped them silently
+      // for a year. Demo shows them so that path is never invisible again.
       const rejected = rnd() < 0.04;
+      const oddball = !rejected && rnd() < 0.002;
       delivery_purchases.push({
         id: `demo-del-${delivery_purchases.length + 1}`,
         order_placed: stamp(d, randomHour()),
         price,
         items,
         delivery_partner: partner,
-        delivery_status: rejected ? pick(["rejected", "cancelled"]) : "delivered",
+        delivery_status: rejected
+          ? pick(["rejected", "cancelled"])
+          : oddball
+            ? pick(["failed", "courier near pick up"])
+            : "delivered",
         order_reference: `DM-${String(delivery_purchases.length + 1).padStart(6, "0")}`,
       });
     }

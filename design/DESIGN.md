@@ -243,8 +243,11 @@ Agreed with the owner before the rebuild started. Do not "fix" these back.
    The platform stays in the UI so it lights up when the data arrives.
 2. **Review themes are an `Upcoming` card.** Only 40 of 231 reviews have text
    and there is no theme column; the classifier is a later decision.
-3. **No rejection reasons.** `delivery_status` is delivered/rejected/cancelled
-   and nothing more. Show the two totals, drop the four-reason breakdown.
+3. **No rejection reasons.** There is no reason field anywhere, so the card
+   counts what was lost rather than why, and the design's four-reason breakdown
+   is dropped. It lists one row per non-delivered status actually present —
+   production has five statuses, not the three the platforms advertise — so a
+   status nobody expected shows up instead of vanishing.
 4. **No TV display status.** No heartbeat, no on-air/offline, no "seen 2
    minutes ago", and no physical spot label ("Above the counter"). Show the
    screens and their slots.

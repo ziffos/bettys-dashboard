@@ -14,6 +14,31 @@ import { eachDay } from "./format";
 export const DELIVERY_IDS = ["wolt", "foody", "bolt"];
 export const SOURCE_IDS = [...DELIVERY_IDS, "pos"];
 
+/**
+ * `delivery_status` has five values in production, not the three the platforms
+ * advertise: delivered, rejected, cancelled, failed, and "courier near pick up".
+ * The last two are rare — two orders each in all of 2026 — which is exactly why
+ * they went unnoticed: the old code counted the first three and quietly dropped
+ * anything else, so four orders were neither revenue nor loss.
+ *
+ * These are the ones that will never reach a customer. Anything not here and
+ * not `delivered` is in flight, and Sales shows it as its own line rather than
+ * folding it into the loss rate.
+ */
+export const LOST_STATUSES = ["rejected", "cancelled", "failed"];
+
+export const LOST_LABEL = {
+  rejected: "Rejected by the kitchen",
+  cancelled: "Cancelled",
+  failed: "Failed on the way",
+};
+
+export const LOST_COLOR = {
+  rejected: "#ee0000",
+  cancelled: "#f5a623",
+  failed: "#7928ca",
+};
+
 /** Everything a platform takes off the top of one statement. */
 export const feesOf = (payout) =>
   Number(payout.commission_total || 0) +

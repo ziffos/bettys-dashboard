@@ -36,6 +36,9 @@ import {
   dayOf,
   hourOf,
   stampLabel,
+  LOST_COLOR,
+  LOST_LABEL,
+  LOST_STATUSES,
 } from "../../lib/salesModel";
 
 const INTERVALS = [
@@ -150,36 +153,60 @@ export default function SalesPage() {
     });
     const scale = niceScale(Math.max(...bars.map((b) => b.total), 1), 4);
 
-    // Rejected and cancelled orders. The platforms never tell us *why* — there
-    // is no reason field anywhere — so this counts what was lost rather than
-    // pretending to explain it.
-    const lost = { rejected: { count: 0, value: 0 }, cancelled: { count: 0, value: 0 } };
-    for (const d of raw.deliveries) {
-      const day = dayOf(d.order_placed);
-      if (day < range.from || day > range.to) continue;
-      const src = (d.delivery_partner || "").toLowerCase();
-      if (!srcs.includes(src)) continue;
-      const status = (d.delivery_status || "").toLowerCase();
-      if (status === "rejected" || status === "cancelled") {
-        lost[status].count += 1;
-        lost[status].value += Number(d.price || 0);
+    // Orders that did not reach a customer. The platforms never tell us *why* —
+    // there is no reason field anywhere — so this counts what was lost rather
+    // than pretending to explain it.
+    //
+    // Every non-delivered status gets a row, in the order it is worth reading,
+    // so a status nobody expected shows up instead of disappearing. That is how
+    // "failed" and "courier near pick up" went unnoticed for a year.
+    const tally = (from, to) => {
+      const byStatus = {};
+      let notDelivered = 0;
+      for (const d of raw.deliveries) {
+        const day = dayOf(d.order_placed);
+        if (day < from || day > to) continue;
+        if (!srcs.includes((d.delivery_partner || "").toLowerCase())) continue;
+        const status = (d.delivery_status || "").toLowerCase();
+        if (!status || status === "delivered") continue;
+        (byStatus[status] ??= { status, count: 0, value: 0 });
+        byStatus[status].count += 1;
+        byStatus[status].value += Number(d.price || 0);
+        notDelivered += 1;
       }
-    }
-    const lostCount = lost.rejected.count + lost.cancelled.count;
-    const lostValue = lost.rejected.value + lost.cancelled.value;
-    const lostRate = now.orders + lostCount > 0 ? (lostCount / (now.orders + lostCount)) * 100 : 0;
+      // Rejected, cancelled, failed — then anything still in flight, which is
+      // not a loss and should not lead the list.
+      const rank = (st) => {
+        const i = LOST_STATUSES.indexOf(st);
+        return i === -1 ? 99 : i;
+      };
+      const rows = Object.values(byStatus).sort(
+        (a, b) => rank(a.status) - rank(b.status) || b.count - a.count
+      );
+      const terminal = rows.filter((r) => LOST_STATUSES.includes(r.status));
+      return {
+        rows,
+        notDelivered,
+        count: terminal.reduce((a, r) => a + r.count, 0),
+        value: terminal.reduce((a, r) => a + r.value, 0),
+      };
+    };
 
-    // Previous period's loss rate, for the KPI's delta.
-    let prevLost = 0;
-    for (const d of raw.deliveries) {
-      const day = dayOf(d.order_placed);
-      if (day < range.previous.from || day > range.previous.to) continue;
-      if (!srcs.includes((d.delivery_partner || "").toLowerCase())) continue;
-      const status = (d.delivery_status || "").toLowerCase();
-      if (status === "rejected" || status === "cancelled") prevLost += 1;
-    }
+    const lost = tally(range.from, range.to);
+    const lostCount = lost.count;
+    const lostValue = lost.value;
+    // Anything still in flight belongs in the denominator but not the numerator:
+    // it has not been lost, it just has not landed.
+    const lostRate =
+      now.orders + lost.notDelivered > 0
+        ? (lostCount / (now.orders + lost.notDelivered)) * 100
+        : 0;
+
+    const prev = tally(range.previous.from, range.previous.to);
     const prevLostRate =
-      before.orders + prevLost > 0 ? (prevLost / (before.orders + prevLost)) * 100 : 0;
+      before.orders + prev.notDelivered > 0
+        ? (prev.count / (before.orders + prev.notDelivered)) * 100
+        : 0;
 
     // Per-platform table.
     const platforms = srcs
@@ -612,33 +639,38 @@ export default function SalesPage() {
 
         <Card>
           <CardHeader
-            title="Rejected & cancelled"
+            title="Not delivered"
             sub="Orders that never reached a customer"
           />
-          {model.lostCount === 0 ? (
+          {model.lost.rows.length === 0 ? (
             <p className="px-4 pb-4 text-[12px] text-muted border-t border-line pt-3">
               Every order in this range reached its customer.
             </p>
           ) : (
             <>
-              {[
-                ["Rejected by the kitchen", model.lost.rejected, "#ee0000"],
-                ["Cancelled", model.lost.cancelled, "#f5a623"],
-              ].map(([label, bucket, color]) => (
+              {model.lost.rows.map((row) => (
                 <div
-                  key={label}
+                  key={row.status}
                   className="px-4 py-2.5 border-t border-line flex items-center gap-2.5"
                 >
                   <span
                     className="w-2 h-2 rounded-[2px] shrink-0"
-                    style={{ background: color }}
+                    style={{ background: LOST_COLOR[row.status] ?? "var(--color-line-strong)" }}
                   />
-                  <span className="text-[13px] flex-1 min-w-0 truncate">{label}</span>
+                  <span className="text-[13px] flex-1 min-w-0 truncate">
+                    {LOST_LABEL[row.status] ??
+                      row.status.charAt(0).toUpperCase() + row.status.slice(1)}
+                  </span>
+                  {!LOST_STATUSES.includes(row.status) && (
+                    <span className="font-mono text-[10px] tracking-[0.06em] text-subtle shrink-0">
+                      IN FLIGHT
+                    </span>
+                  )}
                   <span className="font-mono text-[12px] tabular-nums text-subtle">
-                    {bucket.count}
+                    {row.count}
                   </span>
                   <span className="font-mono text-[13px] tabular-nums w-[56px] text-right">
-                    {euro(bucket.value)}
+                    {euro(row.value)}
                   </span>
                 </div>
               ))}
