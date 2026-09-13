@@ -1,695 +1,729 @@
 "use client";
 
-import React, { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronDown, CircleAlert, Pencil, Plus, Search, TriangleAlert } from "lucide-react";
 import { supabase } from "../../lib/supabase";
-import SkeletonBlock from "../../components/SkeletonBlock";
-import { Search, Table2, LayoutGrid, Pencil, Trash2, Plus, X, Check, ChevronDown } from "lucide-react";
+import {
+  Card,
+  EmptyState,
+  FIELD_INPUT,
+  FIELD_LABEL,
+  LoadingState,
+  PageHeader,
+  Segmented,
+  SidePanel,
+  Toast,
+} from "../../components/ui";
+import { euro2 } from "../../lib/format";
 
 const CATEGORIES = [
-  "Fried Chicken Combos",
-  "Burger & Wrap Combos",
-  "Products",
-  "Sides",
-  "Dips",
-  "Drinks",
+  { name: "Fried Chicken Combos", short: "Chicken", color: "#171717" },
+  { name: "Burger & Wrap Combos", short: "Burgers", color: "#0070f3" },
+  { name: "Products", short: "Products", color: "#7928ca" },
+  { name: "Sides", short: "Sides", color: "#f5a623" },
+  { name: "Dips", short: "Dips", color: "#50e3c2" },
+  { name: "Drinks", short: "Drinks", color: "#8f8f8f" },
+];
+const CAT = Object.fromEntries(CATEGORIES.map((c) => [c.name, c]));
+const CAT_ORDER = Object.fromEntries(CATEGORIES.map((c, i) => [c.name, i]));
+
+const DELIVERY = [
+  { id: "wolt", label: "WOLT", price: "wolt_price", alias: "wolt_name" },
+  { id: "foody", label: "FOODY", price: "foody_price", alias: "foody_name" },
+  { id: "bolt", label: "BOLT", price: "bolt_price", alias: "bolt_name" },
 ];
 
-const CATEGORY_COLORS = {
-  "Fried Chicken Combos": "#facc15",
-  "Burger & Wrap Combos": "#fb923c",
-  Products: "#ef4444",
-  Sides: "#10b981",
-  Dips: "#8b5cf6",
-  Drinks: "#3b82f6",
-  Unknown: "#737373",
-};
+const PRICE_MODES = [
+  { id: "price", label: "Prices" },
+  { id: "markup", label: "Markup vs POS" },
+];
 
-const CATEGORY_ORDER = Object.fromEntries(CATEGORIES.map((c, i) => [c, i]));
+/** "12.40" / "12,40" / "" → 12.4 / null. Anything else stays undefined. */
+function parsePrice(input) {
+  const text = String(input ?? "").trim().replace(",", ".");
+  if (text === "") return null;
+  const n = Number(text);
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
+}
 
-const formatPrice = (val) => (val != null ? `€${Number(val).toFixed(2)}` : null);
+/** Prices go into the form with their cents, so 6.5 does not read as 6.50's sibling. */
+const money = (v) => (v == null ? "" : Number(v).toFixed(2));
 
-const EMPTY_ITEM = {
+const EMPTY_FORM = {
   canonical_name: "",
   category: "Fried Chicken Combos",
   description: "",
+  pos_price: "",
   wolt_price: "",
   foody_price: "",
   bolt_price: "",
-  pos_price: "",
+  servings: "1",
   sort_order: "",
   image_url: "",
-  servings: "",
-  is_active: true,
+  pos_name: "",
+  wolt_name: "",
+  foody_name: "",
+  bolt_name: "",
+  foody_pieces_per_unit: "",
 };
 
-// ─── Inline editable cell (desktop) ──────────────────────────
-function EditableCell({ value, onChange, onSave, type = "text", align = "left", placeholder }) {
-  return (
-    <input
-      type={type}
-      step={type === "number" ? "0.01" : undefined}
-      value={value ?? ""}
-      onChange={(e) => onChange(e.target.value)}
-      onKeyDown={(e) => { if (e.key === "Enter" && onSave) onSave(); }}
-      placeholder={placeholder}
-      className={`w-full bg-neutral-950 border border-neutral-700 focus:border-emerald-500 rounded-lg px-2 py-1.5 text-sm text-neutral-200 focus:outline-none transition-colors ${align === "right" ? "text-right" : ""}`}
-    />
-  );
-}
-
-// ─── Mobile/Add modal ────────────────────────────────────────
-function ItemModal({ title, values, onChange, onSave, onCancel, onDelete, saving }) {
-  const field = (label, key, type = "text", placeholder = "") => (
-    <div>
-      <label className="block text-[11px] font-semibold text-neutral-500 uppercase tracking-wider mb-1">{label}</label>
-      {key === "category" ? (
-        <select
-          value={values[key] || ""}
-          onChange={(e) => onChange(key, e.target.value)}
-          className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2.5 text-sm text-neutral-200 focus:outline-none focus:border-emerald-500"
-        >
-          {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-      ) : key === "description" ? (
-        <textarea
-          value={values[key] ?? ""}
-          onChange={(e) => onChange(key, e.target.value)}
-          placeholder={placeholder}
-          rows={2}
-          className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2.5 text-sm text-neutral-200 focus:outline-none focus:border-emerald-500 resize-none"
-        />
-      ) : (
-        <input
-          type={type}
-          step={type === "number" ? "0.01" : undefined}
-          value={values[key] ?? ""}
-          onChange={(e) => onChange(key, e.target.value)}
-          placeholder={placeholder}
-          className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2.5 text-sm text-neutral-200 focus:outline-none focus:border-emerald-500"
-        />
-      )}
-    </div>
-  );
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
-      <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-neutral-900 border border-neutral-800 rounded-t-2xl md:rounded-2xl p-5 space-y-4 shadow-2xl">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-bold text-white">{title}</h3>
-          <button onClick={onCancel} className="p-1.5 text-neutral-500 hover:text-white rounded-lg hover:bg-white/5 transition-colors"><X size={18} /></button>
-        </div>
-
-        {field("Item Name", "canonical_name", "text", "e.g. Betty's Classic")}
-        {field("Category", "category")}
-        {field("Description", "description", "text", "Short description...")}
-
-        <div className="grid grid-cols-2 gap-3">
-          {field("Wolt Price", "wolt_price", "number", "0.00")}
-          {field("Foody Price", "foody_price", "number", "0.00")}
-          {field("Bolt Price", "bolt_price", "number", "0.00")}
-          {field("POS Price", "pos_price", "number", "0.00")}
-        </div>
-
-        <div className="grid grid-cols-3 gap-3">
-          {field("Sort Order", "sort_order", "number", "0")}
-          {field("Servings", "servings", "number", "1")}
-          {field("Image URL", "image_url", "text", "https://...")}
-        </div>
-
-        <div className="flex items-center gap-3 pt-2">
-          <button
-            onClick={onSave}
-            disabled={saving || !values.canonical_name?.trim()}
-            className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-colors"
-          >
-            {saving ? "Saving..." : "Save"}
-          </button>
-          <button onClick={onCancel} className="px-5 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm font-medium rounded-xl transition-colors">
-            Cancel
-          </button>
-          {onDelete && (
-            <button onClick={onDelete} className="p-2.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl transition-colors" title="Delete item">
-              <Trash2 size={18} />
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Delete confirmation ─────────────────────────────────────
-function DeleteConfirm({ name, onConfirm, onCancel, deleting }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
-      <div className="relative bg-neutral-900 border border-neutral-800 rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl text-center space-y-4">
-        <div className="w-12 h-12 mx-auto rounded-full bg-red-500/10 flex items-center justify-center">
-          <Trash2 size={22} className="text-red-400" />
-        </div>
-        <h3 className="text-lg font-bold text-white">Delete Item</h3>
-        <p className="text-sm text-neutral-400">Are you sure you want to permanently delete <strong className="text-white">{name}</strong>? This cannot be undone.</p>
-        <div className="flex gap-3">
-          <button onClick={onCancel} className="flex-1 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm font-medium rounded-xl transition-colors">Cancel</button>
-          <button onClick={onConfirm} disabled={deleting} className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors">
-            {deleting ? "Deleting..." : "Delete"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Main page ───────────────────────────────────────────────
 export default function MenuPage() {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [activeCategory, setActiveCategory] = useState("All");
-  const [sortConfig, setSortConfig] = useState({ key: "__default", direction: "asc" });
-  const [togglingItems, setTogglingItems] = useState(new Set());
+  const [items, setItems] = useState(null);
+  const [failure, setFailure] = useState(null);
+  const [toast, setToast] = useState(null);
 
-  // Edit state
-  const [editingId, setEditingId] = useState(null);
-  const [editValues, setEditValues] = useState({});
+  const [category, setCategory] = useState("All");
+  const [query, setQuery] = useState("");
+  const [priceMode, setPriceMode] = useState("price");
+  const [flaggedOnly, setFlaggedOnly] = useState(false);
+  const [panel, setPanel] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [advanced, setAdvanced] = useState(false);
 
-  // Mobile edit modal
-  const [mobileEditItem, setMobileEditItem] = useState(null);
-  const [mobileEditValues, setMobileEditValues] = useState({});
+  // Bumped after every write, to pull the saved rows back rather than trusting
+  // the local copy to match what the database ended up with.
+  const [reloadKey, setReloadKey] = useState(0);
+  const reload = () => setReloadKey((k) => k + 1);
 
-  // Add modal
-  const [showAdd, setShowAdd] = useState(false);
-  const [addValues, setAddValues] = useState({ ...EMPTY_ITEM });
-
-  // Delete confirmation
-  const [deleteTarget, setDeleteTarget] = useState(null);
-  const [deleting, setDeleting] = useState(false);
-
-  // Fetch menu items
   useEffect(() => {
-    async function fetchItems() {
-      setLoading(true);
+    let cancelled = false;
+    (async () => {
       const { data, error } = await supabase.from("menu_items").select("*");
-      if (!error && data) setItems(data);
-      setLoading(false);
-    }
-    fetchItems();
-  }, []);
-
-  // Toggle is_active
-  const handleToggleActive = async (item) => {
-    const id = item.id;
-    const newVal = !item.is_active;
-    setTogglingItems((prev) => new Set(prev).add(id));
-    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, is_active: newVal } : i)));
-    const { error } = await supabase.from("menu_items").update({ is_active: newVal }).eq("id", id);
-    if (error) setItems((prev) => prev.map((i) => (i.id === id ? { ...i, is_active: !newVal } : i)));
-    setTogglingItems((prev) => { const n = new Set(prev); n.delete(id); return n; });
-  };
-
-  // Price discrepancy
-  const hasDeliveryDiscrepancy = (item) => {
-    const w = item.wolt_price;
-    if (w == null) return false;
-    return (item.foody_price != null && item.foody_price !== w) || (item.bolt_price != null && item.bolt_price !== w);
-  };
-
-  // ── Inline edit helpers (desktop) ──
-  const startEdit = (item) => {
-    setEditingId(item.id);
-    setEditValues({
-      canonical_name: item.canonical_name || "",
-      category: item.category || "Fried Chicken Combos",
-      description: item.description || "",
-      wolt_price: item.wolt_price ?? "",
-      foody_price: item.foody_price ?? "",
-      bolt_price: item.bolt_price ?? "",
-      pos_price: item.pos_price ?? "",
-      sort_order: item.sort_order ?? "",
-      image_url: item.image_url || "",
-      servings: item.servings ?? "",
-    });
-  };
-
-  const cancelEdit = () => { setEditingId(null); setEditValues({}); };
-
-  const saveEdit = async () => {
-    if (!editValues.canonical_name?.trim()) return;
-    setSaving(true);
-    try {
-      const payload = {
-        canonical_name: editValues.canonical_name.trim(),
-        category: editValues.category,
-        description: editValues.description?.trim() || null,
-        wolt_price: editValues.wolt_price !== "" ? Number(editValues.wolt_price) : null,
-        foody_price: editValues.foody_price !== "" ? Number(editValues.foody_price) : null,
-        bolt_price: editValues.bolt_price !== "" ? Number(editValues.bolt_price) : null,
-        pos_price: editValues.pos_price !== "" ? Number(editValues.pos_price) : null,
-        sort_order: editValues.sort_order !== "" ? Number(editValues.sort_order) : null,
-        image_url: editValues.image_url?.trim() || null,
-        servings: editValues.servings !== "" ? Number(editValues.servings) : null,
-      };
-      const { data, error } = await supabase.from("menu_items").update(payload).eq("id", editingId).select();
+      if (cancelled) return;
       if (error) {
-        console.error("Update error:", error);
-        alert("Failed to save: " + error.message);
-      } else {
-        setItems((prev) => prev.map((i) => (i.id === editingId ? { ...i, ...payload } : i)));
-        cancelEdit();
+        setFailure(error.message || "Could not load the menu.");
+        return;
       }
-    } catch (err) {
-      console.error("Save exception:", err);
-      alert("Failed to save: " + err.message);
-    }
-    setSaving(false);
-  };
-
-  // ── Mobile edit helpers ──
-  const startMobileEdit = (item) => {
-    setMobileEditItem(item);
-    setMobileEditValues({
-      canonical_name: item.canonical_name || "",
-      category: item.category || "Fried Chicken Combos",
-      description: item.description || "",
-      wolt_price: item.wolt_price ?? "",
-      foody_price: item.foody_price ?? "",
-      bolt_price: item.bolt_price ?? "",
-      pos_price: item.pos_price ?? "",
-      sort_order: item.sort_order ?? "",
-      image_url: item.image_url || "",
-      servings: item.servings ?? "",
-    });
-  };
-
-  const saveMobileEdit = async () => {
-    if (!mobileEditValues.canonical_name?.trim()) return;
-    setSaving(true);
-    try {
-      const payload = {
-        canonical_name: mobileEditValues.canonical_name.trim(),
-        category: mobileEditValues.category,
-        description: mobileEditValues.description?.trim() || null,
-        wolt_price: mobileEditValues.wolt_price !== "" ? Number(mobileEditValues.wolt_price) : null,
-        foody_price: mobileEditValues.foody_price !== "" ? Number(mobileEditValues.foody_price) : null,
-        bolt_price: mobileEditValues.bolt_price !== "" ? Number(mobileEditValues.bolt_price) : null,
-        pos_price: mobileEditValues.pos_price !== "" ? Number(mobileEditValues.pos_price) : null,
-        sort_order: mobileEditValues.sort_order !== "" ? Number(mobileEditValues.sort_order) : null,
-        image_url: mobileEditValues.image_url?.trim() || null,
-        servings: mobileEditValues.servings !== "" ? Number(mobileEditValues.servings) : null,
-      };
-      const { data, error } = await supabase.from("menu_items").update(payload).eq("id", mobileEditItem.id).select();
-      if (error) {
-        console.error("Update error:", error);
-        alert("Failed to save: " + error.message);
-      } else {
-        setItems((prev) => prev.map((i) => (i.id === mobileEditItem.id ? { ...i, ...payload } : i)));
-        setMobileEditItem(null);
-      }
-    } catch (err) {
-      console.error("Save exception:", err);
-      alert("Failed to save: " + err.message);
-    }
-    setSaving(false);
-  };
-
-  // ── Add item ──
-  const saveAdd = async () => {
-    if (!addValues.canonical_name?.trim()) return;
-    setSaving(true);
-    const payload = {
-      canonical_name: addValues.canonical_name.trim(),
-      category: addValues.category,
-      description: addValues.description?.trim() || null,
-      wolt_price: addValues.wolt_price !== "" ? Number(addValues.wolt_price) : null,
-      foody_price: addValues.foody_price !== "" ? Number(addValues.foody_price) : null,
-      bolt_price: addValues.bolt_price !== "" ? Number(addValues.bolt_price) : null,
-      pos_price: addValues.pos_price !== "" ? Number(addValues.pos_price) : null,
-      sort_order: addValues.sort_order !== "" ? Number(addValues.sort_order) : 0,
-      image_url: addValues.image_url?.trim() || null,
-      servings: addValues.servings !== "" ? Number(addValues.servings) : null,
-      is_active: true,
-      foody_pieces_per_unit: 1,
+      setFailure(null);
+      setItems(data || []);
+    })();
+    return () => {
+      cancelled = true;
     };
-    const { data, error } = await supabase.from("menu_items").insert(payload).select();
-    if (!error && data) {
-      setItems((prev) => [...prev, ...data]);
-      setShowAdd(false);
-      setAddValues({ ...EMPTY_ITEM });
+  }, [reloadKey]);
+
+  const model = useMemo(() => {
+    if (!items) return null;
+
+    const sorted = [...items].sort(
+      (a, b) =>
+        (CAT_ORDER[a.category] ?? 99) - (CAT_ORDER[b.category] ?? 99) ||
+        (a.sort_order ?? 999) - (b.sort_order ?? 999) ||
+        String(a.canonical_name).localeCompare(String(b.canonical_name))
+    );
+
+    // A delivery price at or below the in-store price means the platform's
+    // commission comes straight out of the margin.
+    const isFlagged = (it) =>
+      DELIVERY.some(
+        (d) =>
+          it[d.price] != null &&
+          it.pos_price != null &&
+          Number(it[d.price]) <= Number(it.pos_price)
+      );
+
+    const flagged = sorted.filter(isFlagged);
+
+    const q = query.trim().toLowerCase();
+    const visible = sorted
+      .filter((it) => category === "All" || it.category === category)
+      .filter((it) => !q || String(it.canonical_name).toLowerCase().includes(q))
+      .filter((it) => !flaggedOnly || isFlagged(it));
+
+    const chips = [
+      { name: "All", label: "All", count: sorted.length },
+      ...CATEGORIES.map((c) => ({
+        name: c.name,
+        label: c.short,
+        count: sorted.filter((it) => it.category === c.name).length,
+      })).filter((c) => c.count > 0),
+    ];
+
+    return { sorted, visible, flagged, isFlagged, chips, total: sorted.length };
+  }, [items, category, query, flaggedOnly]);
+
+  // ── Writes ───────────────────────────────────────────────────────────────
+
+  const toggleActive = async (item) => {
+    const next = !item.is_active;
+    // Move the switch immediately; put it back if the write is refused.
+    setItems((list) =>
+      list.map((it) => (it.id === item.id ? { ...it, is_active: next } : it))
+    );
+    const { error } = await supabase
+      .from("menu_items")
+      .update({ is_active: next })
+      .eq("id", item.id);
+    if (error) {
+      setItems((list) =>
+        list.map((it) => (it.id === item.id ? { ...it, is_active: !next } : it))
+      );
+      setToast({ type: "error", message: "Could not change availability" });
+      return;
     }
+    setToast({
+      type: "ok",
+      message: next
+        ? `${item.canonical_name} is orderable again`
+        : `${item.canonical_name} is hidden from customers`,
+    });
+  };
+
+  const openPanel = (item) => {
+    setAdvanced(false);
+    if (!item) {
+      setPanel({ mode: "add", form: { ...EMPTY_FORM }, error: "" });
+      return;
+    }
+    setPanel({
+      mode: "edit",
+      id: item.id,
+      name: item.canonical_name,
+      error: "",
+      form: {
+        canonical_name: item.canonical_name ?? "",
+        category: item.category ?? "Fried Chicken Combos",
+        description: item.description ?? "",
+        pos_price: money(item.pos_price),
+        wolt_price: money(item.wolt_price),
+        foody_price: money(item.foody_price),
+        bolt_price: money(item.bolt_price),
+        servings: item.servings ?? "",
+        sort_order: item.sort_order ?? "",
+        image_url: item.image_url ?? "",
+        pos_name: item.pos_name ?? "",
+        wolt_name: item.wolt_name ?? "",
+        foody_name: item.foody_name ?? "",
+        bolt_name: item.bolt_name ?? "",
+        foody_pieces_per_unit: item.foody_pieces_per_unit ?? "",
+      },
+    });
+  };
+
+  const setField = (key, value) =>
+    setPanel((p) => (p ? { ...p, form: { ...p.form, [key]: value }, error: "" } : p));
+
+  const save = async () => {
+    if (!panel) return;
+    const f = panel.form;
+
+    if (!f.canonical_name.trim()) {
+      setPanel({ ...panel, error: "Give the item a name." });
+      return;
+    }
+
+    const prices = {};
+    for (const key of ["pos_price", "wolt_price", "foody_price", "bolt_price"]) {
+      const value = parsePrice(f[key]);
+      if (value === undefined) {
+        setPanel({ ...panel, error: `${key.split("_")[0].toUpperCase()} is not a price.` });
+        return;
+      }
+      prices[key] = value;
+    }
+
+    const payload = {
+      canonical_name: f.canonical_name.trim(),
+      category: f.category,
+      description: f.description.trim() || null,
+      ...prices,
+      servings: f.servings === "" ? null : Number(f.servings) || null,
+      sort_order: f.sort_order === "" ? null : Number(f.sort_order) || null,
+      image_url: f.image_url.trim() || null,
+      pos_name: f.pos_name.trim() || null,
+      wolt_name: f.wolt_name.trim() || null,
+      foody_name: f.foody_name.trim() || null,
+      bolt_name: f.bolt_name.trim() || null,
+      foody_pieces_per_unit:
+        f.foody_pieces_per_unit === "" ? null : Number(f.foody_pieces_per_unit) || null,
+    };
+
+    setSaving(true);
+    const { error } =
+      panel.mode === "add"
+        ? await supabase.from("menu_items").insert({ ...payload, is_active: true })
+        : await supabase.from("menu_items").update(payload).eq("id", panel.id);
     setSaving(false);
-  };
 
-  // ── Delete item ──
-  const handleDelete = async (id) => {
-    setDeleting(true);
-    const { error } = await supabase.from("menu_items").delete().eq("id", id);
-    if (!error) {
-      setItems((prev) => prev.filter((i) => i.id !== id));
-      setDeleteTarget(null);
-      setMobileEditItem(null);
-      cancelEdit();
+    if (error) {
+      setPanel({ ...panel, error: error.message || "Could not save." });
+      return;
     }
-    setDeleting(false);
+    setPanel(null);
+    setToast({
+      type: "ok",
+      message: panel.mode === "add" ? "Item added" : "Item saved",
+    });
+    reload();
   };
 
-  // ── Filtered + sorted items ──
-  const displayItems = useMemo(() => {
-    let filtered = items;
-    if (activeCategory !== "All") filtered = filtered.filter((i) => i.category === activeCategory);
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      filtered = filtered.filter((i) => i.canonical_name.toLowerCase().includes(q));
+  const remove = async () => {
+    if (!panel?.id) return;
+    setSaving(true);
+    const { error } = await supabase.from("menu_items").delete().eq("id", panel.id);
+    setSaving(false);
+    if (error) {
+      setPanel({ ...panel, error: error.message || "Could not delete." });
+      return;
     }
-    const sorted = [...filtered];
-    if (sortConfig.key === "__default") {
-      sorted.sort((a, b) => {
-        const catA = CATEGORY_ORDER[a.category] ?? 99;
-        const catB = CATEGORY_ORDER[b.category] ?? 99;
-        if (catA !== catB) return catA - catB;
-        return (b.wolt_price || 0) - (a.wolt_price || 0);
-      });
-    } else {
-      sorted.sort((a, b) => {
-        let aVal = a[sortConfig.key], bVal = b[sortConfig.key];
-        if (sortConfig.key === "category") { aVal = CATEGORY_ORDER[aVal] ?? 99; bVal = CATEGORY_ORDER[bVal] ?? 99; }
-        if (typeof aVal === "string") aVal = aVal.toLowerCase();
-        if (typeof bVal === "string") bVal = bVal.toLowerCase();
-        if (aVal == null && bVal == null) return 0;
-        if (aVal == null) return 1;
-        if (bVal == null) return -1;
-        if (aVal < bVal) return sortConfig.direction === "asc" ? -1 : 1;
-        if (aVal > bVal) return sortConfig.direction === "asc" ? 1 : -1;
-        return 0;
-      });
-    }
-    return sorted;
-  }, [items, activeCategory, search, sortConfig]);
-
-  const handleSort = (key) => {
-    if (sortConfig.key === key) setSortConfig({ key, direction: sortConfig.direction === "asc" ? "desc" : "asc" });
-    else setSortConfig({ key, direction: "asc" });
+    setPanel(null);
+    setToast({ type: "ok", message: "Item deleted" });
+    reload();
   };
 
-  const SortArrow = ({ columnKey }) => {
-    if (sortConfig.key !== columnKey) return <span className="text-neutral-700 ml-1">↕</span>;
-    return sortConfig.direction === "asc" ? <span className="text-emerald-500 ml-1">↑</span> : <span className="text-emerald-500 ml-1">↓</span>;
-  };
+  // ── Render ───────────────────────────────────────────────────────────────
 
-  const categoryCounts = useMemo(() => {
-    const counts = { All: items.length };
-    CATEGORIES.forEach((c) => { counts[c] = items.filter((i) => i.category === c).length; });
-    return counts;
-  }, [items]);
-
-  const columns = [
-    { key: "canonical_name", label: "Item", align: "left" },
-    { key: "category", label: "Category", align: "left" },
-    { key: "wolt_price", label: "Wolt", align: "right" },
-    { key: "foody_price", label: "Foody", align: "right" },
-    { key: "bolt_price", label: "Bolt", align: "right" },
-    { key: "pos_price", label: "POS", align: "right" },
-    { key: "is_active", label: "Active", align: "center" },
-    { key: "__edit", label: "", align: "center", noSort: true },
-  ];
-
-  if (loading) {
+  if (failure) {
     return (
-      <div className="space-y-6">
-        <div><SkeletonBlock className="h-7 w-24 mb-2" /><SkeletonBlock className="h-4 w-72" /></div>
-        <div className="flex gap-2">{[...Array(5)].map((_, i) => <SkeletonBlock key={i} className="h-9 w-28 rounded-xl" />)}</div>
-        <SkeletonBlock className="h-10 w-64 rounded-xl" />
-        <div className="bg-neutral-900 rounded-2xl border border-neutral-800 shadow-lg overflow-hidden">
-          <div className="flex items-center gap-4 px-6 py-4 border-b border-neutral-800"><SkeletonBlock className="h-3 w-40" /><SkeletonBlock className="h-3 w-24" /><SkeletonBlock className="h-3 flex-1" /><SkeletonBlock className="h-3 w-16" /><SkeletonBlock className="h-3 w-16" /></div>
-          {[...Array(8)].map((_, i) => <div key={i} className="flex items-center gap-4 px-6 py-4 border-b border-neutral-800/50"><SkeletonBlock className="h-4 w-40" /><SkeletonBlock className="h-4 w-24" /><SkeletonBlock className="h-4 flex-1" /><SkeletonBlock className="h-4 w-16" /><SkeletonBlock className="h-5 w-10 rounded-full" /></div>)}
-        </div>
+      <div className="flex flex-col gap-4 md:gap-5">
+        <PageHeader title="Menu" />
+        <EmptyState
+          icon={TriangleAlert}
+          title="Could not load the menu"
+          body={failure}
+          action="Try again"
+          onAction={reload}
+        />
       </div>
     );
   }
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-white tracking-tight">Menu</h1>
-        <p className="text-sm text-neutral-400 mt-1">Manage menu items, pricing, and availability.</p>
-      </div>
+  if (!model) {
+    return <LoadingState kpis={0} shape="list" line="LOADING MENU ITEMS · 4 PRICE LISTS" />;
+  }
 
-      {/* Top Bar */}
-      <div className="bg-neutral-900 p-4 rounded-2xl border border-neutral-800 shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="relative w-full sm:w-72">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+  const header = (
+    <PageHeader
+      title="Menu"
+      sub="Items, prices per platform, and what customers can order right now"
+      right={
+        <button
+          onClick={() => openPanel(null)}
+          className="flex items-center gap-[7px] h-8 px-3 rounded-md bg-ink-strong text-surface text-[13px] font-medium hover:bg-ink"
+        >
+          <Plus size={14} strokeWidth={2} />
+          Add item
+        </button>
+      }
+    />
+  );
+
+  if (model.total === 0) {
+    return (
+      <div className="flex flex-col gap-4 md:gap-5">
+        {header}
+        <EmptyState
+          title="The menu is empty"
+          body="No items have been added yet. Add the first one and it will appear on every platform price list."
+          action="Add the first item"
+          onAction={() => openPanel(null)}
+        />
+        <Toast toast={toast} onDone={() => setToast(null)} />
+      </div>
+    );
+  }
+
+  const priceCell = (item, field) => {
+    const value = item[field];
+    if (value == null) return { text: "—", tone: "text-muted" };
+    const pos = item.pos_price;
+    const under = pos != null && Number(value) <= Number(pos);
+    if (priceMode === "price") {
+      return { text: euro2(value), tone: under ? "text-danger" : "" };
+    }
+    if (pos == null || Number(pos) === 0) return { text: "—", tone: "text-muted" };
+    const markup = (Number(value) / Number(pos) - 1) * 100;
+    return {
+      text: markup <= 0.01 ? "0%" : `+${markup.toFixed(0)}%`,
+      tone: markup <= 0.01 ? "text-danger" : "text-muted",
+    };
+  };
+
+  const cols =
+    "grid-cols-[minmax(0,1fr)_58px_58px_30px] md:grid-cols-[minmax(0,1.5fr)_92px_64px_64px_64px_64px_46px_44px_34px]";
+
+  return (
+    <div className="flex flex-col gap-4 md:gap-5">
+      {header}
+
+      {model.flagged.length > 0 && !flaggedOnly && (
+        <div className="flex items-center gap-2.5 px-4 py-3 border border-line rounded-[10px] bg-wash-light flex-wrap">
+          <CircleAlert size={15} strokeWidth={2} className="text-danger shrink-0" />
+          <span className="text-[13px] flex-1 min-w-0 text-pretty">
+            {model.flagged.length} item{model.flagged.length > 1 ? "s" : ""} cost the same
+            on delivery as in-store — the platform commission comes straight out of your
+            margin.
+          </span>
+          <button
+            onClick={() => {
+              setFlaggedOnly(true);
+              setCategory("All");
+              setQuery("");
+            }}
+            className="h-7 px-2.5 border border-line rounded-md bg-surface text-[12px] font-medium hover:border-line-strong"
+          >
+            Show them
+          </button>
+        </div>
+      )}
+
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        {model.chips.map((c) => {
+          const on = category === c.name;
+          return (
+            <button
+              key={c.name}
+              onClick={() => setCategory(c.name)}
+              className={`flex items-center gap-1.5 h-8 px-[11px] rounded-lg border text-[13px] whitespace-nowrap ${
+                on
+                  ? "border-ink-strong bg-ink-strong text-surface"
+                  : "border-line bg-surface text-muted hover:border-line-strong"
+              }`}
+            >
+              {c.label}
+              <span
+                className={`font-mono text-[11px] ${on ? "text-surface/60" : "text-subtle"}`}
+              >
+                {c.count}
+              </span>
+            </button>
+          );
+        })}
+        <div className="flex-1 min-w-1" />
+        <Segmented options={PRICE_MODES} value={priceMode} onChange={setPriceMode} />
+        <div className="flex items-center gap-2 h-8 px-2.5 border border-line rounded-lg bg-surface min-w-[160px]">
+          <Search size={14} strokeWidth={2} className="text-subtle shrink-0" />
           <input
-            type="text" placeholder="Search items..." value={search} onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-neutral-950 border border-neutral-800 rounded-xl pl-9 pr-4 py-2 text-sm text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-emerald-500/50 transition-colors"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search items"
+            className="flex-1 min-w-0 bg-transparent text-[13px] outline-none placeholder:text-faint"
           />
         </div>
-        <button
-          onClick={() => { setShowAdd(true); setAddValues({ ...EMPTY_ITEM }); }}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold rounded-xl transition-colors shrink-0"
+      </div>
+
+      <Card>
+        <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+          <span className="font-mono text-[11px] text-subtle">
+            {model.visible.length} of {model.total} items
+          </span>
+          {flaggedOnly && (
+            <button
+              onClick={() => setFlaggedOnly(false)}
+              className="h-7 px-2.5 border border-line rounded-md bg-surface text-[12px] text-muted hover:border-line-strong hover:text-ink"
+            >
+              Showing flagged only · clear
+            </button>
+          )}
+        </div>
+
+        <div
+          className={`grid gap-2 px-4 pb-2 font-mono text-[11px] tracking-[0.05em] text-muted ${cols}`}
         >
-          <Plus size={16} /> Add Item
-        </button>
-      </div>
+          <span>ITEM</span>
+          <span className="hidden md:block">CATEGORY</span>
+          <span className="text-right">POS</span>
+          {DELIVERY.map((d) => (
+            <span key={d.id} className="text-right hidden md:block">
+              {d.label}
+            </span>
+          ))}
+          <span className="hidden md:block text-right">SERVES</span>
+          <span className="text-center">ON</span>
+          <span />
+        </div>
 
-      {/* Category Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
-        {["All", ...CATEGORIES].map((cat) => (
-          <button
-            key={cat}
-            onClick={() => { setActiveCategory(cat); setSortConfig({ key: "__default", direction: "asc" }); cancelEdit(); }}
-            className={`whitespace-nowrap px-4 py-2 rounded-xl text-xs font-semibold transition-all border ${activeCategory === cat ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400" : "bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-white hover:border-neutral-700"}`}
-          >
-            {cat}{cat === "All" && <span className="ml-1.5 text-neutral-500">({categoryCounts[cat] || 0})</span>}
-          </button>
-        ))}
-      </div>
+        {model.visible.length === 0 && (
+          <p className="px-4 py-8 border-t border-line text-[13px] text-muted text-center">
+            Nothing matches these filters.
+          </p>
+        )}
 
-      {/* ─── Mobile cards ─── */}
-      <div className="md:hidden space-y-3">
-        {displayItems.length === 0 ? (
-          <div className="p-8 text-center text-sm text-neutral-500 bg-neutral-900 rounded-2xl border border-neutral-800">
-            {search.trim() ? "No items match your search" : "No items in this category"}
-          </div>
-        ) : displayItems.map((item) => {
-          const dimmed = !item.is_active;
-          const toggling = togglingItems.has(item.id);
+        {model.visible.map((item) => {
+          const cat = CAT[item.category] ?? { short: item.category, color: "#8f8f8f" };
+          const flagged = model.isFlagged(item);
           return (
-            <div key={item.id} className="bg-neutral-900 rounded-2xl border border-neutral-800 p-4" style={{ opacity: dimmed ? 0.5 : 1 }}>
-              <div className="flex items-start justify-between mb-2">
-                <div>
-                  <p className="text-sm font-bold text-white">{item.canonical_name}</p>
-                  <span className="inline-block mt-1 px-2 py-0.5 rounded-md text-[9px] font-bold uppercase" style={{ backgroundColor: `${CATEGORY_COLORS[item.category] || CATEGORY_COLORS.Unknown}20`, color: CATEGORY_COLORS[item.category] || CATEGORY_COLORS.Unknown }}>{item.category}</span>
+            <div
+              key={item.id}
+              className={`grid gap-2 px-4 py-2.5 border-t border-line items-center hover:bg-wash-light ${cols}`}
+            >
+              <div className="min-w-0 flex items-start gap-2">
+                <span
+                  className="w-2 h-2 rounded-[2px] shrink-0 mt-[5px]"
+                  style={{ background: cat.color }}
+                />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className={`text-[13px] font-medium truncate ${
+                        item.is_active ? "" : "text-subtle"
+                      }`}
+                    >
+                      {item.canonical_name}
+                    </span>
+                    {flagged && (
+                      <span
+                        title="Priced at or below the in-store price"
+                        className="w-[5px] h-[5px] rounded-full bg-danger shrink-0"
+                      />
+                    )}
+                    {!item.is_active && (
+                      <span className="font-mono text-[10px] text-subtle border border-line rounded px-1 shrink-0">
+                        HIDDEN
+                      </span>
+                    )}
+                  </div>
+                  {item.description && (
+                    <div className="text-[11px] text-subtle truncate">{item.description}</div>
+                  )}
+                  <div className="md:hidden font-mono text-[11px] text-subtle">
+                    {cat.short}
+                  </div>
                 </div>
-                <button onClick={() => handleToggleActive(item)} disabled={toggling} className="shrink-0" style={{ opacity: dimmed ? 1 / 0.5 : 1 }}>
-                  <div className={`relative w-9 h-5 rounded-full transition-colors ${item.is_active ? "bg-emerald-500" : "bg-neutral-700"}`}>
-                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${item.is_active ? "translate-x-[18px]" : "translate-x-0.5"}`} />
-                  </div>
-                </button>
               </div>
-              {item.description && <p className="text-xs text-neutral-500 mb-2">{item.description}</p>}
-              <div className="grid grid-cols-4 gap-2 text-center mb-3">
-                {[["Wolt", item.wolt_price], ["Foody", item.foody_price], ["Bolt", item.bolt_price], ["POS", item.pos_price]].map(([lbl, val]) => (
-                  <div key={lbl}>
-                    <p className="text-[9px] text-neutral-600 uppercase">{lbl}</p>
-                    <p className="text-xs font-semibold text-neutral-300">{val != null ? formatPrice(val) : "—"}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => startMobileEdit(item)} className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-neutral-400 hover:text-white bg-neutral-800 hover:bg-neutral-700 rounded-lg transition-colors">
-                  <Pencil size={12} /> Edit
-                </button>
-                <button onClick={() => setDeleteTarget(item)} className="px-3 py-2 text-xs text-red-400 hover:text-red-300 bg-neutral-800 hover:bg-red-500/10 rounded-lg transition-colors">
-                  <Trash2 size={12} />
-                </button>
-              </div>
+
+              <span className="hidden md:block font-mono text-[12px] text-muted truncate">
+                {cat.short}
+              </span>
+
+              {/* Always plain: POS is the baseline the others are judged against,
+                  so it has nothing to be flagged for. */}
+              <span className="font-mono text-[13px] tabular-nums text-right">
+                {item.pos_price == null ? "—" : euro2(item.pos_price)}
+              </span>
+
+              {DELIVERY.map((d) => {
+                const c = priceCell(item, d.price);
+                return (
+                  <span
+                    key={d.id}
+                    className={`hidden md:block font-mono text-[13px] tabular-nums text-right ${c.tone}`}
+                  >
+                    {c.text}
+                  </span>
+                );
+              })}
+
+              <span className="hidden md:block font-mono text-[13px] text-right text-muted">
+                {item.servings ?? "—"}
+              </span>
+
+              <button
+                onClick={() => toggleActive(item)}
+                title={item.is_active ? "Hide from customers" : "Make orderable"}
+                className="justify-self-center w-8 h-[18px] rounded-full relative transition-colors shrink-0"
+                style={{ background: item.is_active ? "#171717" : "#e5e5e5" }}
+              >
+                <span
+                  className="absolute top-[2px] w-3.5 h-3.5 rounded-full bg-white transition-all"
+                  style={{ left: item.is_active ? "16px" : "2px" }}
+                />
+              </button>
+
+              <button
+                onClick={() => openPanel(item)}
+                title="Edit"
+                className="justify-self-end w-7 h-7 flex items-center justify-center rounded-md text-subtle hover:text-ink hover:bg-wash shrink-0"
+              >
+                <Pencil size={13} strokeWidth={1.75} />
+              </button>
             </div>
           );
         })}
-      </div>
+      </Card>
 
-      {/* ─── Desktop table ─── */}
-      <div className="hidden md:block bg-neutral-900 rounded-2xl border border-neutral-800 shadow-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="bg-neutral-950/50">
-              <tr>
-                {columns.map((col) => (
-                  <th key={col.key} className={`px-5 py-3.5 text-[11px] font-semibold text-neutral-400 uppercase tracking-wider ${col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left"} ${!col.noSort ? "cursor-pointer select-none hover:text-neutral-200 transition-colors" : ""}`} onClick={() => !col.noSort && handleSort(col.key)}>
-                    <span className="inline-flex items-center">{col.label}{!col.noSort && <SortArrow columnKey={col.key} />}</span>
-                  </th>
+      {/* Add / edit */}
+      <SidePanel
+        open={!!panel}
+        title={panel?.mode === "add" ? "New menu item" : "Edit item"}
+        onClose={() => setPanel(null)}
+        footer={
+          <div className="px-4 py-3 flex gap-2">
+            <button
+              onClick={save}
+              disabled={saving}
+              className="flex-1 min-h-9 rounded-md bg-ink-strong text-surface text-[13px] font-medium hover:bg-ink disabled:opacity-50"
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
+            <button
+              onClick={() => setPanel(null)}
+              className="min-h-9 px-3 border border-line rounded-md bg-surface text-[13px] hover:border-line-strong"
+            >
+              Cancel
+            </button>
+            {panel?.mode === "edit" && (
+              <button
+                onClick={remove}
+                disabled={saving}
+                className="min-h-9 px-3 border border-line rounded-md bg-surface text-[13px] text-danger hover:border-danger disabled:opacity-50"
+              >
+                Delete
+              </button>
+            )}
+          </div>
+        }
+      >
+        {panel && (
+          <div className="p-4 flex flex-col gap-3.5">
+            <div>
+              <label className={FIELD_LABEL}>Item name</label>
+              <input
+                value={panel.form.canonical_name}
+                onChange={(e) => setField("canonical_name", e.target.value)}
+                placeholder="e.g. Crispy Chicken Burger"
+                className={FIELD_INPUT}
+              />
+            </div>
+
+            <div>
+              <label className={FIELD_LABEL}>Category</label>
+              <select
+                value={panel.form.category}
+                onChange={(e) => setField("category", e.target.value)}
+                className={FIELD_INPUT}
+              >
+                {CATEGORIES.map((c) => (
+                  <option key={c.name} value={c.name}>
+                    {c.name}
+                  </option>
                 ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-800/60">
-              {displayItems.length === 0 ? (
-                <tr><td colSpan={columns.length} className="px-6 py-16 text-center"><p className="text-sm text-neutral-500">{search.trim() ? "No items match your search" : "No items in this category"}</p></td></tr>
-              ) : displayItems.map((item) => {
-                const isEditing = editingId === item.id;
-                const discrepancy = hasDeliveryDiscrepancy(item);
-                const dimmed = !item.is_active && !isEditing;
-                const toggling = togglingItems.has(item.id);
+              </select>
+            </div>
 
-                const priceCell = (val, flagDiff) => {
-                  if (val == null) return <span className="text-neutral-600">—</span>;
-                  const differs = flagDiff && item.wolt_price != null && val !== item.wolt_price;
-                  return <span className={differs ? "text-amber-400 font-semibold" : "text-neutral-300"}>{formatPrice(val)}</span>;
-                };
+            <div>
+              <label className={FIELD_LABEL}>Description</label>
+              <textarea
+                value={panel.form.description}
+                onChange={(e) => setField("description", e.target.value)}
+                rows={2}
+                placeholder="What is in it"
+                className="w-full px-2.5 py-2 border border-line rounded-md bg-surface text-[13px] outline-none focus:border-ink-strong resize-none placeholder:text-faint"
+              />
+            </div>
 
-                return (
-                  <React.Fragment key={item.id}>
-                  <tr className={`hover:bg-neutral-800/20 transition-colors group ${isEditing ? "bg-neutral-800/30" : ""}`} style={{ opacity: dimmed ? 0.45 : 1 }}>
-                    {/* Item name */}
-                    <td className="px-5 py-3">
-                      {isEditing ? (
-                        <EditableCell value={editValues.canonical_name} onChange={(v) => setEditValues((p) => ({ ...p, canonical_name: v }))} onSave={saveEdit} placeholder="Item name" />
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold text-white group-hover:text-emerald-400 transition-colors">{item.canonical_name}</span>
-                          {discrepancy && <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Price discrepancy" />}
-                        </div>
-                      )}
-                    </td>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                ["POS price", "pos_price"],
+                ["Wolt", "wolt_price"],
+                ["Foody", "foody_price"],
+                ["Bolt", "bolt_price"],
+              ].map(([label, key]) => (
+                <div key={key}>
+                  <label className={FIELD_LABEL}>{label}</label>
+                  <input
+                    inputMode="decimal"
+                    value={panel.form[key]}
+                    onChange={(e) => setField(key, e.target.value)}
+                    placeholder="0.00"
+                    className={FIELD_INPUT}
+                  />
+                </div>
+              ))}
+            </div>
 
-                    {/* Category */}
-                    <td className="px-5 py-3">
-                      {isEditing ? (
-                        <select value={editValues.category} onChange={(e) => setEditValues((p) => ({ ...p, category: e.target.value }))} className="bg-neutral-950 border border-neutral-700 focus:border-emerald-500 rounded-lg px-2 py-1.5 text-[10px] font-bold text-neutral-200 focus:outline-none uppercase">
-                          {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                      ) : (
-                        <span className="inline-block px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide" style={{ backgroundColor: `${CATEGORY_COLORS[item.category] || CATEGORY_COLORS.Unknown}20`, color: CATEGORY_COLORS[item.category] || CATEGORY_COLORS.Unknown }}>{item.category}</span>
-                      )}
-                    </td>
+            <div className="w-[120px]">
+              <label className={FIELD_LABEL}>Serves</label>
+              <input
+                inputMode="numeric"
+                value={panel.form.servings}
+                onChange={(e) => setField("servings", e.target.value)}
+                placeholder="1"
+                className={FIELD_INPUT}
+              />
+            </div>
 
-                    {/* Prices */}
-                    {["wolt_price", "foody_price", "bolt_price", "pos_price"].map((key) => (
-                      <td key={key} className="px-5 py-3 text-right text-sm">
-                        {isEditing ? (
-                          <EditableCell type="number" value={editValues[key]} onChange={(v) => setEditValues((p) => ({ ...p, [key]: v }))} onSave={saveEdit} align="right" placeholder="0.00" />
-                        ) : (
-                          priceCell(item[key], key === "foody_price" || key === "bolt_price")
-                        )}
-                      </td>
-                    ))}
+            <p className="text-[12px] text-subtle text-pretty">
+              Delivery prices usually sit 15–25% above the in-store price to cover the
+              platform commission.
+            </p>
 
-                    {/* Active toggle */}
-                    <td className="px-5 py-3 text-center">
-                      <button onClick={(e) => { e.stopPropagation(); handleToggleActive(item); }} disabled={toggling} className="inline-flex items-center cursor-pointer disabled:cursor-wait" style={{ opacity: dimmed ? 1 / 0.45 : 1 }}>
-                        <div className={`relative w-9 h-5 rounded-full transition-colors ${item.is_active ? "bg-emerald-500" : "bg-neutral-700"}`}>
-                          <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${item.is_active ? "translate-x-[18px]" : "translate-x-0.5"}`} />
-                        </div>
-                      </button>
-                    </td>
+            {/* The fields the design left out. They are not decoration: the
+                per-platform names are what match order lines to this item on
+                Products, and sort order and photo drive the QR menu and the
+                in-store boards. */}
+            <button
+              onClick={() => setAdvanced((v) => !v)}
+              className="flex items-center gap-1.5 text-[12px] font-medium text-muted hover:text-ink w-fit"
+            >
+              <ChevronDown
+                size={14}
+                strokeWidth={2}
+                style={{ transform: advanced ? "rotate(180deg)" : "none" }}
+              />
+              Advanced
+            </button>
 
-                    {/* Edit / Save / Delete */}
-                    <td className="px-5 py-3 text-center">
-                      {isEditing ? (
-                        <div className="flex items-center justify-center gap-1.5">
-                          <button onClick={saveEdit} disabled={saving} className="px-2.5 py-1.5 text-xs font-semibold text-white bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 rounded-lg transition-colors" title="Save">Save</button>
-                          <button onClick={cancelEdit} className="px-2 py-1.5 text-xs text-neutral-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors" title="Cancel">Cancel</button>
-                          <button onClick={() => setDeleteTarget(item)} className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors" title="Delete"><Trash2 size={14} /></button>
-                        </div>
-                      ) : (
-                        <button onClick={() => startEdit(item)} className="text-[11px] text-neutral-500 hover:text-neutral-300 transition-colors cursor-pointer inline-flex items-center gap-1">
-                          <Pencil size={11} /> Edit
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                  {isEditing && (
-                    <tr className="bg-neutral-800/20">
-                      <td colSpan={columns.length} className="px-5 py-3">
-                        <div className="grid grid-cols-4 gap-4">
-                          <div>
-                            <label className="block text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-1">Description</label>
-                            <textarea
-                              value={editValues.description ?? ""}
-                              onChange={(e) => setEditValues((p) => ({ ...p, description: e.target.value }))}
-                              rows={2}
-                              placeholder="Short description..."
-                              className="w-full bg-neutral-950 border border-neutral-700 focus:border-emerald-500 rounded-lg px-2 py-1.5 text-sm text-neutral-200 focus:outline-none transition-colors resize-none"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-1">Sort Order</label>
-                            <input
-                              type="number"
-                              value={editValues.sort_order ?? ""}
-                              onChange={(e) => setEditValues((p) => ({ ...p, sort_order: e.target.value }))}
-                              onKeyDown={(e) => { if (e.key === "Enter") saveEdit(); }}
-                              placeholder="0"
-                              className="w-full bg-neutral-950 border border-neutral-700 focus:border-emerald-500 rounded-lg px-2 py-1.5 text-sm text-neutral-200 focus:outline-none transition-colors"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-1">Servings</label>
-                            <input
-                              type="number"
-                              value={editValues.servings ?? ""}
-                              onChange={(e) => setEditValues((p) => ({ ...p, servings: e.target.value }))}
-                              onKeyDown={(e) => { if (e.key === "Enter") saveEdit(); }}
-                              placeholder="1"
-                              className="w-full bg-neutral-950 border border-neutral-700 focus:border-emerald-500 rounded-lg px-2 py-1.5 text-sm text-neutral-200 focus:outline-none transition-colors"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-1">Image URL</label>
-                            <input
-                              type="text"
-                              value={editValues.image_url ?? ""}
-                              onChange={(e) => setEditValues((p) => ({ ...p, image_url: e.target.value }))}
-                              onKeyDown={(e) => { if (e.key === "Enter") saveEdit(); }}
-                              placeholder="https://..."
-                              className="w-full bg-neutral-950 border border-neutral-700 focus:border-emerald-500 rounded-lg px-2 py-1.5 text-sm text-neutral-200 focus:outline-none transition-colors"
-                            />
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            {advanced && (
+              <div className="flex flex-col gap-3.5 pt-1">
+                <p className="text-[12px] text-subtle text-pretty">
+                  Each platform prints the name its own way. These are what match an order
+                  line back to this item — leave one blank and its sales go uncounted on
+                  Products.
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    ["Name on POS", "pos_name"],
+                    ["Name on Wolt", "wolt_name"],
+                    ["Name on Foody", "foody_name"],
+                    ["Name on Bolt", "bolt_name"],
+                  ].map(([label, key]) => (
+                    <div key={key}>
+                      <label className={FIELD_LABEL}>{label}</label>
+                      <input
+                        value={panel.form[key]}
+                        onChange={(e) => setField(key, e.target.value)}
+                        placeholder={panel.form.canonical_name || "—"}
+                        className={FIELD_INPUT}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={FIELD_LABEL}>Sort order</label>
+                    <input
+                      inputMode="numeric"
+                      value={panel.form.sort_order}
+                      onChange={(e) => setField("sort_order", e.target.value)}
+                      placeholder="0"
+                      className={FIELD_INPUT}
+                    />
+                  </div>
+                  <div>
+                    <label className={FIELD_LABEL}>Foody pieces / unit</label>
+                    <input
+                      inputMode="numeric"
+                      value={panel.form.foody_pieces_per_unit}
+                      onChange={(e) => setField("foody_pieces_per_unit", e.target.value)}
+                      placeholder="1"
+                      className={FIELD_INPUT}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className={FIELD_LABEL}>Photo URL</label>
+                  <input
+                    value={panel.form.image_url}
+                    onChange={(e) => setField("image_url", e.target.value)}
+                    placeholder="https://…"
+                    className={FIELD_INPUT}
+                  />
+                </div>
+              </div>
+            )}
 
-      {/* ─── Modals ─── */}
-      {showAdd && (
-        <ItemModal
-          title="Add Menu Item"
-          values={addValues}
-          onChange={(k, v) => setAddValues((p) => ({ ...p, [k]: v }))}
-          onSave={saveAdd}
-          onCancel={() => setShowAdd(false)}
-          saving={saving}
-        />
-      )}
+            {panel.error && (
+              <p className="text-[12px] text-danger bg-[rgba(238,0,0,0.04)] border border-[rgba(238,0,0,0.15)] rounded-md px-3 py-2">
+                {panel.error}
+              </p>
+            )}
+          </div>
+        )}
+      </SidePanel>
 
-      {mobileEditItem && (
-        <ItemModal
-          title="Edit Item"
-          values={mobileEditValues}
-          onChange={(k, v) => setMobileEditValues((p) => ({ ...p, [k]: v }))}
-          onSave={saveMobileEdit}
-          onCancel={() => setMobileEditItem(null)}
-          onDelete={() => { setDeleteTarget(mobileEditItem); }}
-          saving={saving}
-        />
-      )}
-
-      {deleteTarget && (
-        <DeleteConfirm
-          name={deleteTarget.canonical_name}
-          onConfirm={() => handleDelete(deleteTarget.id)}
-          onCancel={() => setDeleteTarget(null)}
-          deleting={deleting}
-        />
-      )}
+      <Toast toast={toast} onDone={() => setToast(null)} />
     </div>
   );
 }

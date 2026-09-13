@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { ArrowUpRight, Calendar, X } from "lucide-react";
 import { sparkPath } from "../../lib/format";
 
@@ -306,3 +307,38 @@ export const PLATFORM = {
   pos: { name: "In-store POS", color: "#171717" },
   google: { name: "Google", color: "#ee0000" },
 };
+
+/**
+ * A short-lived confirmation or failure notice.
+ *
+ * The write-capable screens all need one: an edit that silently fails looks
+ * exactly like an edit that worked until the page is reloaded.
+ */
+export function Toast({ toast, onDone, after = 3200 }) {
+  useEffect(() => {
+    if (!toast || !onDone) return;
+    const id = setTimeout(onDone, after);
+    return () => clearTimeout(id);
+  }, [toast, onDone, after]);
+
+  if (!toast) return null;
+  const bad = toast.type === "error";
+  return (
+    <div
+      className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-[110] px-4 py-2.5 rounded-lg text-[13px] font-medium shadow-lg max-w-[90vw]"
+      style={{
+        background: bad ? "var(--color-danger)" : "var(--color-ink-strong)",
+        color: "#fff",
+        animation: "riseIn .12s ease",
+      }}
+    >
+      {toast.message}
+    </div>
+  );
+}
+
+/** Field label and input styling shared by every side panel. */
+export const FIELD_LABEL =
+  "block font-mono text-[10px] tracking-[0.06em] text-muted uppercase mb-1.5";
+export const FIELD_INPUT =
+  "w-full h-9 px-2.5 border border-line rounded-md bg-surface text-[13px] text-ink outline-none focus:border-ink-strong placeholder:text-faint";
