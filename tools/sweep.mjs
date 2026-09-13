@@ -77,13 +77,38 @@ for (const [label, width, height] of [["desktop", 1440, 1000], ["phone", 390, 84
         await p.getByRole("button", { name: new RegExp(`^${interval}$`) }).first().click();
         await p.waitForTimeout(900);
       }
+
+      // Source chips, when the screen has them: all on, one on, none on. The
+      // last is the one worth checking — a chart with every series switched off
+      // still has to draw something honest.
+      const chipBar = p.locator("main button").filter({ hasText: /^(Wolt|Foody|Bolt|POS)/ });
+      const chipCount = await chipBar.count();
+      const chipStates = chipCount ? ["all", "one", "none"] : ["all"];
+
+      for (const chips of chipStates) {
+        if (chipCount) {
+          // reset to all on
+          for (let i = 0; i < chipCount; i++) {
+            const pressed = await chipBar.nth(i).evaluate((el) => !el.className.includes("text-subtle"));
+            if (!pressed) await chipBar.nth(i).click();
+          }
+          await p.waitForTimeout(400);
+          if (chips === "one") {
+            for (let i = 1; i < chipCount; i++) await chipBar.nth(i).click();
+          } else if (chips === "none") {
+            for (let i = 0; i < chipCount; i++) await chipBar.nth(i).click();
+          }
+          await p.waitForTimeout(900);
+        }
+
       errs.length = 0;
       const problems = await p.evaluate(audit);
       checks++;
-      const tag = `${route.replace(/\//g, "") || "overview"}-${label}-${range.replace(/ /g, "")}${interval ? "-" + interval : ""}`;
+      const tag = `${route.replace(/\//g, "") || "overview"}-${label}-${range.replace(/ /g, "")}${interval ? "-" + interval : ""}${chipCount ? "-" + chips : ""}`;
       if (problems.length || errs.length) {
         found.push({ tag, problems, errs: [...new Set(errs)].slice(0, 2) });
         await p.screenshot({ path: `${OUT}/${tag}.png`, fullPage: true });
+      }
       }
     }
   }

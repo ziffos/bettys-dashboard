@@ -67,7 +67,7 @@ overlapping data, empty states that render as a broken chart rather than a
 sentence, and a filter combination that produces `NaN` or an infinite axis.
 
 - [x] Overview
-- [ ] Sales
+- [x] Sales
 - [ ] Products
 - [ ] Reviews
 - [ ] Platform Payouts
@@ -502,3 +502,10 @@ in `.shots/sweep/`.
   before" — and Sales said it twice, "1 days · compared with the 1 days before".
   Replaced with `dayCount` and `priorPhrase` in `format.js`; it now reads
   "compared with the day before".
+- **Sales — 74 combinations, clean.** The sweep also toggles the source chips
+  now: all on, one on, and none on, against every range and interval.
+- **Switching every source off looked identical to leaving them all on.** The
+  page falls back to all four for the maths — otherwise an empty filter reads as
+  a closed month — but said nothing, so four greyed chips sat above a full
+  chart with no way to tell the two states apart. It now says "No source
+  selected — showing all four" beside them.

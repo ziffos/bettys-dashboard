@@ -433,6 +433,14 @@ export default function SalesPage() {
             </span>
           </button>
         ))}
+        {/* Switching every source off falls back to all four, so that the page
+            reads as an empty filter rather than a closed month. Silently, until
+            now: greyed-out chips over a full chart is not a readable state. */}
+        {on.length === 0 && (
+          <span className="text-[12px] text-subtle text-pretty">
+            No source selected — showing all four
+          </span>
+        )}
         <div className="flex-1 min-w-1" />
         <Segmented options={INTERVALS} value={interval} onChange={setInterval} />
       </div>
