@@ -26,7 +26,7 @@ function isBare(pathname) {
  * in the same commit that rebuilds it; when the list is complete, this whole
  * mechanism and the `legacy-surface` class go away.
  */
-const MIGRATED = new Set(["/", "/sales", "/marketing", "/products"]);
+const MIGRATED = new Set(["/", "/sales", "/marketing", "/products", "/reviews"]);
 
 export default function ClientLayout({ children }) {
   const pathname = usePathname();

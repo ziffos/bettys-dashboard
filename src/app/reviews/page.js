@@ -1,721 +1,629 @@
 "use client";
-import { useState, useEffect } from "react";
-import {
-  Star,
-  Search,
-  Calendar,
-  RefreshCw,
-  MessageSquareOff,
-  TrendingUp,
-  TrendingDown,
-  Minus,
-  Utensils,
-  Filter,
-  ChevronDown
-} from "lucide-react";
-import { supabase } from "@/lib/supabase";
-import SkeletonBlock from "@/components/SkeletonBlock";
-import { format, parseISO, isAfter, isBefore, subMonths, startOfMonth, startOfWeek, addWeeks, differenceInDays } from "date-fns";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RechartsTooltip,
-  ResponsiveContainer,
-} from "recharts";
 
-// Helper to format Date objects into YYYY-MM-DD strings
-const getFormattedDate = (date) => {
-  return date.toISOString().split("T")[0];
-};
+import { useEffect, useMemo, useState } from "react";
+import { MessageCircle, Search, TriangleAlert } from "lucide-react";
+import { supabase } from "../../lib/supabase";
+import { useRange } from "../../lib/RangeContext";
+import {
+  Card,
+  CardHeader,
+  EmptyState,
+  LoadingState,
+  PageHeader,
+  Segmented,
+  Stars,
+  UpcomingCard,
+  PLATFORM,
+} from "../../components/ui";
+import {
+  MONTHS,
+  eachDay,
+  fetchAllRows,
+  fmtDay,
+  num,
+  parseDay,
+  parseItems,
+  rangeTitle,
+} from "../../lib/format";
+import { dayOf, timeOf } from "../../lib/salesModel";
+
+/**
+ * Google has no rows in `reviews` yet — the import only covers the three
+ * delivery platforms. It stays in the UI on purpose, so the day the Google feed
+ * is connected the screen already has a place for it rather than needing a
+ * change. Until then it reads as "no reviews yet", which is true.
+ */
+const SOURCES = ["google", "wolt", "foody", "bolt"];
+
+const FEED_LIMIT = 30;
+const TARGET = 4.5;
+const WEEKS = 8;
 
 export default function ReviewsPage() {
-  // Data State
-  const [originalReviews, setOriginalReviews] = useState([]);
-  const [filteredReviews, setFilteredReviews] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState(null);
+  const range = useRange();
+  const rangeKey = `${range.from}|${range.to}`;
+  const [store, setStore] = useState({ key: null, raw: null, failure: null });
+  const loading = store.key !== rangeKey;
+  const raw = loading ? null : store.raw;
+  const failure = loading ? null : store.failure;
 
-  // Filter State
-  const [platformFilter, setPlatformFilter] = useState("all"); // all, google, wolt, foody, bolt
-  const [starFilter, setStarFilter] = useState("all"); // all, 5, 4, 3, 2, 1
-  const [searchQuery, setSearchQuery] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [activePreset, setActivePreset] = useState("1M");
+  const [platform, setPlatform] = useState("all");
+  const [star, setStar] = useState(0);
   const [commentsOnly, setCommentsOnly] = useState(false);
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [oldestAvailableDate, setOldestAvailableDate] = useState(null);
+  const [query, setQuery] = useState("");
 
-  // 1. Fetch Data
   useEffect(() => {
-    async function fetchReviews() {
-        setLoading(true);
-        try {
-            // Fetch reviews
-            const { data: reviewsData, error: reviewsError } = await supabase
-                .from("reviews")
-                .select("*")
-                .order("review_date", { ascending: false });
-                
-            if (reviewsError) throw reviewsError;
-            
-            if (reviewsData.length > 0) {
-                setLastUpdated(new Date(reviewsData[0].review_date));
-                setOldestAvailableDate(new Date(reviewsData[reviewsData.length - 1].review_date));
-            } else {
-                setLastUpdated(new Date());
-                setOldestAvailableDate(new Date());
-            }
+    let cancelled = false;
 
-            // Default dates to 1M
-            const end = new Date();
-            const start = new Date();
-            start.setMonth(end.getMonth() - 1);
-            setEndDate(getFormattedDate(end));
-            setStartDate(getFormattedDate(start));
+    (async () => {
+      // The weekly trend looks back further than the range picker does.
+      const trendFrom = fmtDay(
+        new Date(parseDay(range.to).getTime() - (WEEKS * 7 - 1) * 86400000)
+      );
+      const windowFrom = trendFrom < range.previous.from ? trendFrom : range.previous.from;
+      const until = `${range.to}T23:59:59.999`;
 
-            // Extract order_references to find ordered items
-            const activeOrderRefs = reviewsData
-              .map(r => r.order_reference)
-              .filter(ref => ref != null && ref !== '');
-            
-            const itemMap = {};
-            if (activeOrderRefs.length > 0) {
-               // Fetch delivery_purchases for the items column
-               // Chunking might be needed for thousands, but let's assume standard payload amounts for MVP
-               const { data: purchasesData, error: purchasesError } = await supabase
-                  .from("delivery_purchases")
-                  .select("order_reference, items")
-                  .in("order_reference", activeOrderRefs);
-
-               if (!purchasesError && purchasesData) {
-                  purchasesData.forEach(p => {
-                      if (p.order_reference) {
-                          itemMap[p.order_reference] = p.items;
-                      }
-                  });
-               }
-            }
-
-            // Augment reviews with items
-            const enriched = reviewsData.map(r => ({
-                ...r,
-                items: r.order_reference ? itemMap[r.order_reference] || null : null
-            }));
-
-            setOriginalReviews(enriched);
-            setFilteredReviews(enriched); // Default
-
-        } catch (error) {
-            console.error("Error fetching reviews:", error);
-        } finally {
-            setLoading(false);
-        }
-    }
-
-    fetchReviews();
-  }, []);
-
-  // 2. Apply Filters
-  useEffect(() => {
-    if (!originalReviews.length) return;
-
-    let result = originalReviews;
-
-    // Platform Filter
-    if (platformFilter !== "all") {
-        result = result.filter(r => r.source_platform?.toLowerCase() === platformFilter);
-    }
-
-    // Star Filter
-    if (starFilter !== "all") {
-        result = result.filter(r => r.rating === Number(starFilter));
-    }
-
-    // Date Range Filter
-    if (startDate && endDate) {
-        const start = parseISO(startDate);
-        const end = parseISO(endDate);
-        // Set end time to end of day to include the full day
-        end.setHours(23, 59, 59, 999);
-        
-        result = result.filter(r => {
-            if (!r.review_date) return false;
-            const rDate = parseISO(r.review_date);
-            return (isAfter(rDate, start) || rDate.getTime() === start.getTime()) && 
-                   (isBefore(rDate, end) || rDate.getTime() === end.getTime());
-        });
-    }
-
-    // Search Query
-    if (searchQuery.trim() !== "") {
-        const query = searchQuery.toLowerCase();
-        result = result.filter(r => 
-            (r.review_text && r.review_text.toLowerCase().includes(query)) ||
-            (r.reviewer_name && r.reviewer_name.toLowerCase().includes(query))
+      try {
+        const reviews = await fetchAllRows(
+          supabase,
+          "reviews",
+          "rating, review_text, review_date, source_platform, order_reference, reviewer_name",
+          [
+            { op: "gte", col: "review_date", val: windowFrom },
+            { op: "lte", col: "review_date", val: until },
+          ]
         );
-    }
 
-    setFilteredReviews(result);
-  }, [originalReviews, platformFilter, starFilter, startDate, endDate, searchQuery]);
-
-
-  // Helper for rendering presets
-  const handleDatePreset = (preset) => {
-    const end = new Date();
-    const start = new Date();
-
-    switch (preset) {
-        case "1M":
-            start.setMonth(end.getMonth() - 1);
-            break;
-        case "3M":
-            start.setMonth(end.getMonth() - 3);
-            break;
-        case "6M":
-            start.setMonth(end.getMonth() - 6);
-            break;
-        case "1Y":
-            start.setFullYear(end.getFullYear() - 1);
-            break;
-        default:
-            return;
-    }
-
-    setStartDate(getFormattedDate(start));
-    setEndDate(getFormattedDate(end));
-    setActivePreset(preset);
-  };
-
-  // Helper to calculate card stats
-  const calculateCardStats = (platform) => {
-    let relevantReviews = originalReviews;
-    if (startDate && endDate) {
-       const start = parseISO(startDate);
-       const end = parseISO(endDate);
-       end.setHours(23, 59, 59, 999);
-       relevantReviews = relevantReviews.filter(r => {
-           if (!r.review_date) return false;
-           const d = parseISO(r.review_date);
-           return (isAfter(d, start) || d.getTime() === start.getTime()) && 
-                  (isBefore(d, end) || d.getTime() === end.getTime());
-       });
-    }
-
-    if (platform !== "all") {
-        relevantReviews = relevantReviews.filter(r => r.source_platform?.toLowerCase() === platform);
-    }
-
-    const total = relevantReviews.length;
-    const avg = total > 0 ? (relevantReviews.reduce((sum, r) => sum + r.rating, 0) / total).toFixed(1) : "0.0";
-
-    // Trend: compare current month vs last month based on lastUpdated
-    let trend = 0;
-    if (lastUpdated) {
-        const currentMonthStart = startOfMonth(lastUpdated);
-        const lastMonthStart = subMonths(currentMonthStart, 1);
-        
-        const currentMonthReviews = originalReviews.filter(r => {
-            if (platform !== "all" && r.source_platform?.toLowerCase() !== platform) return false;
-            if (!r.review_date) return false;
-            const d = parseISO(r.review_date);
-            return d >= currentMonthStart;
-        });
-        const lastMonthReviews = originalReviews.filter(r => {
-             if (platform !== "all" && r.source_platform?.toLowerCase() !== platform) return false;
-             if (!r.review_date) return false;
-             const d = parseISO(r.review_date);
-             return d >= lastMonthStart && d < currentMonthStart;
-        });
-
-        const currAvg = currentMonthReviews.length > 0 ? currentMonthReviews.reduce((sum, r) => sum + r.rating, 0) / currentMonthReviews.length : 0;
-        const lastAvg = lastMonthReviews.length > 0 ? lastMonthReviews.reduce((sum, r) => sum + r.rating, 0) / lastMonthReviews.length : 0;
-
-        if (lastAvg > 0) {
-            trend = (currAvg - lastAvg).toFixed(1);
-        } else if (currAvg > 0) {
-            trend = currAvg.toFixed(1); // if no previous data, trend is just the current average
+        // What each reviewer actually ordered, via the order they rated.
+        const refs = [...new Set(reviews.map((r) => r.order_reference).filter(Boolean))];
+        let purchases = [];
+        if (refs.length) {
+          // `in` on a few hundred references is fine; chunked so a busy quarter
+          // cannot produce a URL the gateway rejects.
+          const CHUNK = 150;
+          for (let i = 0; i < refs.length; i += CHUNK) {
+            const { data, error } = await supabase
+              .from("delivery_purchases")
+              .select("order_reference, items")
+              .in("order_reference", refs.slice(i, i + CHUNK));
+            if (error) throw new Error(`delivery_purchases: ${error.message}`);
+            purchases = purchases.concat(data || []);
+          }
         }
+
+        if (cancelled) return;
+        setStore({ key: rangeKey, raw: { reviews, purchases, windowFrom }, failure: null });
+      } catch (err) {
+        if (cancelled) return;
+        console.error("Reviews fetch failed:", err);
+        setStore({
+          key: rangeKey,
+          raw: null,
+          failure: err.message || "Could not load this period.",
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [rangeKey, range.from, range.to, range.previous.from]);
+
+  const model = useMemo(() => {
+    if (!raw) return null;
+
+    const itemsByRef = new Map(
+      raw.purchases.map((p) => [p.order_reference, p.items])
+    );
+
+    const all = raw.reviews.map((r) => {
+      const day = dayOf(r.review_date);
+      return {
+        ...r,
+        day,
+        platform: (r.source_platform || "").toLowerCase(),
+        text: (r.review_text || "").trim(),
+        items: parseItems(itemsByRef.get(r.order_reference)),
+      };
+    });
+
+    const inRange = (r) => r.day >= range.from && r.day <= range.to;
+    const current = all.filter(inRange);
+    const previous = all.filter(
+      (r) => r.day >= range.previous.from && r.day <= range.previous.to
+    );
+
+    const avgOf = (list) =>
+      list.length ? list.reduce((a, r) => a + (r.rating || 0), 0) / list.length : 0;
+
+    const overallAvg = avgOf(current);
+    const prevAvg = avgOf(previous);
+
+    // Per platform, including the ones with nothing yet.
+    const platRows = SOURCES.map((id) => {
+      const list = current.filter((r) => r.platform === id);
+      const before = previous.filter((r) => r.platform === id);
+      const avg = avgOf(list);
+      return {
+        id,
+        name: PLATFORM[id].name,
+        color: PLATFORM[id].color,
+        avg,
+        count: list.length,
+        diff: list.length && before.length ? avg - avgOf(before) : null,
+      };
+    }).sort((a, b) => b.count - a.count || b.avg - a.avg);
+
+    // The breakdown doubles as the star filter, so it reflects the platform
+    // choice but not its own star selection.
+    const forBreakdown =
+      platform === "all" ? current : current.filter((r) => r.platform === platform);
+    const breakdown = [5, 4, 3, 2, 1].map((s) => {
+      const count = forBreakdown.filter((r) => r.rating === s).length;
+      return {
+        star: s,
+        count,
+        share: forBreakdown.length ? (count / forBreakdown.length) * 100 : 0,
+        color: s >= 4 ? "#171717" : s === 3 ? "#f5a623" : "#ee0000",
+      };
+    });
+
+    // Weekly average over the last eight weeks, ending at the range's end.
+    const end = parseDay(range.to);
+    const weeks = [];
+    for (let w = WEEKS - 1; w >= 0; w--) {
+      const to = fmtDay(new Date(end.getTime() - w * 7 * 86400000));
+      const from = fmtDay(new Date(parseDay(to).getTime() - 6 * 86400000));
+      const list = all.filter(
+        (r) =>
+          r.day >= from &&
+          r.day <= to &&
+          (platform === "all" || r.platform === platform)
+      );
+      weeks.push({ from, to, avg: list.length ? avgOf(list) : null, count: list.length });
     }
 
-    return { total, avg, trend: parseFloat(trend) };
-  };
+    // ── Feed.
+    const q = query.trim().toLowerCase();
+    const feedAll = current
+      .filter((r) => platform === "all" || r.platform === platform)
+      .filter((r) => !star || r.rating === star)
+      .filter((r) => !commentsOnly || r.text)
+      .filter(
+        (r) =>
+          !q ||
+          r.text.toLowerCase().includes(q) ||
+          (r.reviewer_name || "").toLowerCase().includes(q) ||
+          r.items.some((i) => i.name.toLowerCase().includes(q))
+      )
+      .sort((a, b) => String(b.review_date).localeCompare(String(a.review_date)));
 
-  const ratingBreakdown = [5, 4, 3, 2, 1].map(star => {
-      const count = filteredReviews.filter(r => r.rating === star).length;
-      return { star, count, percentage: filteredReviews.length ? (count / filteredReviews.length) * 100 : 0 };
-  });
+    const withComment = current.filter((r) => r.text).length;
 
-  const getChartData = () => {
-      if (!startDate || !endDate) return [];
+    let lastDay = null;
+    for (const r of current) if (!lastDay || r.day > lastDay) lastDay = r.day;
+    const daysBehind = lastDay
+      ? Math.round((parseDay(range.to) - parseDay(lastDay)) / 86400000)
+      : null;
 
-      const rangeStart = parseISO(startDate);
-      const rangeEnd = parseISO(endDate);
-      rangeEnd.setHours(23, 59, 59, 999);
+    return {
+      overallAvg,
+      prevAvg,
+      count: current.length,
+      withComment,
+      platRows,
+      breakdown,
+      weeks,
+      feed: feedAll.slice(0, FEED_LIMIT),
+      feedTotal: feedAll.length,
+      lastDay,
+      daysBehind,
+      isEmpty: current.length === 0,
+    };
+  }, [raw, range.from, range.to, range.previous.from, range.previous.to, platform, star, commentsOnly, query]);
 
-      // Need at least 7 days for weekly data
-      if (differenceInDays(rangeEnd, rangeStart) < 7) return [];
-
-      const data = [];
-      let weekStart = startOfWeek(rangeStart, { weekStartsOn: 1 }); // Monday
-
-      while (weekStart < rangeEnd) {
-          const weekEnd = addWeeks(weekStart, 1);
-          const weekLabel = format(weekStart, "MMM dd");
-
-          let weekReviews = originalReviews.filter(r => {
-              if (!r.review_date) return false;
-              const rd = parseISO(r.review_date);
-              return rd >= weekStart && rd < weekEnd;
-          });
-
-          if (platformFilter !== "all") {
-              weekReviews = weekReviews.filter(r => r.source_platform?.toLowerCase() === platformFilter);
-          }
-
-          const dataPoint = { name: weekLabel };
-          if (weekReviews.length > 0) {
-              dataPoint.rating = Number((weekReviews.reduce((sum, r) => sum + r.rating, 0) / weekReviews.length).toFixed(1));
-          }
-
-          data.push(dataPoint);
-          weekStart = weekEnd;
-      }
-      return data;
-  };
-
-  const getChartLineColor = () => {
-      if (platformFilter === "google") return "#ef4444";
-      if (platformFilter === "wolt") return "#3b82f6";
-      if (platformFilter === "foody") return "#f97316";
-      if (platformFilter === "bolt") return "#10b981";
-      return "#10b981"; // all — emerald
-  };
-
-  const getPlatformDetails = (pName) => {
-      const lower = pName ? pName.toLowerCase() : "";
-      if (lower === "google") return { border: "border-l-red-500", text: "text-red-500", bg: "bg-red-500/10" };
-      if (lower === "wolt") return { border: "border-l-blue-500", text: "text-blue-500", bg: "bg-blue-500/10" };
-      if (lower === "foody") return { border: "border-l-orange-500", text: "text-orange-500", bg: "bg-orange-500/10" };
-      if (lower === "bolt") return { border: "border-l-emerald-500", text: "text-emerald-500", bg: "bg-emerald-500/10" };
-      return { border: "border-l-neutral-500", text: "text-neutral-500", bg: "bg-neutral-500/10" };
-  };
-
-  const platformsConfig = [
-    { id: "all", name: "Overall", icon: Star, color: "text-white", bg: "bg-neutral-800" },
-    { id: "google", name: "Google", icon: Star, color: "text-red-500", bg: "bg-red-500/10" },
-    { id: "wolt", name: "Wolt", icon: Star, color: "text-blue-500", bg: "bg-blue-500/10" },
-    { id: "foody", name: "Foody", icon: Star, color: "text-orange-500", bg: "bg-orange-500/10" },
-    { id: "bolt", name: "Bolt", icon: Star, color: "text-emerald-500", bg: "bg-emerald-500/10" },
-  ];
-
-  if (loading && !originalReviews.length) {
+  if (failure) {
     return (
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div>
-            <SkeletonBlock className="h-7 w-52 mb-2" />
-            <SkeletonBlock className="h-4 w-80" />
-          </div>
-          <SkeletonBlock className="h-7 w-44 rounded-full" />
-        </div>
-        {/* 5 platform rating cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="bg-neutral-900 p-4 md:p-5 rounded-2xl border border-neutral-800">
-              <div className="flex justify-between items-start mb-3">
-                <SkeletonBlock className="h-4 w-16" />
-                <SkeletonBlock className="h-8 w-8 rounded-lg" />
-              </div>
-              <SkeletonBlock className="h-10 w-16 mb-2" />
-              <SkeletonBlock className="h-3 w-20 mb-4" />
-              <SkeletonBlock className="h-3 w-full" />
-            </div>
-          ))}
-        </div>
-        {/* Filter bar */}
-        <div className="bg-neutral-900 p-4 rounded-2xl border border-neutral-800">
-          <div className="flex flex-wrap gap-4">
-            <SkeletonBlock className="h-10 w-96 rounded-xl" />
-            <SkeletonBlock className="h-10 w-64 rounded-xl" />
-          </div>
-        </div>
-        {/* Main area: feed + stats */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left: 3 review card skeletons */}
-          <div className="lg:col-span-2 space-y-4">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="bg-neutral-900 rounded-2xl border border-neutral-800 p-5 border-l-4 border-l-neutral-700">
-                <div className="flex justify-between mb-3">
-                  <div>
-                    <SkeletonBlock className="h-4 w-32 mb-2" />
-                    <SkeletonBlock className="h-3 w-40" />
-                  </div>
-                  <SkeletonBlock className="h-5 w-16 rounded" />
-                </div>
-                <SkeletonBlock className="h-3 w-24 mb-3" />
-                <SkeletonBlock className="h-4 w-full mb-2" />
-                <SkeletonBlock className="h-4 w-3/4" />
-              </div>
-            ))}
-          </div>
-          {/* Right: rating breakdown */}
-          <div className="bg-neutral-900 rounded-2xl border border-neutral-800 p-6 h-[400px]">
-            <SkeletonBlock className="h-5 w-32 mb-4" />
-            <SkeletonBlock className="h-full w-full rounded-xl" />
-          </div>
-        </div>
+      <div className="flex flex-col gap-4 md:gap-5">
+        <PageHeader title="Reviews" sub={rangeTitle(range.from, range.to)} />
+        <EmptyState
+          icon={TriangleAlert}
+          title="Could not load this period"
+          body={`${failure} The figures are left blank rather than shown half-read.`}
+          action="Try again"
+          onAction={() => range.setRange(range.id)}
+        />
       </div>
     );
   }
 
+  if (loading || !model) {
+    return <LoadingState kpis={2} shape="list" line="LOADING REVIEWS · 4 PLATFORMS" columns="minmax(0,1.9fr) minmax(280px,1fr)" />;
+  }
+
+  const header = (
+    <PageHeader
+      title="Reviews"
+      sub={`${rangeTitle(range.from, range.to)} · Google, Wolt, Foody and Bolt`}
+      right={
+        model.lastDay && (
+          <div className="flex items-center gap-[7px] h-[26px] px-2.5 border border-line rounded-full font-mono text-[11px] text-subtle whitespace-nowrap">
+            <span
+              className="w-1.5 h-1.5 rounded-full shrink-0"
+              style={{
+                background:
+                  model.daysBehind > 2 ? "#ee0000" : model.daysBehind > 0 ? "#f5a623" : "#50e3c2",
+              }}
+            />
+            SYNCED {parseDay(model.lastDay).getDate()}{" "}
+            {MONTHS[parseDay(model.lastDay).getMonth()].toUpperCase()}
+          </div>
+        )
+      }
+    />
+  );
+
+  if (model.isEmpty) {
+    return (
+      <div className="flex flex-col gap-4 md:gap-5">
+        {header}
+        <EmptyState
+          icon={MessageCircle}
+          title={`No reviews between ${rangeTitle(range.from, range.to)}`}
+          body="Nobody left a rating in this range. Reviews usually land a day or two after the order, so a recent window stays quiet for a while."
+          action="Jump to the last 28 days"
+          onAction={() => range.setRange("28d")}
+        />
+      </div>
+    );
+  }
+
+  const diff = model.overallAvg - model.prevAvg;
+  const ratedWeeks = model.weeks.filter((w) => w.avg != null);
+  const lo = 3.5;
+  const hi = 5;
+  const yOf = (v) => 110 - ((v - lo) / (hi - lo)) * 110;
+  const xOf = (i) => (i / Math.max(1, WEEKS - 1)) * 300;
+
+  const platformOptions = [
+    { id: "all", label: "All" },
+    ...SOURCES.map((id) => ({ id, label: PLATFORM[id].name })),
+  ];
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-            <h1 className="text-2xl font-bold text-white tracking-tight">Reviews & Feedback</h1>
-            <p className="text-sm text-neutral-400">
-                Customer satisfaction, platform ratings, and order feedback.
-            </p>
-        </div>
-        <div className="flex items-center gap-2 text-xs text-neutral-500 bg-neutral-900/50 px-3 py-1.5 rounded-full border border-neutral-800 shrink-0">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
-            Last updated: {lastUpdated ? format(lastUpdated, "MMM dd, yyyy") : "..."}
-        </div>
-      </div>
+    <div className="flex flex-col gap-4 md:gap-5">
+      {header}
 
-      {/* Top Platform Rating Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-        {platformsConfig.map((p) => {
-            const stats = calculateCardStats(p.id);
-            return (
-                <div key={p.id} className="bg-neutral-900 p-4 md:p-5 rounded-2xl border border-neutral-800 shadow-lg relative overflow-hidden group">
-                    <div className="flex justify-between items-start mb-2">
-                        <span className="text-xs md:text-sm font-semibold text-neutral-400 uppercase tracking-wider">{p.name}</span>
-                        <div className={`hidden md:block p-2 rounded-lg ${p.bg}`}>
-                            <p.icon size={16} className={p.color} />
-                        </div>
-                    </div>
-                    <div className="flex items-end gap-2 md:gap-3 mb-1">
-                        <h3 className="text-2xl md:text-4xl font-black text-white">{stats.avg}</h3>
-                        <div className="flex pb-1">
-                            {[1, 2, 3, 4, 5].map(star => {
-                                const avg = parseFloat(stats.avg);
-                                const fill = Math.max(0, Math.min(1, avg - (star - 1)));
-                                if (fill >= 1) return <Star key={star} size={14} className={p.color} fill="currentColor" />;
-                                if (fill <= 0) return <Star key={star} size={14} className="text-neutral-700" fill="none" />;
-                                const id = `star-clip-${p.id}-${star}`;
-                                const starPath = "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z";
-                                return (
-                                  <svg key={star} width={14} height={14} viewBox="0 0 24 24" fill="none" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                                    <defs><clipPath id={id}><rect x="0" y="0" width={24 * fill} height="24" /></clipPath></defs>
-                                    <path d={starPath} className="text-neutral-700" stroke="currentColor" />
-                                    <path d={starPath} className={p.color} fill="currentColor" stroke="currentColor" clipPath={`url(#${id})`} />
-                                  </svg>
-                                );
-                            })}
-                        </div>
-                    </div>
-                    <div className="flex items-center justify-between text-xs mt-4">
-                        <span className="text-neutral-500 font-medium">{stats.total.toLocaleString()} reviews</span>
-                        {stats.trend !== 0 && (
-                            <div className={`flex items-center gap-1 font-bold ${stats.trend > 0 ? "text-emerald-500" : "text-red-500"}`}>
-                                {stats.trend > 0 ? <TrendingUp size={12} strokeWidth={3} /> : <TrendingDown size={12} strokeWidth={3} />}
-                                <span>{Math.abs(stats.trend)}</span>
-                            </div>
-                        )}
-                        {stats.trend === 0 && (
-                             <div className="flex items-center gap-1 font-bold text-neutral-500">
-                                <Minus size={12} strokeWidth={3} />
-                                <span>0.0</span>
-                            </div>
-                        )}
-                    </div>
+      {/* Hero + breakdown */}
+      <div className="grid gap-3 items-start md:grid-cols-[minmax(0,1.9fr)_minmax(280px,1fr)]">
+        <Card className="px-4 py-4">
+          <div className="flex items-end gap-3.5 flex-wrap">
+            <span className="text-[44px] md:text-[52px] font-semibold tracking-[-0.045em] leading-none">
+              {model.overallAvg.toFixed(1)}
+            </span>
+            <div className="flex flex-col gap-1.5 pb-1">
+              <Stars rating={model.overallAvg} size={16} />
+              <span className="font-mono text-[11px] text-subtle">
+                {num(model.count)} review{model.count === 1 ? "" : "s"} in {range.days} days
+              </span>
+            </div>
+            <div className="flex-1" />
+            {model.prevAvg > 0 && (
+              <span
+                className="text-[12px] font-medium"
+                style={{
+                  color: diff >= 0 ? "var(--color-accent)" : "var(--color-danger)",
+                }}
+              >
+                {diff >= 0 ? "+" : "−"}
+                {Math.abs(diff).toFixed(1)} vs previous {range.days} days
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-3 mt-4">
+            {model.platRows.map((p) => (
+              <div key={p.id} className="flex items-center gap-2.5">
+                <span
+                  className="w-2 h-2 rounded-[2px] shrink-0"
+                  style={{ background: p.count ? p.color : "#e5e5e5" }}
+                />
+                <span
+                  className={`text-[13px] w-14 shrink-0 ${p.count ? "" : "text-subtle"}`}
+                >
+                  {p.name}
+                </span>
+                <div className="flex-1 min-w-10 h-[5px] bg-wash rounded-full overflow-hidden">
+                  <div
+                    className="h-full"
+                    style={{ width: `${(p.avg / 5) * 100}%`, background: p.color }}
+                  />
                 </div>
-            );
-        })}
+                <span className="font-mono text-[13px] font-medium w-7 text-right">
+                  {p.count ? p.avg.toFixed(1) : "—"}
+                </span>
+                <span
+                  className="font-mono text-[11px] w-8 text-right"
+                  style={{
+                    color:
+                      p.diff == null
+                        ? "var(--color-subtle)"
+                        : p.diff >= 0
+                          ? "var(--color-accent)"
+                          : "var(--color-danger)",
+                  }}
+                >
+                  {p.diff == null ? "" : `${p.diff >= 0 ? "+" : "−"}${Math.abs(p.diff).toFixed(1)}`}
+                </span>
+                <span className="font-mono text-[11px] text-subtle w-16 text-right">
+                  {p.count ? `${p.count} reviews` : "none yet"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader title="Rating breakdown" sub="Click a row to filter the feed" />
+          <div className="px-2 pb-2.5">
+            {model.breakdown.map((b) => {
+              const on = star === b.star;
+              return (
+                <div
+                  key={b.star}
+                  onClick={() => setStar(on ? 0 : b.star)}
+                  className={`flex items-center gap-2.5 px-2 py-[7px] rounded-md cursor-pointer hover:bg-wash-light ${
+                    on ? "bg-wash-light" : ""
+                  }`}
+                >
+                  <span
+                    className={`flex items-center gap-[3px] w-[26px] text-[13px] ${
+                      on ? "font-medium" : ""
+                    }`}
+                  >
+                    {b.star}
+                    <svg
+                      width="11"
+                      height="11"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      className="text-ink-strong"
+                    >
+                      <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+                    </svg>
+                  </span>
+                  <div className="flex-1 min-w-[30px] h-1.5 bg-wash rounded-full overflow-hidden">
+                    <div
+                      className="h-full"
+                      style={{ width: `${b.share}%`, background: b.color }}
+                    />
+                  </div>
+                  <span className="font-mono text-[12px] w-7 text-right">{b.count}</span>
+                  <span className="font-mono text-[11px] text-subtle w-8 text-right">
+                    {Math.round(b.share)}%
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
       </div>
 
-      {/* Mobile Filter Bar */}
-      <div className="md:hidden">
-        <button onClick={() => setFiltersOpen(!filtersOpen)} className="w-full flex items-center justify-between px-4 py-3 bg-neutral-900 border border-neutral-800 rounded-lg filter-pattern">
-          <div className="flex items-center gap-2"><Filter size={16} className="text-emerald-500" /><span className="text-sm font-semibold text-white">Filters</span></div>
-          <ChevronDown size={16} className={`text-neutral-400 transition-transform duration-200 ${filtersOpen ? "rotate-180" : ""}`} />
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Segmented options={platformOptions} value={platform} onChange={setPlatform} />
+        <button
+          onClick={() => setCommentsOnly((v) => !v)}
+          className={`flex items-center gap-[7px] h-8 px-[11px] rounded-lg border text-[13px] whitespace-nowrap ${
+            commentsOnly
+              ? "border-ink-strong bg-ink-strong text-surface"
+              : "border-line bg-surface text-muted"
+          }`}
+        >
+          <MessageCircle size={14} strokeWidth={1.75} />
+          With comment
+          <span
+            className={`font-mono text-[11px] ${
+              commentsOnly ? "text-surface/70" : "text-subtle"
+            }`}
+          >
+            {model.withComment}
+          </span>
         </button>
-        {filtersOpen && (
-          <div className="mt-1 bg-neutral-900 border border-neutral-800 rounded-lg p-4 space-y-3 filter-pattern">
-            <div>
-              <p className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">Platform</p>
-              <div className="flex flex-wrap gap-1.5">
-                {platformsConfig.map(p => (
-                  <button key={p.id} onClick={() => setPlatformFilter(p.id)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${platformFilter === p.id ? "bg-neutral-800 text-white border-neutral-700 shadow-md" : "text-neutral-400 border-neutral-800 hover:text-neutral-200"}`}>{p.name}</button>
-                ))}
-              </div>
+        <div className="flex-1 min-w-1" />
+        <div className="flex items-center gap-2 h-8 px-2.5 border border-line rounded-lg bg-surface min-w-[180px]">
+          <Search size={14} strokeWidth={2} className="text-subtle shrink-0" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search reviews"
+            className="flex-1 min-w-0 bg-transparent text-[13px] outline-none placeholder:text-faint"
+          />
+        </div>
+      </div>
+
+      {/* Themes (upcoming) + weekly average */}
+      <div className="grid gap-3 items-start md:grid-cols-[minmax(0,1.9fr)_minmax(280px,1fr)]">
+        <UpcomingCard title="What people mention">
+          Themes — food quality, delivery time, missing items — pulled from the reviews
+          that left a comment. Only {model.withComment} of {model.count} reviews in this
+          range carry any text, and there is no theme on the record yet, so the
+          classifier is still an open decision.
+        </UpcomingCard>
+
+        <Card className="px-4 py-3.5">
+          <h2 className="text-[14px] font-semibold tracking-[-0.01em]">Weekly average</h2>
+          <p className="mt-[3px] text-[12px] text-subtle">
+            Last {WEEKS} weeks, against a {TARGET} target
+          </p>
+          <div className="flex gap-2.5 mt-4">
+            <div className="w-[30px] shrink-0 relative h-[110px]">
+              {[5, 4.5, 4, 3.5].map((v) => (
+                <span
+                  key={v}
+                  className="absolute right-0 font-mono text-[11px] text-muted -translate-y-1/2"
+                  style={{ top: `${((hi - v) / (hi - lo)) * 100}%` }}
+                >
+                  {v.toFixed(1)}
+                </span>
+              ))}
             </div>
-            <div>
-              <p className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">Stars</p>
-              <div className="flex flex-wrap gap-1.5">
-                {["all", "5", "4", "3", "2", "1"].map(star => (
-                  <button key={star} onClick={() => setStarFilter(star)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border flex items-center gap-1 ${starFilter === star ? "bg-neutral-800 text-white border-neutral-700 shadow-md" : "text-neutral-400 border-neutral-800 hover:text-neutral-200"}`}>
-                    {star === "all" ? "All" : <>{star} <Star size={10} className={starFilter === star ? "text-yellow-500" : ""} fill={starFilter === star ? "currentColor" : "none"}/></>}
-                  </button>
-                ))}
-                <button onClick={() => setCommentsOnly(!commentsOnly)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border flex items-center gap-1.5 ${commentsOnly ? "bg-neutral-800 text-white border-neutral-700 shadow-md" : "text-neutral-400 border-neutral-800 hover:text-neutral-200"}`}>
-                  <MessageSquareOff size={12} /> Comments
-                </button>
-              </div>
+            <div className="flex-1 min-w-0 relative h-[110px]">
+              {[5, 4.5, 4, 3.5].map((v) => (
+                <div
+                  key={v}
+                  className="absolute left-0 right-0 h-px bg-wash"
+                  style={{ top: `${((hi - v) / (hi - lo)) * 100}%` }}
+                />
+              ))}
+              <svg
+                viewBox="0 0 300 110"
+                preserveAspectRatio="none"
+                className="absolute inset-0 w-full h-full"
+              >
+                <line
+                  x1="0"
+                  x2="300"
+                  y1={yOf(TARGET)}
+                  y2={yOf(TARGET)}
+                  stroke="#d4d4d4"
+                  strokeWidth={1}
+                  strokeDasharray="3 3"
+                  vectorEffect="non-scaling-stroke"
+                />
+                {ratedWeeks.length > 1 && (
+                  <polyline
+                    points={model.weeks
+                      .map((w, i) => (w.avg == null ? null : `${xOf(i)},${yOf(w.avg)}`))
+                      .filter(Boolean)
+                      .join(" ")}
+                    fill="none"
+                    stroke="var(--color-ink-strong)"
+                    strokeWidth={1.75}
+                    vectorEffect="non-scaling-stroke"
+                    strokeLinejoin="round"
+                  />
+                )}
+                {model.weeks.map((w, i) =>
+                  w.avg == null ? null : (
+                    <circle
+                      key={w.to}
+                      cx={xOf(i)}
+                      cy={yOf(w.avg)}
+                      r={2.5}
+                      fill="var(--color-ink-strong)"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  )
+                )}
+              </svg>
             </div>
-            <div>
-              <p className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">Date Range</p>
-              <div className="grid grid-cols-2 gap-2 mb-2">
-                <div>
-                  <label className="text-[10px] text-neutral-500 mb-1 block">From</label>
-                  <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setActivePreset(null); }} min={oldestAvailableDate ? getFormattedDate(oldestAvailableDate) : undefined} className="w-full bg-neutral-950 border border-neutral-800 rounded-lg text-neutral-200 text-xs px-3 py-2 focus:outline-none focus:border-emerald-500/50" />
-                </div>
-                <div>
-                  <label className="text-[10px] text-neutral-500 mb-1 block">To</label>
-                  <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setActivePreset(null); }} max={getFormattedDate(new Date())} className="w-full bg-neutral-950 border border-neutral-800 rounded-lg text-neutral-200 text-xs px-3 py-2 focus:outline-none focus:border-emerald-500/50" />
-                </div>
-              </div>
-              <div className="flex bg-neutral-950 rounded-lg p-1 border border-neutral-800 w-fit">
-                {["1M", "3M", "6M", "1Y"].map(preset => (
-                  <button key={preset} onClick={() => handleDatePreset(preset)} className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all ${activePreset === preset ? "bg-emerald-500 text-white" : "text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800"}`}>{preset}</button>
-                ))}
-              </div>
+          </div>
+          <div className="flex gap-2.5 mt-2">
+            <div className="w-[30px] shrink-0" />
+            <div className="flex-1 min-w-0 relative h-3.5">
+              {[0, 3, 7].map((i) => (
+                <span
+                  key={i}
+                  className="absolute font-mono text-[11px] text-muted -translate-x-1/2 whitespace-nowrap"
+                  style={{ left: `${(i / (WEEKS - 1)) * 100}%` }}
+                >
+                  {parseDay(model.weeks[i].to).getDate()}{" "}
+                  {MONTHS[parseDay(model.weeks[i].to).getMonth()].toLowerCase()}
+                </span>
+              ))}
             </div>
+          </div>
+          {ratedWeeks.length < 2 && (
+            <p className="mt-3 text-[12px] text-subtle text-pretty">
+              Too few weeks with reviews to draw a trend yet.
+            </p>
+          )}
+        </Card>
+      </div>
+
+      {/* Feed */}
+      <Card>
+        <div className="px-4 py-3.5 flex items-center justify-between gap-3 flex-wrap">
+          <h2 className="text-[14px] font-semibold tracking-[-0.01em]">Feed</h2>
+          <div className="flex items-center gap-3">
+            <span className="font-mono text-[11px] text-subtle">
+              {model.feedTotal === 0
+                ? "No reviews match these filters"
+                : `Showing ${Math.min(FEED_LIMIT, model.feedTotal)} of ${model.feedTotal}`}
+            </span>
+            <button
+              onClick={() => {
+                setPlatform("all");
+                setStar(0);
+                setCommentsOnly(false);
+                setQuery("");
+              }}
+              className="h-7 px-2.5 border border-line rounded-md bg-surface text-[12px] text-muted hover:border-line-strong hover:text-ink"
+            >
+              Clear filters
+            </button>
+          </div>
+        </div>
+
+        {model.feed.length === 0 && (
+          <div className="border-t border-line py-11 px-6 flex flex-col items-center text-center gap-2.5">
+            <div className="w-9 h-9 rounded-[9px] border border-line bg-surface flex items-center justify-center">
+              <MessageCircle size={16} strokeWidth={1.75} className="text-subtle" />
+            </div>
+            <h3 className="text-[15px] font-semibold tracking-[-0.01em]">
+              Nothing matches those filters
+            </h3>
+            <p className="text-[13px] text-muted max-w-[320px] text-pretty">
+              Try a different platform or star rating, or clear the filters to see
+              everything again.
+            </p>
           </div>
         )}
-      </div>
 
-      {/* Desktop Filter Bar */}
-      <div className="hidden md:flex bg-neutral-900 p-4 rounded-2xl border border-neutral-800 shadow-lg flex-row items-center justify-between gap-3 filter-pattern">
-        <div className="flex items-center gap-3">
-            <div className="flex p-1 bg-neutral-950 rounded-lg border border-neutral-800">
-                {platformsConfig.map(p => (
-                    <button key={p.id} onClick={() => setPlatformFilter(p.id)} className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all duration-200 flex items-center gap-1.5 ${platformFilter === p.id ? "bg-neutral-800 text-white shadow-sm" : "text-neutral-400 hover:text-neutral-200 hover:bg-white/5"}`}>
-                        {platformFilter === p.id && <p.icon size={12} className={p.color} />}
-                        {p.name}
-                    </button>
-                ))}
-            </div>
-            <div className="h-6 w-px bg-neutral-800"></div>
-            <div className="flex p-1 bg-neutral-950 rounded-lg border border-neutral-800">
-                {["all", "5", "4", "3", "2", "1"].map(star => (
-                    <button key={star} onClick={() => setStarFilter(star)} className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all duration-200 flex items-center gap-1 ${starFilter === star ? "bg-neutral-800 text-white shadow-sm" : "text-neutral-400 hover:text-neutral-200 hover:bg-white/5"}`}>
-                        {star === "all" ? "All Stars" : <>{star} <Star size={10} className={starFilter === star ? "text-yellow-500" : ""} fill={starFilter === star ? "currentColor" : "none"}/></>}
-                    </button>
-                ))}
-            </div>
-            <button onClick={() => setCommentsOnly(!commentsOnly)} className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all duration-200 flex items-center gap-1.5 border ${commentsOnly ? "bg-neutral-800 text-white border-neutral-700 shadow-sm" : "text-neutral-400 hover:text-neutral-200 hover:bg-white/5 border-neutral-800"}`}>
-                <MessageSquareOff size={12} /> Comments
-            </button>
-        </div>
-        <div className="flex items-center gap-2">
-            <div className="flex items-center bg-neutral-950 rounded-lg border border-neutral-800 p-1">
-                 <div className="flex items-center px-2 border-r border-white/10">
-                    <Calendar size={12} className="text-neutral-400 mr-1.5" />
-                    <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setActivePreset(null); }} min={oldestAvailableDate ? getFormattedDate(oldestAvailableDate) : undefined} className="bg-transparent text-xs text-neutral-300 focus:outline-none cursor-pointer [&::-webkit-calendar-picker-indicator]:invert-[0.8]" />
-                    <span className="text-neutral-600 text-xs mx-1.5">to</span>
-                    <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setActivePreset(null); }} max={getFormattedDate(new Date())} className="bg-transparent text-xs text-neutral-300 focus:outline-none cursor-pointer [&::-webkit-calendar-picker-indicator]:invert-[0.8]" />
-                </div>
-                <div className="flex px-1 gap-1">
-                    {["1M", "3M", "6M", "1Y"].map(preset => (
-                        <button key={preset} onClick={() => handleDatePreset(preset)} className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all ${activePreset === preset ? "bg-emerald-500 text-white shadow-sm" : "text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800"}`}>{preset}</button>
-                    ))}
-                </div>
-            </div>
-        </div>
-      </div>
-
-      {/* Main Area: Feed & Stats */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Rating Breakdown — appears first on mobile, right column on desktop */}
-          <div className="order-first lg:order-last space-y-6">
-            <div className="bg-neutral-900 p-4 md:p-6 rounded-2xl border border-neutral-800 shadow-lg">
-                <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
-                     <Filter size={16} className="text-emerald-500" />
-                     Rating Breakdown
-                </h3>
-                {filteredReviews.length === 0 ? (
-                     <p className="text-sm text-neutral-500 italic">No data to breakdown</p>
-                ) : (
-                    <div className="space-y-3">
-                        {ratingBreakdown.map((row) => (
-                            <div key={row.star} className="flex items-center gap-3">
-                                <div className="flex items-center gap-1 w-10 shrink-0 text-sm font-medium text-neutral-400">
-                                    {row.star} <Star size={12} className={row.star >= 4 ? "text-emerald-500" : row.star === 3 ? "text-yellow-500" : "text-red-500"} fill="currentColor" />
-                                </div>
-                                <div className="flex-1 h-2 bg-neutral-800 rounded-full overflow-hidden">
-                                     <div
-                                        className={`h-full rounded-full ${row.star >= 4 ? "bg-emerald-500" : row.star === 3 ? "bg-yellow-500" : "bg-red-500"}`}
-                                        style={{ width: `${row.percentage}%` }}
-                                     ></div>
-                                </div>
-                                <div className="shrink-0 text-right text-xs font-semibold text-white whitespace-nowrap">
-                                    {row.count} <span className="text-neutral-500 font-medium">· {Math.round(row.percentage)}%</span>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-          </div>
-
-          {/* Feed Column */}
-          <div className="lg:col-span-2 space-y-4">
-               {(() => {
-                 const displayedReviews = commentsOnly ? filteredReviews.filter(r => r.review_text && r.review_text.trim() !== "") : filteredReviews;
-                 return displayedReviews.length === 0 ? (
-                    <div className="bg-neutral-900 p-6 md:p-10 rounded-2xl border border-neutral-800 shadow-lg flex flex-col items-center justify-center text-center">
-                        <MessageSquareOff size={48} className="text-neutral-700 mb-4" />
-                        <h3 className="text-lg font-bold text-white mb-2">No Reviews Found</h3>
-                        <p className="text-sm text-neutral-400 max-w-sm">
-                            We couldn't find any reviews matching your current filters. Try adjusting your platform, star rating, or date parameters.
-                        </p>
-                    </div>
-               ) : (
-                    <div className="space-y-4 h-[300px] md:h-[800px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent">
-                        {displayedReviews.map((review) => {
-                            const pData = getPlatformDetails(review.source_platform);
-                            return (
-                                <div key={review.id} className={`bg-neutral-900 rounded-2xl border border-neutral-800 shadow-md overflow-hidden flex flex-col border-l-4 ${pData.border}`}>
-                                    <div className="p-4 md:p-5 flex-1">
-                                        <div className="flex justify-between items-start mb-3">
-                                            <div>
-                                                {review.source_platform?.toLowerCase() === "google" && review.reviewer_name && (
-                                                    <h4 className="text-white font-bold mb-1">
-                                                        {review.reviewer_name}
-                                                    </h4>
-                                                )}
-                                                <p className="text-xs text-neutral-500">{review.review_date ? format(parseISO(review.review_date), "MMM dd, yyyy - h:mm a") : "Unknown Date"}</p>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                 <div className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${pData.bg} ${pData.text}`}>
-                                                     {review.source_platform}
-                                                 </div>
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="flex mb-3">
-                                            {[1, 2, 3, 4, 5].map(star => (
-                                                <Star 
-                                                    key={star} 
-                                                    size={14} 
-                                                    className={star <= review.rating ? "text-yellow-500" : "text-neutral-700"} 
-                                                    fill={star <= review.rating ? "currentColor" : "none"}
-                                                />
-                                            ))}
-                                        </div>
-
-                                        {review.review_text ? (
-                                            <p className="text-sm text-neutral-300 leading-relaxed">{review.review_text}</p>
-                                        ) : (
-                                            <p className="text-sm text-neutral-600 italic">No comment left</p>
-                                        )}
-                                    </div>
-
-                                    {/* Order Details (if available) */}
-                                    {review.order_reference && review.items && (
-                                        <div className="bg-neutral-800/50 px-5 py-3 border-t border-neutral-800 flex items-start gap-3">
-                                            <Utensils size={14} className="text-neutral-500 mt-0.5 shrink-0" />
-                                            <div>
-                                                <span className="text-xs font-semibold text-neutral-400 block mb-1">What they ordered:</span>
-                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                                  {review.items.split(', ').map((item, i) => {
-                                                    const match = item.match(/^(\d+)\s+(.+)$/);
-                                                    const qty = match ? match[1] : '';
-                                                    const name = match ? match[2] : item;
-                                                    return (
-                                                      <span key={i} style={{
-                                                        fontSize: '12px',
-                                                        padding: '3px 10px',
-                                                        borderRadius: '999px',
-                                                        background: 'rgba(128,128,128,0.08)',
-                                                        border: '0.5px solid rgba(128,128,128,0.2)',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '3px'
-                                                      }}>
-                                                        {qty && <span style={{ fontWeight: 500, color: '#3b82f6', fontSize: '11px' }}>{qty}×</span>}
-                                                        {name}
-                                                      </span>
-                                                    );
-                                                  })}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-               );
-               })()}
-          </div>
-
-      </div>
-
-      {/* Bottom Chart */}
-      <div className="bg-neutral-900 p-4 md:p-6 rounded-2xl border border-neutral-800 shadow-lg relative">
-          <div className="mb-6">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                   <TrendingUp size={18} className="text-emerald-500" />
-                   Rating Timeline
-              </h3>
-              <p className="text-xs text-neutral-500 mt-1">Weekly average rating for the selected date range{platformFilter !== "all" ? ` (${platformFilter})` : ""}.</p>
-          </div>
-          
-          {originalReviews.length === 0 || getChartData().length === 0 ? (
-              <div className="h-[200px] md:h-[300px] flex flex-col items-center justify-center text-center text-neutral-500">
-                  <p className="text-sm font-semibold text-white">{originalReviews.length === 0 ? "No data available" : "Select a date range of at least 1 week"}</p>
+        {model.feed.map((r, i) => {
+          const plat = PLATFORM[r.platform];
+          return (
+            <div key={i} className="px-4 py-3.5 border-t border-line hover:bg-wash-light">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <Stars rating={r.rating || 0} size={12} />
+                <span className="flex items-center gap-1.5 text-[12px]">
+                  <span
+                    className="w-[7px] h-[7px] rounded-[2px]"
+                    style={{ background: plat?.color ?? "#8f8f8f" }}
+                  />
+                  {r.reviewer_name || `${plat?.name ?? r.platform} customer`}
+                </span>
+                <span className="font-mono text-[11px] text-subtle">
+                  {parseDay(r.day).getDate()} {MONTHS[parseDay(r.day).getMonth()]} ·{" "}
+                  {timeOf(r.review_date)}
+                </span>
               </div>
-          ) : (
-              <div className="h-[200px] md:h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={getChartData()} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#262626" />
-                          <XAxis 
-                              dataKey="name" 
-                              fontSize={10} 
-                              tickLine={false} 
-                              axisLine={false} 
-                              stroke="#a3a3a3" 
-                          />
-                          <YAxis 
-                              fontSize={10} 
-                              tickLine={false} 
-                              axisLine={false} 
-                              stroke="#a3a3a3" 
-                              domain={[1, 5]}
-                              ticks={[1, 2, 3, 4, 5]}
-                          />
-                          <RechartsTooltip content={({ active, payload, label }) => {
-                              if (!active || !payload?.length) return null;
-                              const lineColor = getChartLineColor();
-                              const labelText = platformFilter === "all" ? "Avg Rating" : platformFilter.charAt(0).toUpperCase() + platformFilter.slice(1);
-                              return (
-                                  <div style={{ backgroundColor: "#171717", border: "1px solid #404040", borderRadius: "12px", padding: "12px 14px", color: "#f5f5f5" }}>
-                                      <p style={{ color: "#a3a3a3", marginBottom: "8px", fontSize: "12px" }}>{label}</p>
-                                      <p style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px" }}>
-                                          <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: lineColor, display: "inline-block" }}></span>
-                                          <span style={{ color: "#a3a3a3" }}>{labelText}:</span>
-                                          <span style={{ fontWeight: "600" }}>{Number(payload[0].value).toFixed(1)}</span>
-                                      </p>
-                                  </div>
-                              );
-                          }} />
-                          <Line type="monotone" dataKey="rating" name={platformFilter === "all" ? "Avg Rating" : platformFilter} stroke={getChartLineColor()} strokeWidth={3} dot={{ r: 4, fill: getChartLineColor(), strokeWidth: 0 }} activeDot={{ r: 6 }} connectNulls />
-                      </LineChart>
-                  </ResponsiveContainer>
-              </div>
-          )}
-      </div>
-
+              <p
+                className="mt-2 text-[13px] leading-[1.5] text-pretty"
+                style={{
+                  color: r.text ? "var(--color-ink)" : "var(--color-muted)",
+                  fontStyle: r.text ? "normal" : "italic",
+                }}
+              >
+                {r.text || "No comment left"}
+              </p>
+              {r.items.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2.5">
+                  {r.items.map((item, j) => (
+                    <span
+                      key={j}
+                      className="text-[11px] px-2 py-[3px] rounded-full bg-wash-light border border-line text-muted"
+                    >
+                      {item.qty}× {item.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </Card>
     </div>
   );
 }

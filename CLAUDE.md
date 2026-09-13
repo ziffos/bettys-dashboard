@@ -38,7 +38,7 @@ conventions in "Legacy UI" still apply to it.
 | Sales | `/sales` | **done** |
 | Marketing | `/marketing` | **done** |
 | Products | `/products` | **done** |
-| Reviews | `/reviews` | todo |
+| Reviews | `/reviews` | **done** |
 | Menu | `/menu` | todo |
 | Platform Payouts | `/platform-payouts` | todo |
 | Calendar | `/calendar` | todo |
