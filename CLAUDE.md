@@ -41,7 +41,7 @@ conventions in "Legacy UI" still apply to it.
 | Reviews | `/reviews` | **done** |
 | Menu | `/menu` | **done** |
 | Platform Payouts | `/platform-payouts` | **done** |
-| Calendar | `/calendar` | todo |
+| Calendar | `/calendar` | **done** |
 | Payroll | `/payroll` | todo |
 | My Payroll | `/my-payroll` | todo |
 | Settings | `/settings` | todo |

@@ -280,6 +280,10 @@ Agreed with the owner before the rebuild started. Do not "fix" these back.
     ads and other.
 17. **The calendar axis fits the week** — earliest start to latest end — rather
     than the design's hardcoded 10:00–23:59. Same for the Sales heatmap.
+18. **A day with nobody rostered is closed, not short-staffed.** Betty's shuts
+    on Sundays; counting a shut day among the days that are "short at peak"
+    makes the headline useless. Fewer than two on at 19:00/20:00 only counts as
+    a gap on a day that has shifts at all.
 
 ## Out of scope — do not touch
 
