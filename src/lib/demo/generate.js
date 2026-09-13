@@ -63,12 +63,6 @@ const REVIEW_TEXT = {
   1: ["Order never arrived and I still got charged.", "Cold and greasy, very disappointing."],
 };
 
-const REVIEWER_NAMES = [
-  "A. Morgan", "C. Delgado", "P. Nowak", "S. Whitfield", "K. Andersen",
-  "M. Rossi", "T. Fischer", "L. Varga", "J. Bakker", "R. Silva",
-  "E. Lindqvist", "D. Moreau", "H. Yilmaz", "N. Pappas", "O. Brennan",
-];
-
 const QUOTES = [
   ["Quality is remembered long after price is forgotten.", "Aldo Gucci"],
   ["The details are not the details. They make the design.", "Charles Eames"],
@@ -378,26 +372,34 @@ function build() {
   };
 
   const reviews = [];
-  eachDay((d) => {
+  // Foody's review feed stops partway through, the way it has in production
+  // since 1 May 2026: the platform keeps taking orders, the reviews stop
+  // arriving. The screen has to be able to say that.
+  const foodyReviewsStop = Math.floor(HISTORY_DAYS * 0.45);
+  eachDay((d, dayIndex) => {
     if (!isOpen(d)) return;
     const count = rnd() < 0.85 ? intBetween(2, 5) : 0;
     for (let i = 0; i < count; i++) {
       const rating = pickRating();
-      const platform = pick(["google", "wolt", "foody", "bolt"]);
-      const linked =
-        rnd() < 0.4
-          ? delivery_purchases[intBetween(0, delivery_purchases.length - 1)]
-          : null;
+      // A review belongs to an order, so take the order first and let it decide
+      // the platform. Production has 297 of 298 reviews resolving to an order
+      // and the two platforms agreeing every single time — reviews arrive
+      // through the delivery apps, never on their own.
+      const linked = delivery_purchases[intBetween(0, delivery_purchases.length - 1)];
+      const platform = linked.delivery_partner;
+      if (platform === "foody" && dayIndex > foodyReviewsStop) continue;
       reviews.push({
         id: `demo-review-${reviews.length + 1}`,
         rating,
-        // Delivery-platform ratings often carry no text; keep some blanks so
-        // the "With comment only" filter has something to actually do.
-        review_text: rnd() < 0.22 ? null : pick(REVIEW_TEXT[rating]),
-        reviewer_name: platform === "google" ? pick(REVIEWER_NAMES) : null,
+        // Only 49 of production's 298 reviews carry any text — a star with
+        // nothing attached is the normal case, and the screen has to look like
+        // that rather than like a wall of comments.
+        review_text: rnd() < 0.16 ? pick(REVIEW_TEXT[rating]) : null,
+        // Never set in production: the delivery apps do not pass the name on.
+        reviewer_name: null,
         review_date: stamp(d, randomHour()),
         source_platform: platform,
-        order_reference: linked ? linked.order_reference : null,
+        order_reference: linked.order_reference,
       });
     }
   });

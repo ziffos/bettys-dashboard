@@ -107,7 +107,7 @@ All data access is direct client-side Supabase SDK queries (no API routes).
 | `delivery_purchases` | One row per order. `delivery_partner`, `items` as a comma-separated string. `delivery_status` has **five** values, not three: delivered, rejected, cancelled, failed, `courier near pick up` — the last two are two rows each, which is how they went unnoticed. Use `LOST_STATUSES` from `salesModel.js` rather than listing them inline |
 | `pos_sales` | In-store orders. No status column — POS orders are never rejected |
 | `platform_payouts` | Weekly-ish statements. Periods are **not** week aligned: Bolt 7 days, Wolt mostly 5, Foody 1–9 |
-| `reviews` | `source_platform` is wolt/foody/bolt only. `reviewer_name` is always null, and only 40 of 231 rows have `review_text` |
+| `reviews` | `source_platform` is wolt/foody/bolt only. `reviewer_name` is always null, and only 49 of 298 rows carry `review_text`. 297 of 298 resolve to a `delivery_purchases.order_reference`, and the two platforms always agree — reviews arrive through the delivery apps, never on their own. **Foody's feed stopped on 1 May 2026** while Foody kept selling |
 | `social_stats` | `platform` is facebook / instagram / **`facebook_instagram`** (combined campaigns — count these only in "Both") |
 | `shifts` | `shift_date`, `start_time`, `end_time`, `break_minutes`, `hourly_rate` snapshot |
 | `payroll_records` | One per employee per month. `amount_paid` and `status` are maintained by a DB trigger — never recalculate them in JS |

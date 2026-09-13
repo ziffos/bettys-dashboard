@@ -24,6 +24,7 @@ import {
   parseDay,
   parseItems,
   rangeTitle,
+  shortDate,
 } from "../../lib/format";
 import { dayOf, timeOf } from "../../lib/salesModel";
 
@@ -91,8 +92,24 @@ export default function ReviewsPage() {
           }
         }
 
+        // When a platform has nothing in the range, "none yet" is the wrong
+        // story if it used to have plenty. One row each, unbounded, so the
+        // table can say when its last review actually arrived.
+        const lastEver = {};
+        await Promise.all(
+          SOURCES.map(async (id) => {
+            const { data } = await supabase
+              .from("reviews")
+              .select("review_date")
+              .eq("source_platform", id)
+              .order("review_date", { ascending: false })
+              .limit(1);
+            lastEver[id] = data?.[0]?.review_date ? dayOf(data[0].review_date) : null;
+          })
+        );
+
         if (cancelled) return;
-        setStore({ key: rangeKey, raw: { reviews, purchases, windowFrom }, failure: null });
+        setStore({ key: rangeKey, raw: { reviews, purchases, windowFrom, lastEver }, failure: null });
       } catch (err) {
         if (cancelled) return;
         console.error("Reviews fetch failed:", err);
@@ -151,6 +168,7 @@ export default function ReviewsPage() {
         avg,
         count: list.length,
         diff: list.length && before.length ? avg - avgOf(before) : null,
+        lastEver: raw.lastEver?.[id] ?? null,
       };
     }).sort((a, b) => b.count - a.count || b.avg - a.avg);
 
@@ -355,8 +373,12 @@ export default function ReviewsPage() {
                 >
                   {p.diff == null ? "" : `${p.diff >= 0 ? "+" : "−"}${Math.abs(p.diff).toFixed(1)}`}
                 </span>
-                <span className="font-mono text-[11px] text-subtle w-16 text-right">
-                  {p.count ? `${p.count} reviews` : "none yet"}
+                <span className="font-mono text-[11px] text-subtle w-[128px] text-right truncate">
+                  {p.count
+                    ? `${p.count} reviews`
+                    : p.lastEver
+                      ? `none since ${shortDate(p.lastEver)}`
+                      : "none yet"}
                 </span>
               </div>
             ))}

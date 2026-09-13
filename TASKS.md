@@ -50,7 +50,7 @@ looking at it in a screenshot with real data, not demo data.
 - [x] Overview — KPIs, per-day bars, top dishes, day drawer
 - [x] Sales — gross/orders/avg/per-day/lost, platform table, fee rates, heatmap
 - [x] Products — units, revenue, per-platform split, price flags
-- [ ] Reviews — counts, average, distribution, per-platform
+- [x] Reviews — counts, average, distribution, per-platform
 - [ ] Menu — prices vs `menu_item_price_history`, alias coverage
 - [ ] Platform Payouts — statement totals vs computed sales for the same period
 - [ ] Calendar — 53 shifts, Feb–Mar only. Check the empty months read as empty
@@ -300,3 +300,29 @@ Reconciled with `tools/audit-products.mjs` and `tools/sql.sh`.
   as its canonical name and matches on the fallback, POS writes Halloumi Burger
   normalisably, and the two Vegetable Burger rows appear in no order ever
   placed. They really do sell nothing.
+
+### Reviews (task 5)
+
+Reconciled with `tools/audit-reviews.mjs` and `tools/sql.sh`.
+
+- **Foody's review feed died on 1 May 2026.** 12–15 reviews a month through
+  April, one in May, then **zero for June, July, August and September** — while
+  Foody kept taking 115 orders in a 28-day window. The per-platform row said
+  "none yet", which reads as "Foody customers do not review" rather than "this
+  import stopped". It now reads **"none since 1 May"** when a platform has
+  history but nothing in range, and keeps "none yet" for one that has genuinely
+  never had any — which is Google, the platform kept in the UI on purpose
+  (DESIGN.md departure 1).
+- **The data itself is clean.** 298 reviews; three platforms only (wolt 194,
+  foody 56, bolt 48); every rating 1–5; all-time average 3.849. 297 of 298 carry
+  an `order_reference` and **all 297 resolve to a real order**, with the review's
+  platform matching the order's platform **every single time**, and not one
+  review dated before the order it rates.
+- **`reviewer_name` is null on all 298 rows** and only **49** carry
+  `review_text` — CLAUDE.md still said 40 of 231; corrected.
+- **Demo was lying about this screen.** It invented Google reviews with
+  reviewer names, linked only 40% of them to an order, and gave 78% of them
+  text. Production has none of that. Demo now takes the order first and lets it
+  decide the platform (so the reference always resolves and the platforms always
+  agree), never sets a name, writes text on 16%, and stalls Foody's feed partway
+  through — so the screen looks like what the owner will actually see.
