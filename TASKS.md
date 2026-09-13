@@ -69,7 +69,7 @@ sentence, and a filter combination that produces `NaN` or an infinite axis.
 - [x] Overview
 - [x] Sales
 - [x] Products
-- [ ] Reviews
+- [x] Reviews
 - [ ] Platform Payouts
 - [ ] Calendar
 - [ ] Payroll / My Payroll
@@ -518,3 +518,19 @@ in `.shots/sweep/`.
   judged on every row rather than the visible ones, which is what a matching
   failure actually means, and the category card says "Every category is switched
   off, so there is nothing to divide up" instead of rendering as a titled blank.
+- **Reviews — 42 combinations, clean.** The sweep reads a radio control's
+  options off the control now rather than assuming them, since Reviews carries
+  Google and Products does not.
+- **The weekly rating line left the chart through the bottom.** The y-axis was
+  hardcoded to 3.5–5, which holds while ratings are healthy — but filter to a
+  quiet platform and a whole week can rest on a single one-star review. That
+  week plotted below the floor and the line simply disappeared off the plot. The
+  floor now drops to fit the worst week, in half-star steps, and the axis labels
+  follow: 5.0 / 4.5 / 4.0 / 3.5 normally, 5.0 / 4.0 / 3.0 / 2.0 when a week
+  needs the room. Production will hit this — the all-time average is 3.849 with
+  46 one-star reviews on the record.
+- **The sweep now fails on a point drawn outside its own plot**, which is what
+  would have caught that without anyone looking.
+- **The star breakdown rows were `div`s with an onClick**, so the design's
+  "Click a row to filter the feed" could not be done from a keyboard. They are
+  buttons with `aria-pressed` now.

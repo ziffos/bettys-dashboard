@@ -41,6 +41,18 @@ const audit = () => {
     const r = el.getBoundingClientRect();
     if (r.width > 40 && r.height === 0) problems.push("an svg has zero height");
   }
+  // a series drawn outside its own plot — a fixed axis that the data escaped
+  for (const svg of document.querySelectorAll("svg[viewBox]")) {
+    const box = svg.viewBox.baseVal;
+    if (!box || !box.height) continue;
+    for (const c of svg.querySelectorAll("circle")) {
+      const cy = Number(c.getAttribute("cy"));
+      if (Number.isFinite(cy) && (cy < -0.5 || cy > box.height + 0.5)) {
+        problems.push(`a point sits at cy=${cy.toFixed(1)} outside a 0–${box.height} plot`);
+        break;
+      }
+    }
+  }
   if (document.documentElement.scrollWidth > window.innerWidth + 1) {
     problems.push(`content is ${document.documentElement.scrollWidth}px wide in a ${window.innerWidth}px viewport`);
   }
@@ -87,17 +99,26 @@ for (const [label, width, height] of [["desktop", 1440, 1000], ["phone", 390, 84
       // switched off still has to draw something honest.
       const radio = p.locator("main button").filter({ hasText: /^All$/ }).first();
       const isRadio = (await radio.count()) > 0;
+      // Read the options off the control rather than assuming them — Reviews
+      // carries Google, Products does not, and Payouts has its own pair.
+      const radioOptions = isRadio
+        ? await radio.evaluate((el) =>
+            [...el.parentElement.querySelectorAll("button")]
+              .map((b) => b.innerText.trim())
+              .filter((t) => t && t.length < 20)
+          )
+        : [];
       const chipBar = p.locator("main button").filter({ hasText: chipPattern });
       const chipCount = isRadio ? 0 : await chipBar.count();
       const chipStates = isRadio
-        ? ["All", "Wolt", "Foody", "Bolt", "POS"]
+        ? radioOptions
         : chipCount
           ? ["all", "one", "none"]
           : ["all"];
 
       for (const chips of chipStates) {
         if (isRadio) {
-          const opt = p.locator("main button").filter({ hasText: new RegExp(`^${chips}$`) }).first();
+          const opt = radio.locator("xpath=..").locator("button", { hasText: new RegExp(`^${chips}$`) }).first();
           if (await opt.count()) {
             await opt.click();
             await p.waitForTimeout(900);
@@ -120,7 +141,7 @@ for (const [label, width, height] of [["desktop", 1440, 1000], ["phone", 390, 84
       errs.length = 0;
       const problems = await p.evaluate(audit);
       checks++;
-      const tag = `${route.replace(/\//g, "") || "overview"}-${label}-${range.replace(/ /g, "")}${interval ? "-" + interval : ""}${isRadio || chipCount ? "-" + chips : ""}`;
+      const tag = `${route.replace(/\//g, "") || "overview"}-${label}-${range.replace(/ /g, "")}${interval ? "-" + interval : ""}${isRadio || chipCount ? "-" + chips.replace(/\s+/g, "") : ""}`;
       if (problems.length || errs.length) {
         found.push({ tag, problems, errs: [...new Set(errs)].slice(0, 2) });
         await p.screenshot({ path: `${OUT}/${tag}.png`, fullPage: true });

@@ -298,8 +298,17 @@ export default function ReviewsPage() {
 
   const diff = model.overallAvg - model.prevAvg;
   const ratedWeeks = model.weeks.filter((w) => w.avg != null);
-  const lo = 3.5;
+  // 3.5–5 is the comfortable band, and the chart keeps it whenever the weeks
+  // stay inside — but a bad week is exactly the one worth seeing. Filtering to
+  // a quiet platform can put a whole week on a single one-star review, and with
+  // a fixed floor the line simply left the chart through the bottom.
   const hi = 5;
+  const lo = Math.max(
+    1,
+    Math.min(3.5, ...ratedWeeks.map((w) => Math.floor(w.avg * 2) / 2))
+  );
+  const ticks = [];
+  for (let v = hi; v >= lo - 0.001; v -= (hi - lo) / 3) ticks.push(Math.round(v * 10) / 10);
   const yOf = (v) => 110 - ((v - lo) / (hi - lo)) * 110;
   const xOf = (i) => (i / Math.max(1, WEEKS - 1)) * 300;
 
@@ -391,10 +400,11 @@ export default function ReviewsPage() {
             {model.breakdown.map((b) => {
               const on = star === b.star;
               return (
-                <div
+                <button
                   key={b.star}
                   onClick={() => setStar(on ? 0 : b.star)}
-                  className={`flex items-center gap-2.5 px-2 py-[7px] rounded-md cursor-pointer hover:bg-wash-light ${
+                  aria-pressed={on}
+                  className={`w-full flex items-center gap-2.5 px-2 py-[7px] rounded-md text-left hover:bg-wash-light ${
                     on ? "bg-wash-light" : ""
                   }`}
                 >
@@ -424,7 +434,7 @@ export default function ReviewsPage() {
                   <span className="font-mono text-[11px] text-subtle w-8 text-right">
                     {Math.round(b.share)}%
                   </span>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -480,7 +490,7 @@ export default function ReviewsPage() {
           </p>
           <div className="flex gap-2.5 mt-4">
             <div className="w-[30px] shrink-0 relative h-[110px]">
-              {[5, 4.5, 4, 3.5].map((v) => (
+              {ticks.map((v) => (
                 <span
                   key={v}
                   className="absolute right-0 font-mono text-[11px] text-muted -translate-y-1/2"
@@ -491,7 +501,7 @@ export default function ReviewsPage() {
               ))}
             </div>
             <div className="flex-1 min-w-0 relative h-[110px]">
-              {[5, 4.5, 4, 3.5].map((v) => (
+              {ticks.map((v) => (
                 <div
                   key={v}
                   className="absolute left-0 right-0 h-px bg-wash"
