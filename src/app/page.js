@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { TriangleAlert } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import { isParked } from "../lib/features";
 import { useRange } from "../lib/RangeContext";
 import DayDrawer from "../components/DayDrawer";
 import {
@@ -587,6 +588,8 @@ export default function OverviewPage() {
           })}
         </Card>
 
+        {/* Parked with Marketing — same table, same stalled import. */}
+        {!isParked("marketing") && (
         <Card className="px-4 py-3.5">
           <div className="flex items-baseline justify-between gap-3">
             <h2 className="text-[14px] font-semibold tracking-[-0.01em]">Social reach</h2>
@@ -631,6 +634,7 @@ export default function OverviewPage() {
             </>
           )}
         </Card>
+        )}
       </div>
 
       {openBar && (

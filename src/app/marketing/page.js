@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { TriangleAlert } from "lucide-react";
+import { Megaphone, TriangleAlert } from "lucide-react";
 import { supabase } from "../../lib/supabase";
+import { isParked } from "../../lib/features";
 import { useRange } from "../../lib/RangeContext";
 import {
   Card,
@@ -83,7 +84,29 @@ const polyline = (values, w, h, min, max) => {
     .join(" ");
 };
 
+/**
+ * Parked until the social import restarts — see src/lib/features.js. The screen
+ * below is untouched and comes back with its slug.
+ */
 export default function MarketingPage() {
+  if (isParked("marketing")) return <MarketingParked />;
+  return <MarketingScreen />;
+}
+
+function MarketingParked() {
+  return (
+    <div className="flex flex-col gap-4 md:gap-5">
+      <PageHeader title="Marketing" sub="Reach, followers and what advertising brought back" />
+      <EmptyState
+        icon={Megaphone}
+        title="Coming back once the numbers are flowing again"
+        body="Marketing reads Facebook and Instagram stats, and that import stopped on 24 April 2026. Rather than draw a chart that runs off the end of April, the screen is parked until the data starts arriving again."
+      />
+    </div>
+  );
+}
+
+function MarketingScreen() {
   const range = useRange();
   const [interval, setInterval] = useState("daily");
   const [platform, setPlatform] = useState("all");

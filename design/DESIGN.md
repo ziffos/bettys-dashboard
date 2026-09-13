@@ -299,6 +299,12 @@ Agreed with the owner before the rebuild started. Do not "fix" these back.
     `prefers-reduced-motion`, and on a phone they keep to the free bands
     above and below the column instead of crossing it. The design's login
     canvas is plain.
+22. **Marketing is parked, and Overview's "Social reach" card with it.**
+    `social_stats` stops on 24 Apr 2026. Rather than draw flat lines off the end
+    of April, both are switched off through `src/lib/features.js`; the route
+    renders a "coming back" state and the page leaves the rail, the phone bar,
+    the More sheet, ⌘K and the permissions matrix. Nothing is deleted — removing
+    the slug from `PARKED_PAGES` restores all of it.
 
 ## Out of scope — do not touch
 

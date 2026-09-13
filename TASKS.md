@@ -26,13 +26,13 @@ re-derive them.
       on Escape, does not sit under the bar, does not scroll the page behind it
 - [x] Show who is signed in in the sheet, as the desktop rail does
 
-## 3 · Hide Marketing
+## 3 · Hide Marketing — **done**
 
-- [ ] Temporary, not deleted. `social_stats` stops at 2026-04-24, so the screen
+- [x] Temporary, not deleted. `social_stats` stops at 2026-04-24, so the screen
       has nothing recent to draw. Owner will re-open it when data is added
-- [ ] One flag, one place, documented so re-opening is a one-line change
-- [ ] Gone from rail, mobile bar, More sheet, ⌘K palette, permissions matrix
-- [ ] Route itself returns a "coming back" state rather than a broken chart
+- [x] One flag, one place, documented so re-opening is a one-line change
+- [x] Gone from rail, mobile bar, More sheet, ⌘K palette, permissions matrix
+- [x] Route itself returns a "coming back" state rather than a broken chart
 
 ## 4 · Platform payouts: what has not landed
 
@@ -174,10 +174,18 @@ off here with a reason.
   with the page given `4.75rem + safe-area` of clearance so the last card is
   never underneath it. Verified: the More button sits at the same y after
   scrolling to the bottom of Overview, and the last card clears the bar by 76px.
-- **Overview's "Social reach" card reads `social_stats` too**, so hiding
-  Marketing (task 3) leaves that card with nothing after 24 Apr. Decide there
-  whether it goes with Marketing or stays with an empty state.
+- **Overview's "Social reach" card reads `social_stats` too.** Parked with
+  Marketing under the same flag, so one edit brings both back.
 - **Demo invents Google reviews.** `reviews.source_platform` in production is
   wolt/foody/bolt only (DESIGN.md departure 1), but the demo generator emits
   GOOGLE, so demo screenshots show a platform the real screen can never show.
   Worth correcting when task 5 reaches Reviews.
+- **Parking is one import, not a search-and-replace.** The rail, ⌘K, the phone
+  bar and the More sheet all derive from `useVisibleNav`, so a single check
+  there covers four surfaces; the permissions matrix keeps its own list and
+  needed the second. Verified with Playwright that Marketing is absent from all
+  six, including the matrix, which now reads 8 columns and "3/8" rather than
+  "3/9".
+- **`page_permissions` grants for a parked page are left alone.** Nothing is
+  deleted from the database, so whoever had Marketing still has it when it
+  comes back.

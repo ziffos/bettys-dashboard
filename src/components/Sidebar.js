@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import logo from "../../public/images/betty_logo.png";
 import { useAuth } from "../lib/AuthContext";
+import { isParked } from "../lib/features";
 import { supabase } from "../lib/supabase";
 
 export const NAV_GROUPS = [
@@ -84,6 +85,7 @@ export function useVisibleNav() {
   }, [user, isAdmin]);
 
   const allowed = (item) => {
+    if (isParked(item.slug)) return false;
     if (!canAccess(item.slug)) return false;
     if (item.slug === "my-payroll" && (isAdmin || !hasShifts)) return false;
     return true;

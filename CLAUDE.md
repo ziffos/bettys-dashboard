@@ -71,6 +71,8 @@ Chicken" built with **Next.js 16 App Router**, **React 19**, **Supabase** and
 - `src/app/` — Next.js App Router pages (file-based routing)
 - `src/components/` — The shell (ClientLayout, Sidebar, AppHeader, MobileNav)
 - `src/components/ui/` — The pieces every rebuilt screen composes from
+- `src/lib/features.js` — Pages parked on purpose. Marketing is off until the
+  social import restarts; take its slug out of `PARKED_PAGES` to bring it back
 - `src/lib/format.js` — Money, dates, sparklines, item parsing, paginated reads
 - `src/lib/salesModel.js` — Per-day revenue and the prorated fee model
 - `src/lib/menuMatch.js` — Order lines → menu items, and effective-dated prices

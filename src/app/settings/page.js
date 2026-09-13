@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, Pencil, Plus, ShieldCheck, TriangleAlert } from "lucide-react";
 import { supabase } from "../../lib/supabase";
+import { isParked } from "../../lib/features";
 import { useAuth } from "../../lib/AuthContext";
 import {
   Card,
@@ -23,7 +24,7 @@ import { MONTHS, euro2 } from "../../lib/format";
  * always had — TV Displays is admin-only in practice, and adding it here is a
  * permissions decision rather than a design one.
  */
-const PAGES = [
+const ALL_PAGES = [
   { slug: "overview", label: "Overview", short: "OVER" },
   { slug: "sales", label: "Sales", short: "SALES" },
   { slug: "marketing", label: "Marketing", short: "MKTG" },
@@ -34,6 +35,10 @@ const PAGES = [
   { slug: "calendar", label: "Calendar", short: "CAL" },
   { slug: "my-payroll", label: "My Payroll", short: "MY PAY" },
 ];
+
+// A parked page is not a permission anyone can act on, so it leaves the matrix
+// too. Existing grants stay in `page_permissions` and come back with the page.
+const PAGES = ALL_PAGES.filter((p) => !isParked(p.slug));
 
 const TABS = [
   { id: "people", label: "People" },
