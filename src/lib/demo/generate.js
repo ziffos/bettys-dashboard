@@ -148,10 +148,14 @@ function build() {
     }
     return 20;
   };
+  // Naive local wall clock, the shape production stores (see salesModel's
+  // WALL_CLOCK note). toISOString() would re-tag it as UTC and shift demo by
+  // the screenshotting machine's offset.
   const stamp = (day, hour) => {
     const d = new Date(day);
     d.setHours(hour, intBetween(0, 59), intBetween(0, 59), 0);
-    return d.toISOString();
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${iso(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
   };
 
   // Weekend lift, gentle growth trend, seasonal wobble — so the trend charts

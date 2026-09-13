@@ -78,7 +78,10 @@ Chicken" built with **Next.js 16 App Router**, **React 19**, **Supabase** and
 - `src/lib/` — Supabase client (`supabase.js`) and auth context (`AuthContext.js`)
 - `src/lib/demo/` — In-memory Supabase stand-in for demo mode
 - `design/` — The redesign spec and reference renders
-- `tools/` — Screenshot tooling
+- `tools/` — Screenshot tooling, plus `sql.sh` (read-only SQL against
+  production through the Management API, which unlike the anon key can see the
+  RLS-locked tables) and `node-app.mjs` (run a script that imports the app's own
+  modules under plain `node`, for checking the model against SQL)
 
 ### Auth & access control
 
@@ -119,7 +122,14 @@ not set `job_title` — it is filled in afterwards from the Settings panel.
 
 - Parallel fetches via `Promise.all()` in `useEffect`
 - Paginate with `fetchAllRows` — PostgREST caps at 1000 rows per request
-- Timezone: `Europe/Nicosia` (Cyprus) throughout
+- **Timestamps are Cyprus wall clock, not UTC.** `pos_sales.order_placed` is a
+  naive `timestamp`; `delivery_purchases.order_placed` and `reviews.review_date`
+  are `timestamptz` carrying a `+00` tag the importer never earned. Read them
+  with `dayOf` / `timeOf` / `hourOf` / `stampLabel` from `salesModel.js`, which
+  parse the wall clock and ignore the offset. Converting the tag to
+  Europe/Nicosia shifts every delivery order three hours late — see the note on
+  `WALL_CLOCK`. `RangeContext` still uses Europe/Nicosia, correctly, because
+  "today" is a real instant
 - Delivery platforms: Wolt, Foody, Bolt, plus in-store POS
 - Rejected and cancelled orders are filtered out of revenue
 - Order lines are parsed out of the comma-separated `items` string with a regex,

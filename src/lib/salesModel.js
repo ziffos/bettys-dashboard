@@ -21,34 +21,68 @@ export const feesOf = (payout) =>
   Number(payout.other_fees || 0) +
   Number(payout.customer_deductions || 0);
 
-/** The business day an order belongs to, in Cyprus. */
-export const dayOf = (timestamp) => {
+/**
+ * Both order tables store Cyprus wall-clock time — but only one of them says so.
+ *
+ * `pos_sales.order_placed` is a naive `timestamp`, which is honest.
+ * `delivery_purchases.order_placed` and `reviews.review_date` are `timestamptz`
+ * carrying a `+00` tag they have not earned: the importer wrote local time and
+ * Postgres, running in UTC, stamped it as if it were UTC. Converting that tag
+ * to Europe/Nicosia pushed every delivery order and review three hours late —
+ * enough to roll a 21:46 Saturday order onto Sunday, a day the shop is shut,
+ * and to move an evening's takings onto the next day's bar.
+ *
+ * Two proofs, both in TASKS.md: the hour histograms of the two tables have the
+ * same 11:00–22:00 shape once the tag is ignored, and read that way Sundays
+ * have zero orders.
+ *
+ * So we read the characters PostgREST sends and ignore anything after the
+ * minutes. That is correct for a naive timestamp and for a mis-tagged one, and
+ * it does not depend on the timezone of the machine looking at the page.
+ */
+const WALL_CLOCK = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/;
+
+const wallParts = (timestamp) => {
   if (!timestamp) return null;
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/Nicosia",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date(timestamp));
+  return WALL_CLOCK.exec(
+    typeof timestamp === "string" ? timestamp : toWallString(timestamp)
+  );
 };
 
-export const timeOf = (timestamp) =>
-  new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Europe/Nicosia",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(timestamp));
+/** A Date can only have come from our own code, so read it in local time. */
+const toWallString = (date) => {
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
+    d.getHours()
+  )}:${pad(d.getMinutes())}`;
+};
+
+/** The business day an order belongs to, in Cyprus. "2026-09-12" */
+export const dayOf = (timestamp) => {
+  const m = wallParts(timestamp);
+  return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
+};
+
+/** "21:46" */
+export const timeOf = (timestamp) => {
+  const m = wallParts(timestamp);
+  return m ? `${m[4]}:${m[5]}` : "";
+};
 
 /** The hour of day an order was placed, in Cyprus. */
 export const hourOf = (timestamp) => {
-  if (!timestamp) return null;
-  return Number(
-    new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Europe/Nicosia",
-      hour: "2-digit",
-      hour12: false,
-    }).format(new Date(timestamp))
-  );
+  const m = wallParts(timestamp);
+  return m ? Number(m[4]) : null;
+};
+
+/** "12 SEP, 21:46" — for the freshness chip. */
+export const stampLabel = (timestamp) => {
+  const m = wallParts(timestamp);
+  if (!m) return "";
+  const MON = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+  return `${Number(m[3])} ${MON[Number(m[2]) - 1]}, ${m[4]}:${m[5]}`;
 };
 
 export function buildSalesModel({ deliveries = [], pos = [], payouts = [] }) {

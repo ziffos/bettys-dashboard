@@ -35,6 +35,7 @@ import {
   buildSalesModel,
   dayOf,
   hourOf,
+  stampLabel,
 } from "../../lib/salesModel";
 
 const INTERVALS = [
@@ -240,23 +241,13 @@ export default function SalesPage() {
     }
     for (const p of raw.pos) addHeat(p.order_placed, p.price, "pos");
 
-    // The axis follows the trading day, not the clock. Betty's serves past
-    // midnight, so a plain 0–23 axis puts the evening peak and the small hours
-    // at opposite ends with half a day of dead columns between them. Find the
-    // longest stretch the kitchen is shut and start the axis where it reopens.
-    let quietStart = 0;
-    let quietLen = 0;
-    for (let start = 0; start < 24; start++) {
-      if (hourTotals[start] > 0) continue;
-      let len = 0;
-      while (len < 24 && hourTotals[(start + len) % 24] === 0) len++;
-      if (len > quietLen) {
-        quietLen = len;
-        quietStart = start;
-      }
-    }
-    const opensAt = quietLen > 0 ? (quietStart + quietLen) % 24 : 0;
-    const hours = Array.from({ length: 24 - quietLen }, (_, i) => (opensAt + i) % 24);
+    // The axis spans the hours the kitchen actually traded — a shop that opens
+    // at 08:00 or closes at 23:00 keeps all of its columns, and the dead hours
+    // of the night are not drawn as a row of empty cells.
+    const traded = hourTotals.map((v, h) => (v > 0 ? h : -1)).filter((h) => h >= 0);
+    const firstHour = traded.length ? traded[0] : 11;
+    const lastHour = traded.length ? traded[traded.length - 1] : 22;
+    const hours = Array.from({ length: lastHour - firstHour + 1 }, (_, i) => firstHour + i);
     const weeksInRange = Math.max(1, days.length / 7);
     const heatRows = DOW_ORDER.map((dow) => ({
       dow,
@@ -360,16 +351,7 @@ export default function SalesPage() {
                       : "#50e3c2",
               }}
             />
-            SYNCED{" "}
-            {new Date(model.lastOrderAt)
-              .toLocaleString("en-GB", {
-                day: "numeric",
-                month: "short",
-                hour: "2-digit",
-                minute: "2-digit",
-                timeZone: "Europe/Nicosia",
-              })
-              .toUpperCase()}
+            SYNCED {stampLabel(model.lastOrderAt)}
           </div>
         )
       }
