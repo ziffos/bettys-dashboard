@@ -37,7 +37,7 @@ conventions in "Legacy UI" still apply to it.
 | Overview | `/` | **done** |
 | Sales | `/sales` | **done** |
 | Marketing | `/marketing` | **done** |
-| Products | `/products` | todo |
+| Products | `/products` | **done** |
 | Reviews | `/reviews` | todo |
 | Menu | `/menu` | todo |
 | Platform Payouts | `/platform-payouts` | todo |
@@ -85,6 +85,7 @@ Chicken" built with **Next.js 16 App Router**, **React 19**, **Supabase** and
 - `src/components/ui/` — The pieces every rebuilt screen composes from
 - `src/lib/format.js` — Money, dates, sparklines, item parsing, paginated reads
 - `src/lib/salesModel.js` — Per-day revenue and the prorated fee model
+- `src/lib/menuMatch.js` — Order lines → menu items, and effective-dated prices
 - `src/components/tv/` — The in-store display boards (out of scope)
 - `src/lib/` — Supabase client (`supabase.js`) and auth context (`AuthContext.js`)
 - `src/lib/demo/` — In-memory Supabase stand-in for demo mode
@@ -134,7 +135,12 @@ not set `job_title` — it is filled in afterwards from the Settings panel.
 - Delivery platforms: Wolt, Foody, Bolt, plus in-store POS
 - Rejected and cancelled orders are filtered out of revenue
 - Order lines are parsed out of the comma-separated `items` string with a regex,
-  then matched to `menu_items` through the per-platform alias columns
+  then matched to `menu_items` through the per-platform alias columns. The three
+  platforms genuinely disagree on names — Wolt writes "Betty's Classic", Foody
+  writes it with a backtick, the till shouts it in capitals — which is what
+  those columns are for. `buildMenuMatcher` falls back to a normalised canonical
+  name so a dish added before its aliases were filled in is not reported as
+  selling nothing
 - Per-order fees do not exist. Commission is prorated from `platform_payouts`,
   sales-weighted across the days a statement covers, and a day with no statement
   is marked *estimated* rather than confirmed
