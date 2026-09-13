@@ -121,6 +121,18 @@
   }
 }
 
+/* The phone More sheet rising from the bottom bar. */
+@keyframes sheetIn {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
 @keyframes riseIn {
   from {
     opacity: 0;

@@ -18,13 +18,13 @@ re-derive them.
       (naive local, 11:00–22:00, closed Sundays) so demo screenshots stay honest
 - [x] Verify: 0 orders on Sundays, last order 12 Sep 21:46 not 13 Sep 00:46
 
-## 2 · Mobile navigation
+## 2 · Mobile navigation — **done**
 
-- [ ] There is no way to sign out on a phone. Add it to the More sheet
-- [ ] Bottom bar sticky/fixed so it survives a long page and iOS URL-bar chrome
-- [ ] More sheet opens properly: animates, scrolls, closes on backdrop tap and
+- [x] There is no way to sign out on a phone. Add it to the More sheet
+- [x] Bottom bar sticky/fixed so it survives a long page and iOS URL-bar chrome
+- [x] More sheet opens properly: animates, scrolls, closes on backdrop tap and
       on Escape, does not sit under the bar, does not scroll the page behind it
-- [ ] Show who is signed in in the sheet, as the desktop rail does
+- [x] Show who is signed in in the sheet, as the desktop rail does
 
 ## 3 · Hide Marketing
 
@@ -167,3 +167,17 @@ off here with a reason.
   counts match `tools/sql.sh` to the cent on all 11 trading days, Sunday 6 Sep
   is €0.00 / 0 orders, and the newest order reads 12 Sep 21:46 rather than
   13 Sep 00:46.
+- **Signing out was impossible on a phone.** The rail carries it on desktop; the
+  More sheet listed pages only. It now opens with the person and a Sign out
+  button, the way the rail does.
+- **The bar was `sticky`, which is not the same as staying put.** Now `fixed`,
+  with the page given `4.75rem + safe-area` of clearance so the last card is
+  never underneath it. Verified: the More button sits at the same y after
+  scrolling to the bottom of Overview, and the last card clears the bar by 76px.
+- **Overview's "Social reach" card reads `social_stats` too**, so hiding
+  Marketing (task 3) leaves that card with nothing after 24 Apr. Decide there
+  whether it goes with Marketing or stays with an empty state.
+- **Demo invents Google reviews.** `reviews.source_platform` in production is
+  wolt/foody/bolt only (DESIGN.md departure 1), but the demo generator emits
+  GOOGLE, so demo screenshots show a platform the real screen can never show.
+  Worth correcting when task 5 reaches Reviews.

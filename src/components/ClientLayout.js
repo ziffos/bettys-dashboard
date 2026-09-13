@@ -37,7 +37,10 @@ export default function ClientLayout({ children }) {
       {/* min-w-0 so a wide table inside a page cannot stretch the whole shell */}
       <div className="flex-1 min-w-0 flex flex-col">
         <AppHeader />
-        <main className="flex-1 px-3 md:px-6 pt-4 pb-6 md:py-6">{children}</main>
+        {/* The phone nav is fixed, so the last card needs clearance under it. */}
+        <main className="flex-1 px-3 md:px-6 pt-4 md:pt-6 pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:pb-6">
+          {children}
+        </main>
         <MobileNav />
       </div>
 
