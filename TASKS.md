@@ -34,12 +34,12 @@ re-derive them.
 - [x] Gone from rail, mobile bar, More sheet, ⌘K palette, permissions matrix
 - [x] Route itself returns a "coming back" state rather than a broken chart
 
-## 4 · Platform payouts: what has not landed
+## 4 · Platform payouts: what has not landed — **done**
 
-- [ ] Compare every delivery sales day against statement coverage per platform
-- [ ] Separate genuinely missing statements from "too recent to be settled"
-- [ ] Surface it on `/platform-payouts` — a statement gap is money not received
-- [ ] Give the owner the list (also in "Payout gaps" below)
+- [x] Compare every delivery sales day against statement coverage per platform
+- [x] Separate genuinely missing statements from "too recent to be settled"
+- [x] Surface it on `/platform-payouts` — a statement gap is money not received
+- [x] Give the owner the list (also in "Payout gaps" below)
 
 ## 5 · Data audit against Supabase
 
@@ -128,11 +128,16 @@ absent from the database:
 | Platform | Period | Days | Orders | Gross |
 |---|---|---|---|---|
 | Wolt | 2026-09-11 → 2026-09-12 | 2 | 19 | €268.70 |
-| Foody | 2026-09-06 → 2026-09-12 | 6 | 30 | €544.20 |
-| Bolt | 2026-09-07 → 2026-09-12 | 4 | 6 | €84.50 |
+| Foody | 2026-09-06 → 2026-09-12 | 7 | 30 | €544.20 |
+| Bolt | 2026-09-07 → 2026-09-12 | 6 | 6 | €84.50 |
 
 Statement cadence, for judging whether a gap is real: Wolt settles every 5 days,
 Bolt every 7, Foody every 4–5.
+
+**€2,688.24 of gross is unsettled in total, €1,790.84 of it genuinely missing.**
+Spans count calendar days, so a closed Sunday inside a gap is part of it.
+`tools/audit-payout-gaps.mjs` reproduces this list from the app's own
+`findPayoutGaps`, and it matches the SQL island query row for row.
 
 ### Tools
 
@@ -189,3 +194,15 @@ off here with a reason.
 - **`page_permissions` grants for a parked page are left alone.** Nothing is
   deleted from the database, so whoever had Marketing still has it when it
   comes back.
+- **Gap islands must be cut on coverage, not on sales.** Islanding on sales days
+  split Wolt's June gap into three (6th, 8th–12th, 15th) because the shop is
+  shut on Sundays. Cutting on coverage gives the one real answer: 6–15 June, ten
+  days, 76 orders, €1,264.32 — a Wolt invoice number jump of 93592 → 102751,
+  which is two statements.
+- **The unsettled card cannot live inside the header range.** A statement
+  missing since June is still missing while you look at last week, and the
+  range-empty state is exactly when you most want to see it. It scans every
+  statement there is and renders in the empty branch too.
+- **Two-step fetch keeps it cheap.** Coverage alone tells you where the gaps
+  are, so the order query starts at the first uncovered day instead of pulling
+  all 3,695 deliveries. It shrinks as statements arrive.

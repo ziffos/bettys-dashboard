@@ -85,6 +85,66 @@ export const stampLabel = (timestamp) => {
   return `${Number(m[3])} ${MON[Number(m[2]) - 1]}, ${m[4]}:${m[5]}`;
 };
 
+/**
+ * Days a platform sold on that no statement covers — money the shop earned and
+ * has not been settled for.
+ *
+ * Islands are cut on coverage, not on sales, so a Sunday sitting inside a gap
+ * does not split one missing statement into two. An island that starts after
+ * the platform's newest statement is `awaiting` — the trailing edge, which
+ * always exists because settlement lags. One with statements on both sides is
+ * `missing`: the period was settled around it and the paperwork never arrived.
+ *
+ * @param statements  [{ platform, from, to }] — every statement, not just the
+ *                    ones overlapping the header range
+ * @param sales       a buildSalesModel result covering at least the gap days
+ * @param lastDay     the newest day with orders; nothing after it can be late
+ */
+export function findPayoutGaps({ statements = [], sales, lastDay }) {
+  const out = [];
+
+  for (const id of DELIVERY_IDS) {
+    const mine = statements
+      .filter((s) => (s.platform || "").toLowerCase() === id && s.from && s.to)
+      .sort((a, b) => a.from.localeCompare(b.from));
+    if (mine.length === 0) continue;
+
+    const covered = new Set();
+    for (const s of mine) for (const day of eachDay(s.from, s.to)) covered.add(day);
+    const lastTo = mine.reduce((a, s) => (s.to > a ? s.to : a), mine[0].to);
+    if (mine[0].from > lastDay) continue;
+
+    let island = null;
+    const close = () => {
+      if (island && island.orders > 0) out.push(island);
+      island = null;
+    };
+
+    for (const day of eachDay(mine[0].from, lastDay)) {
+      if (covered.has(day)) {
+        close();
+        continue;
+      }
+      island ??= {
+        platform: id,
+        from: day,
+        to: day,
+        days: 0,
+        orders: 0,
+        gross: 0,
+        kind: day > lastTo ? "awaiting" : "missing",
+      };
+      island.to = day;
+      island.days += 1;
+      island.orders += sales.ordOn(day, id);
+      island.gross += sales.revOn(day, id);
+    }
+    close();
+  }
+
+  return out.sort((a, b) => b.from.localeCompare(a.from));
+}
+
 export function buildSalesModel({ deliveries = [], pos = [], payouts = [] }) {
   // A delivery only counts as revenue once it reached someone.
   const sold = deliveries.filter(

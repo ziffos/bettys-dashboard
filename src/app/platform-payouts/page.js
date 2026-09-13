@@ -17,6 +17,7 @@ import {
 import {
   MONTHS,
   euro,
+  euro2,
   eachDay,
   fetchAllRows,
   fmtDay,
@@ -24,7 +25,7 @@ import {
   pctChange,
   rangeTitle,
 } from "../../lib/format";
-import { buildSalesModel, feesOf } from "../../lib/salesModel";
+import { buildSalesModel, dayOf, feesOf, findPayoutGaps } from "../../lib/salesModel";
 
 const PLATFORMS = ["wolt", "foody", "bolt"];
 
@@ -69,6 +70,61 @@ export default function PayoutsPage() {
   const [platform, setPlatform] = useState("all");
   const [mode, setMode] = useState("fee");
   const [open, setOpen] = useState({});
+  const [gaps, setGaps] = useState(null);
+
+  // Unsettled days are not a property of the header range — a statement missing
+  // since June is still missing while you look at last week. So this runs once,
+  // over every statement there is, and says so on the card.
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const statements = (
+          await fetchAllRows(supabase, "platform_payouts", "platform, period_from, period_to", [])
+        ).map((p) => ({ platform: p.platform, from: p.period_from, to: p.period_to }));
+        if (cancelled) return;
+        if (statements.length === 0) {
+          setGaps([]);
+          return;
+        }
+
+        // Find the uncovered spans from coverage alone, so the order fetch can
+        // start at the first one instead of dragging in every order ever taken.
+        const everySold = { ordOn: () => 1, revOn: () => 0 };
+        const today = fmtDay(new Date());
+        const candidates = findPayoutGaps({ statements, sales: everySold, lastDay: today });
+        if (candidates.length === 0) {
+          setGaps([]);
+          return;
+        }
+        const firstGapDay = candidates[candidates.length - 1].from;
+
+        const deliveries = await fetchAllRows(
+          supabase,
+          "delivery_purchases",
+          "order_placed, price, delivery_status, delivery_partner",
+          [{ op: "gte", col: "order_placed", val: firstGapDay }]
+        );
+        if (cancelled) return;
+
+        const sales = buildSalesModel({ deliveries, pos: [], payouts: [] });
+        const lastDay = deliveries.reduce((a, d) => {
+          const day = dayOf(d.order_placed);
+          return day && day > a ? day : a;
+        }, firstGapDay);
+        setGaps(findPayoutGaps({ statements, sales, lastDay }));
+      } catch (err) {
+        if (cancelled) return;
+        console.error("Payout gap scan failed:", err);
+        setGaps([]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -271,6 +327,76 @@ export default function PayoutsPage() {
     />
   );
 
+  const shownGaps = (gaps ?? []).filter(
+    (g) => platform === "all" || g.platform === platform
+  );
+  const missingGaps = shownGaps.filter((g) => g.kind === "missing");
+  const missingTotal = missingGaps.reduce((a, g) => a + g.gross, 0);
+  const gapTotal = shownGaps.reduce((a, g) => a + g.gross, 0);
+
+  /* What has not been settled. Deliberately outside the header range — a
+     statement missing since June is still missing while you look at this week,
+     so this also has to survive the "no statements in range" empty state. */
+  const notSettled =
+    shownGaps.length === 0 ? null : (
+      <Card>
+        <CardHeader
+          title="Not settled"
+          sub="Days that sold but no statement covers, across every statement there is — not just this range"
+          right={
+            <div className="text-right shrink-0">
+              <div className="font-mono text-[13px]">{euro(gapTotal)}</div>
+              <div className="font-mono text-[10px] tracking-[0.06em] text-subtle">GROSS</div>
+            </div>
+          }
+        />
+        {shownGaps.map((g) => (
+          <div
+            key={`${g.platform}-${g.from}`}
+            className="px-4 py-2.5 border-t border-line flex flex-wrap items-center gap-x-3 gap-y-1"
+          >
+            <span
+              className="w-1.5 h-1.5 rounded-full shrink-0"
+              style={{ background: PLATFORM[g.platform]?.color ?? "#8f8f8f" }}
+            />
+            <span className="text-[13px] font-medium w-[52px] shrink-0">
+              {PLATFORM[g.platform]?.name ?? g.platform}
+            </span>
+            <span className="text-[13px] text-muted shrink-0">
+              {periodLabel(g.from, g.to)}
+            </span>
+            <span
+              className="font-mono text-[10px] tracking-[0.06em] px-1.5 py-0.5 rounded shrink-0"
+              style={
+                g.kind === "missing"
+                  ? { background: "rgba(238,0,0,0.06)", color: "var(--color-danger)" }
+                  : { background: "var(--color-wash)", color: "var(--color-subtle)" }
+              }
+            >
+              {g.kind === "missing" ? "MISSING" : "AWAITING"}
+            </span>
+            <span className="hidden md:block flex-1 min-w-0" />
+            <span className="font-mono text-[12px] text-subtle shrink-0 md:w-[112px] md:text-right">
+              {g.days}d · {g.orders} orders
+            </span>
+  <span className="font-mono text-[13px] shrink-0 ml-auto md:ml-0 md:w-[76px] text-right">
+              {euro2(g.gross)}
+            </span>
+          </div>
+        ))}
+        <div className="px-4 py-2.5 border-t border-line text-[12px] text-muted text-pretty">
+          <strong className="font-medium text-ink">Missing</strong> means the platform
+          settled the periods on both sides and skipped this one — worth chasing.{" "}
+          <strong className="font-medium text-ink">Awaiting</strong> is the trailing
+          edge and arrives on its own: Wolt settles every 5 days, Bolt every 7, Foody
+          every 4–5.
+        </div>
+      </Card>
+    );
+
+  const cols =
+    "grid-cols-[minmax(0,1fr)_80px_30px] md:grid-cols-[minmax(0,1.4fr)_84px_84px_80px_52px_88px_56px_30px]";
+
   if (model.isEmpty) {
     return (
       <div className="flex flex-col gap-4 md:gap-5">
@@ -285,12 +411,10 @@ export default function PayoutsPage() {
           action="Jump to the last 28 days"
           onAction={() => range.setRange("28d")}
         />
+        {notSettled}
       </div>
     );
   }
-
-  const cols =
-    "grid-cols-[minmax(0,1fr)_80px_30px] md:grid-cols-[minmax(0,1.4fr)_84px_84px_80px_52px_88px_56px_30px]";
 
   const xOf = (i, n) => (n <= 1 ? 0 : (i / (n - 1)) * 320);
   const yOf = (v) => 140 - ((v - model.lo) / (model.hi - model.lo || 1)) * 140;
@@ -315,6 +439,18 @@ export default function PayoutsPage() {
         <div className="flex-1 min-w-1" />
         <Segmented options={MODES} value={mode} onChange={setMode} />
       </div>
+
+      {missingGaps.length > 0 && (
+        <div className="flex items-start gap-2.5 px-4 py-3 border border-line rounded-[10px] bg-wash-light">
+          <CircleAlert size={15} strokeWidth={2} className="text-danger shrink-0 mt-px" />
+          <span className="text-[13px] flex-1 min-w-0 text-pretty">
+            {missingGaps.length === 1 ? "A settled period has" : `${missingGaps.length} settled periods have`}{" "}
+            no statement against {missingGaps.length === 1 ? "it" : "them"} —{" "}
+            <strong className="font-medium">{euro(missingTotal)}</strong> of sales the
+            platform has invoiced around. Listed below.
+          </span>
+        </div>
+      )}
 
       {/* KPIs */}
       <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
@@ -358,6 +494,8 @@ export default function PayoutsPage() {
           series={model.series}
         />
       </div>
+
+      {notSettled}
 
       {/* Trend */}
       <Card>
