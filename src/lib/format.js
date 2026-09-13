@@ -47,6 +47,12 @@ export const fmtDay = (date) =>
     date.getDate()
   ).padStart(2, "0")}`;
 
+/** "7 days" / "1 day" — a span, counted. */
+export const dayCount = (n) => `${n} day${n === 1 ? "" : "s"}`;
+
+/** "the 7 days before" / "the day before" — what a range is compared against. */
+export const priorPhrase = (n) => (n === 1 ? "the day before" : `the ${n} days before`);
+
 /** "5 Sep" */
 export const shortDate = (str) => {
   const d = parseDay(str);

@@ -26,6 +26,8 @@ import {
   parseDay,
   pctChange,
   rangeTitle,
+  dayCount,
+  priorPhrase,
   signedPct,
   bucketDays,
   bucketLabel,
@@ -363,7 +365,7 @@ export default function SalesPage() {
   const header = (
     <PageHeader
       title="Sales"
-      sub={`${rangeTitle(range.from, range.to)} · ${range.days} days · compared with the ${range.days} days before`}
+      sub={`${rangeTitle(range.from, range.to)} · ${dayCount(range.days)} · compared with ${priorPhrase(range.days)}`}
       right={
         model?.lastOrderAt && (
           <div className="flex items-center gap-[7px] h-[26px] px-2.5 border border-line rounded-full font-mono text-[11px] text-subtle whitespace-nowrap">

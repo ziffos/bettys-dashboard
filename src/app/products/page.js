@@ -25,6 +25,7 @@ import {
   parseItems,
   pctChange,
   rangeTitle,
+  priorPhrase,
   signedPct,
   sparkPath,
 } from "../../lib/format";
@@ -333,7 +334,7 @@ export default function ProductsPage() {
   const header = (
     <PageHeader
       title="Products"
-      sub={`${rangeTitle(range.from, range.to)} · ${model.activeCount} active menu items · compared with the ${range.days} days before`}
+      sub={`${rangeTitle(range.from, range.to)} · ${model.activeCount} active menu items · compared with ${priorPhrase(range.days)}`}
     />
   );
 

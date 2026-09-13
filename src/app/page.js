@@ -32,6 +32,7 @@ import {
   parseItems,
   pctChange,
   rangeTitle,
+  priorPhrase,
   signedPct,
   bucketDays,
   bucketLabel,
@@ -294,7 +295,7 @@ export default function OverviewPage() {
   const header = (
     <PageHeader
       title="Overview"
-      sub={`${rangeTitle(range.from, range.to)} · compared with previous ${range.days} days`}
+      sub={`${rangeTitle(range.from, range.to)} · compared with ${priorPhrase(range.days)}`}
       right={<Segmented options={INTERVALS} value={interval} onChange={setInterval} />}
     />
   );

@@ -25,6 +25,7 @@ import {
   parseDay,
   pctChange,
   rangeTitle,
+  priorPhrase,
   signedPct,
   bucketDays,
   bucketLabel,
@@ -389,7 +390,7 @@ function MarketingScreen() {
   const header = (
     <PageHeader
       title="Marketing"
-      sub={`${rangeTitle(range.from, range.to)} · Facebook and Instagram · compared with the ${range.days} days before`}
+      sub={`${rangeTitle(range.from, range.to)} · Facebook and Instagram · compared with ${priorPhrase(range.days)}`}
       right={
         model.lastStatDate && (
           <div className="flex items-center gap-[7px] h-[26px] px-2.5 border border-line rounded-full font-mono text-[11px] text-subtle whitespace-nowrap">

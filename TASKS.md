@@ -66,7 +66,7 @@ platform/source filter, and every interval (daily/weekly/monthly), at 1440px and
 overlapping data, empty states that render as a broken chart rather than a
 sentence, and a filter combination that produces `NaN` or an infinite axis.
 
-- [ ] Overview
+- [x] Overview
 - [ ] Sales
 - [ ] Products
 - [ ] Reviews
@@ -485,3 +485,20 @@ Checked with `tools/sql.sh`.
 - Verified end to end in one page load: hide `Betty's Classic` on Menu → toast
   reads "hidden, and off TV 1" → slot 1 of display 1 reads **Empty slot** →
   library holds 25, the hidden dish correctly not among them.
+
+### Charts across every filter (task 6)
+
+`tools/sweep.mjs <route>` steps a screen through every range and interval at
+1440px and 390px and fails on anything that cannot be right: NaN or Infinity in
+the text or in an SVG attribute, a chart that rendered with no height, content
+wider than the viewport, or a page error. Screenshots of anything it flags land
+in `.shots/sweep/`.
+
+- **Overview — 30 combinations, clean.** Today falls through to a proper empty
+  state with a way out; This quarter on Monthly gives three month bars with the
+  estimated-fee cap drawn correctly; the 76-point sparklines stay legible.
+- **"compared with previous 1 days".** Four screens built that sentence by
+  pasting a number in front of "days", so every one-day range read "the 1 days
+  before" — and Sales said it twice, "1 days · compared with the 1 days before".
+  Replaced with `dayCount` and `priorPhrase` in `format.js`; it now reads
+  "compared with the day before".
