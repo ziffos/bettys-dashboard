@@ -196,6 +196,10 @@ export default function PayrollPage() {
           payments,
           dbStatus,
           staleTotal,
+          // Hours worked with no rate anywhere are not worth nothing — they
+          // are unpriced. Showing €0 reads as "owes them nothing", which is the
+          // wrong thing to believe about someone who turned up.
+          noRate: hours > 0 && rate === 0 && bonus === 0,
           progress: gross > 0 ? Math.min(100, (paid / gross) * 100) : 0,
           settled: remaining <= 0.005 && gross > 0,
         };
@@ -212,7 +216,9 @@ export default function PayrollPage() {
     );
     const owing = rows.filter((r) => r.remaining > 0.005).length;
 
-    return { months, active, rows, totals, owing, empty: rows.length === 0 };
+    const unpriced = rows.filter((r) => r.noRate);
+
+    return { months, active, rows, totals, owing, unpriced, empty: rows.length === 0 };
   }, [store, monthKey]);
 
   // ── Writes ───────────────────────────────────────────────────────────────
@@ -391,6 +397,19 @@ export default function PayrollPage() {
         </div>
       )}
 
+      {model.unpriced.length > 0 && (
+        <div className="flex items-start gap-2.5 px-4 py-3 border border-line rounded-[10px] bg-wash-light">
+          <TriangleAlert size={15} strokeWidth={2} className="text-warn-ink shrink-0 mt-px" />
+          <span className="text-[13px] flex-1 min-w-0 text-pretty">
+            {model.unpriced.map((r) => r.person.full_name).join(", ")} worked this month with
+            no pay rate on file, so there is nothing to price{" "}
+            {model.unpriced.length > 1 ? "their hours" : "the hours"} at. Set{" "}
+            {model.unpriced.length > 1 ? "rates" : "a rate"} in Settings and the month fills
+            in.
+          </span>
+        </div>
+      )}
+
       {/* Totals */}
       <Card className="grid grid-cols-2 md:grid-cols-4">
         {[
@@ -476,8 +495,11 @@ export default function PayrollPage() {
                   <span className="hidden md:block font-mono text-[13px] tabular-nums text-right text-muted">
                     {r.rate ? euro2(r.rate) : "—"}
                   </span>
-                  <span className="hidden md:block font-mono text-[13px] tabular-nums text-right">
-                    {euro(r.gross)}
+                  <span
+                    className="hidden md:block font-mono text-[13px] tabular-nums text-right"
+                    style={r.noRate ? { color: "var(--color-subtle)" } : undefined}
+                  >
+                    {r.noRate ? "—" : euro(r.gross)}
                   </span>
 
                   <div className="hidden md:block min-w-0">

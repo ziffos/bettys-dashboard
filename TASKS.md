@@ -54,7 +54,7 @@ looking at it in a screenshot with real data, not demo data.
 - [x] Menu — prices vs `menu_item_price_history`, alias coverage
 - [x] Platform Payouts — statement totals vs computed sales for the same period
 - [x] Calendar — 53 shifts, Feb–Mar only. Check the empty months read as empty
-- [ ] Payroll / My Payroll — 2 records, Feb 2026. Same
+- [x] Payroll / My Payroll — 2 records, Feb 2026. Same
 - [ ] Settings — 3 profiles, permissions matrix
 - [ ] TV Displays — slots vs `menu_items.tv_number` / `position`
 
@@ -413,3 +413,28 @@ anon-key audit scripts cannot see them and the management API is the only way in
   all. All four are test rows, so this is not evidence against the closed-Sunday
   rule the screens rely on (DESIGN.md departure 18) — but worth re-checking once
   the real roster is in.
+
+### Payroll / My Payroll (task 5)
+
+Checked with `tools/sql.sh` — these tables are RLS-locked too.
+
+- **February reconciles exactly.** Both records carry the same hours the shifts
+  add up to (Maria Test 105.50, Test Employee 128.00 — 233.50 together, which is
+  February's shift total to the minute), `amount_paid` equals `gross_expected`
+  on both, and the three `payroll_payments` rows sum to them precisely
+  (640.00, and 500.00 + 502.25 = 1,002.25). The trigger is doing its job.
+- **March was worked and never rolled into payroll.** 166 hours across three
+  people — Test Employee 82.5, Maria Test 67.5, Dinos 16.0 — and no
+  `payroll_records` row at all. The screen handles it correctly by pricing the
+  hours from `rate_changes` and showing the month unpaid; it is the data that is
+  outstanding, not the code.
+- **Hours with no rate on file were priced at €0, which reads as "owes them
+  nothing".** Dinos has 16 March hours and no `rate_changes` row anywhere, so
+  the row said €0 and the month looked settled. Rate and gross now show "—", the
+  person is left out of the owed total, and a banner names them and points at
+  Settings. Hours still count, because they were worked.
+- **One rate change is already in the past.** Test Employee went €5.00 → €7.00
+  effective April 2026; the other two rows are the original rates from March.
+  Nothing is pending, so Settings correctly announces no scheduled change.
+- **Demo gave everyone a rate**, so the unpriced path could not appear in a
+  screenshot. One person is now on the rota with no rate, mirroring production.

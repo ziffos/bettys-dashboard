@@ -462,15 +462,23 @@ function build() {
     return (eh * 60 + em - (sh * 60 + sm) - s.break_minutes) / 60;
   };
 
-  const rate_changes = rosterable.map((e, i) => ({
-    id: `demo-rate-${i + 1}`,
-    employee_id: e.id,
-    hourly_rate: rateOf[e.id].rate,
-    monthly_bonus: rateOf[e.id].bonus,
-    bonus_description: rateOf[e.id].bonus ? "Monthly performance bonus" : null,
-    effective_year: firstDay.getFullYear(),
-    effective_month: firstDay.getMonth() + 1,
-  }));
+  // One person is on the rota with no rate anywhere, which is the state
+  // production is in: the owner has hours in March and no rate_changes row, so
+  // Payroll prices sixteen hours of work at nothing. The screen has to say that
+  // rather than show €0 and look settled.
+  const unpricedId = rosterable[rosterable.length - 1].id;
+
+  const rate_changes = rosterable
+    .filter((e) => e.id !== unpricedId)
+    .map((e, i) => ({
+      id: `demo-rate-${i + 1}`,
+      employee_id: e.id,
+      hourly_rate: rateOf[e.id].rate,
+      monthly_bonus: rateOf[e.id].bonus,
+      bonus_description: rateOf[e.id].bonus ? "Monthly performance bonus" : null,
+      effective_year: firstDay.getFullYear(),
+      effective_month: firstDay.getMonth() + 1,
+    }));
 
   // A couple of rises already agreed for later. rate_changes is effective-dated
   // history, so a future row is how a pay change is booked — and without one
