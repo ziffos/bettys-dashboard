@@ -292,6 +292,13 @@ Agreed with the owner before the rebuild started. Do not "fix" these back.
     `pointer-events: none` and keyed on the reload counter, so moving a dish
     re-renders the board rather than leaving a stale wall on screen. Nothing in
     `/tv-display-*` is ever written to.
+21. **Login has an animated backdrop.** A faint blueprint grid where
+    occasional monochrome light streaks travel along the grid lines — picked
+    by the owner from four prototypes (Sep 2026). The grid dims to near
+    nothing behind the form, streaks disappear under
+    `prefers-reduced-motion`, and on a phone they keep to the free bands
+    above and below the column instead of crossing it. The design's login
+    canvas is plain.
 
 ## Out of scope — do not touch
 

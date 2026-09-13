@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 import { Loader2 } from "lucide-react";
+import LoginBackdrop from "./LoginBackdrop";
 
 // useSearchParams opts the subtree out of prerendering, so the form sits behind
 // its own boundary and the page shell can still be static.
@@ -51,8 +52,9 @@ function LoginForm() {
     "w-full h-10 px-3 border border-line rounded-md bg-surface text-[13px] text-ink placeholder:text-faint outline-none focus:border-ink-strong transition-colors";
 
   return (
-    <div className="min-h-screen bg-canvas flex flex-col justify-center px-4 py-12">
-      <div className="mx-auto w-full max-w-[380px]">
+    <div className="relative min-h-screen bg-canvas overflow-hidden flex flex-col justify-center px-4 py-12">
+      <LoginBackdrop />
+      <div className="relative mx-auto w-full max-w-[380px]">
         <div className="flex flex-col items-center gap-4 mb-8">
           <Image
             src="/images/betty_logo.png"

@@ -131,3 +131,14 @@
     transform: translateY(0);
   }
 }
+
+/* The login backdrop's light streaks: a dash one pulse long travels the whole
+   path once per period (--p is set per streak from its dash geometry). */
+@keyframes streakTravel {
+  from {
+    stroke-dashoffset: var(--p, 2);
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
