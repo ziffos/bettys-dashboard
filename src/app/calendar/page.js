@@ -16,7 +16,7 @@ import {
   SidePanel,
   Toast,
 } from "../../components/ui";
-import { MONTHS, euro, fmtDay, parseDay } from "../../lib/format";
+import { MONTHS, euro, fetchAllRows, fmtDay, parseDay, shortDate } from "../../lib/format";
 
 const VIEWS = [
   { id: "week", label: "Week" },
@@ -78,24 +78,32 @@ export default function CalendarPage() {
     let cancelled = false;
 
     (async () => {
-      const [shiftRes, staffRes, rateRes] = await Promise.all([
-        supabase
-          .from("shifts")
-          .select("*, profiles!shifts_employee_id_fkey(full_name)")
-          .order("shift_date", { ascending: false })
-          .limit(1000),
+      // Paginated rather than capped at a thousand: the calendar can be walked
+      // to any month, and a bare limit would quietly drop the oldest shifts
+      // once the roster passed a year or so of four people.
+      let shifts = [];
+      let failure = null;
+      try {
+        shifts = await fetchAllRows(
+          supabase,
+          "shifts",
+          "*, profiles!shifts_employee_id_fkey(full_name)",
+          []
+        );
+      } catch (err) {
+        failure = err.message;
+      }
+      const [staffRes, rateRes] = await Promise.all([
         supabase.from("profiles").select("id, full_name, role, is_active").eq("is_active", true),
         supabase.from("rate_changes").select("*"),
       ]);
       if (cancelled) return;
-      const failure =
-        shiftRes.error?.message || staffRes.error?.message || rateRes.error?.message || null;
       setStore({
         loaded: true,
-        shifts: shiftRes.data || [],
+        shifts,
         staff: staffRes.data || [],
         rates: rateRes.data || [],
-        failure,
+        failure: failure || staffRes.error?.message || rateRes.error?.message || null,
       });
     })();
 
@@ -307,6 +315,12 @@ export default function CalendarPage() {
       rateFor,
       hasAny: store.shifts.length > 0,
       weekEmpty: weekShifts.length === 0,
+      // An empty week inside a roster that stops in March is a different thing
+      // from an empty week in a roster that is up to date.
+      rosterEnds: store.shifts.reduce(
+        (a, sh) => (sh.shift_date > a ? sh.shift_date : a),
+        ""
+      ),
     };
   }, [store, anchor]);
 
@@ -778,8 +792,11 @@ export default function CalendarPage() {
           </div>
 
           {model.weekEmpty ? (
-            <p className="px-4 py-10 text-[13px] text-muted text-center">
+            <p className="px-4 py-10 text-[13px] text-muted text-center text-pretty">
               Nothing scheduled for this week.{" "}
+              {model.rosterEnds && model.rosterEnds < model.weekDays[0] && (
+                <>The roster runs to {shortDate(model.rosterEnds)}. </>
+              )}
               <button
                 onClick={() => openPanel("add", null, model.weekDays[0])}
                 className="text-accent font-medium"

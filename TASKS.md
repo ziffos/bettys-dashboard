@@ -53,7 +53,7 @@ looking at it in a screenshot with real data, not demo data.
 - [x] Reviews — counts, average, distribution, per-platform
 - [x] Menu — prices vs `menu_item_price_history`, alias coverage
 - [x] Platform Payouts — statement totals vs computed sales for the same period
-- [ ] Calendar — 53 shifts, Feb–Mar only. Check the empty months read as empty
+- [x] Calendar — 53 shifts, Feb–Mar only. Check the empty months read as empty
 - [ ] Payroll / My Payroll — 2 records, Feb 2026. Same
 - [ ] Settings — 3 profiles, permissions matrix
 - [ ] TV Displays — slots vs `menu_items.tv_number` / `position`
@@ -387,3 +387,29 @@ Reconciled with `tools/audit-payouts.mjs` and `tools/sql.sh`.
   gross was always exactly our own, so nothing ever drifted. Demo now carries a
   flat unlisted Foody charge and the occasional statement reporting well away
   from its orders.
+
+### Calendar (task 5)
+
+Checked with `tools/sql.sh` — `shifts` and `profiles` are RLS-locked, so the
+anon-key audit scripts cannot see them and the management API is the only way in.
+
+- **The whole roster is test data.** Three profiles: `Dinos` (admin, the owner),
+  `Test Employee` and `Maria Test` — hourly rates €5 and €9.50, `job_title` null
+  on all three. 53 shifts, 31 in February and 22 in March, nothing since **30
+  March**. Calendar, Payroll, My Payroll and Settings are all running on
+  placeholders until real staff are entered.
+- **An empty week now says why.** It read "Nothing scheduled for this week" —
+  true, but useless when the roster stopped five months ago. It now adds **"The
+  roster runs to 30 March"** whenever the week you are looking at sits past the
+  end of it.
+- **Shifts were fetched with a bare `.limit(1000)` ordered newest-first**, so
+  once the roster passed roughly a year of four people the oldest shifts would
+  have vanished from the calendar with no sign. Paginated through
+  `fetchAllRows` now. Harmless today at 53 rows; silent later.
+- **The shift data itself is sound.** No shift ends before it starts, none is
+  missing an hourly rate or a break, and they run 09:00–22:00 — consistent with
+  a kitchen that trades 11:00–22:00 and preps beforehand.
+- **Four shifts fall on a Sunday**, which is the day the shop takes no orders at
+  all. All four are test rows, so this is not evidence against the closed-Sunday
+  rule the screens rely on (DESIGN.md departure 18) — but worth re-checking once
+  the real roster is in.
