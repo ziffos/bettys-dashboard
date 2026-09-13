@@ -1,713 +1,742 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { Check, ChevronDown, TriangleAlert } from "lucide-react";
+import { supabase } from "../../lib/supabase";
+import { useAuth } from "../../lib/AuthContext";
 import {
-  ChevronDown,
-  Loader2,
-  X,
-  Check,
-  DollarSign,
-  Clock,
-  Banknote,
-  CreditCard,
-  FileText,
-  User,
-  Calendar,
-  Trash2,
-} from "lucide-react";
-import { supabase } from "@/lib/supabase";
-import SkeletonBlock from "@/components/SkeletonBlock";
-import { useAuth } from "@/lib/AuthContext";
+  Card,
+  EmptyState,
+  FIELD_INPUT,
+  FIELD_LABEL,
+  LoadingState,
+  PageHeader,
+  Segmented,
+  SidePanel,
+  Toast,
+} from "../../components/ui";
+import { MONTHS, euro, euro2, fetchAllRows, fmtDay } from "../../lib/format";
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+const MONTHS_BACK = 6;
 
-
-/** Calculate worked hours from a single shift row */
-function shiftHours(shift) {
-  const [sh, sm] = (shift.start_time || "00:00").split(":").map(Number);
-  const [eh, em] = (shift.end_time || "00:00").split(":").map(Number);
-  const startMins = sh * 60 + sm;
-  const endMins = eh * 60 + em;
-  const worked = endMins - startMins - (shift.break_minutes || 0);
-  return Math.max(worked, 0) / 60;
-}
-
-/** Round to 2 decimal places */
-function r2(n) {
-  return Math.round(n * 100) / 100;
-}
-
-// Status badge colours
-const STATUS_STYLES = {
-  paid: "bg-emerald-500/15 text-emerald-400",
-  partial: "bg-amber-500/15 text-amber-400",
-  unpaid: "bg-red-500/15 text-red-400",
+const toMinutes = (time) => {
+  const [h, m] = String(time || "").split(":").map(Number);
+  return (h || 0) * 60 + (m || 0);
 };
+const paidHours = (shift) =>
+  Math.max(
+    0,
+    toMinutes(shift.end_time) - toMinutes(shift.start_time) - (shift.break_minutes || 0)
+  ) / 60;
 
-// ─── Main page ───────────────────────────────────────────────────────────────
+const round2 = (n) => Math.round(n * 100) / 100;
 
 export default function PayrollPage() {
-  const { user, profile } = useAuth();
-  const router = useRouter();
+  const { profile, user } = useAuth();
   const isAdmin = profile?.role === "admin";
 
-  // Redirect non-admins
-  useEffect(() => {
-    if (profile && !isAdmin) router.push("/");
-  }, [profile, isAdmin, router]);
-
-  const [selectedMonth, setSelectedMonth] = useState(null);
-
-  const [employees, setEmployees] = useState([]);
-  const [shifts, setShifts] = useState([]);
-  const [records, setRecords] = useState([]);
-  const [payments, setPayments] = useState([]);
-  const [rateChanges, setRateChanges] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [store, setStore] = useState({ loaded: false, failure: null });
+  const [monthKey, setMonthKey] = useState(null);
+  const [open, setOpen] = useState({});
+  const [panel, setPanel] = useState(null);
+  const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
-
-  // Accordion
-  const [expandedEmp, setExpandedEmp] = useState(null);
-  const [expandedPayments, setExpandedPayments] = useState(null);
-
-  // Payment modal
-  const [payModal, setPayModal] = useState(null); // { employeeId, prefill }
-
-  // ── Fetch all data ────────────────────────────────────────────────────────
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
-    const [empRes, shiftRes, recRes, payRes, rateRes] = await Promise.all([
-      supabase.from("profiles").select("*").eq("is_active", true).order("full_name", { ascending: true }),
-      supabase.from("shifts").select("*").limit(1000),
-      supabase.from("payroll_records").select("*").limit(1000),
-      supabase.from("payroll_payments").select("*, profiles!payroll_payments_created_by_fkey(full_name)").limit(1000),
-      supabase.from("rate_changes").select("*").order("effective_year", { ascending: false }).order("effective_month", { ascending: false }),
-    ]);
-
-    if (empRes.error) console.error("Employees fetch error:", JSON.stringify(empRes.error));
-    if (shiftRes.error) console.error("Shifts fetch error:", JSON.stringify(shiftRes.error));
-    if (recRes.error) console.error("Records fetch error:", JSON.stringify(recRes.error));
-    if (payRes.error) console.error("Payments fetch error:", JSON.stringify(payRes.error));
-    if (rateRes.error) console.error("Rate changes fetch error:", JSON.stringify(rateRes.error));
-
-    setEmployees(empRes.data || []);
-    setShifts(shiftRes.data || []);
-    setRecords(recRes.data || []);
-    setPayments(payRes.data || []);
-    setRateChanges(rateRes.data || []);
-    setLoading(false);
-  }, []);
+  const [reloadKey, setReloadKey] = useState(0);
+  const reload = () => setReloadKey((k) => k + 1);
 
   useEffect(() => {
-    if (isAdmin) fetchAll();
-  }, [isAdmin, fetchAll]);
+    if (!isAdmin) return;
+    let cancelled = false;
 
-  // Toast auto-dismiss
-  useEffect(() => {
-    if (!toast) return;
-    const id = setTimeout(() => setToast(null), 3500);
-    return () => clearTimeout(id);
-  }, [toast]);
+    (async () => {
+      // Bounded to the months the picker can reach, and paginated. A bare
+      // .limit(1000) over every shift ever worked silently drops whichever
+      // rows fall outside an arbitrary first thousand, and the hours it adds
+      // up look perfectly reasonable while being wrong.
+      const from = new Date();
+      from.setMonth(from.getMonth() - MONTHS_BACK);
+      const since = fmtDay(new Date(from.getFullYear(), from.getMonth(), 1));
 
-  // ── Build month options from shifts that actually exist ───────────────────
-  const monthOptions = useMemo(() => {
-    const seen = new Set();
-    const options = [];
-    for (const s of shifts) {
-      const [sy, sm] = (s.shift_date || "").split("-").map(Number);
-      if (!sy || !sm) continue;
-      const key = `${sy}-${sm}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const d = new Date(sy, sm - 1, 1);
-      options.push({
-        year: sy,
-        month: sm,
-        label: d.toLocaleDateString("en-GB", { month: "long", year: "numeric" }),
-      });
-    }
-    // Sort newest first, cap at 12
-    options.sort((a, b) => b.year - a.year || b.month - a.month);
-    return options.slice(0, 12);
-  }, [shifts]);
+      try {
+        const [staffRes, shifts, records, payments, rateRes] = await Promise.all([
+          supabase
+            .from("profiles")
+            .select("id, full_name, job_title, role, is_active")
+            .eq("is_active", true)
+            .order("full_name", { ascending: true }),
+          fetchAllRows(supabase, "shifts", "*", [
+            { op: "gte", col: "shift_date", val: since },
+          ]),
+          fetchAllRows(supabase, "payroll_records", "*", [
+            { op: "gte", col: "year", val: from.getFullYear() },
+          ]),
+          fetchAllRows(
+            supabase,
+            "payroll_payments",
+            "*, profiles!payroll_payments_created_by_fkey(full_name)",
+            []
+          ),
+          supabase.from("rate_changes").select("*"),
+        ]);
+        if (cancelled) return;
+        setStore({
+          loaded: true,
+          failure: staffRes.error?.message || rateRes.error?.message || null,
+          staff: staffRes.data || [],
+          shifts,
+          records,
+          payments,
+          rates: rateRes.data || [],
+        });
+      } catch (err) {
+        if (cancelled) return;
+        setStore({ loaded: true, failure: err.message || "Could not load payroll." });
+      }
+    })();
 
-  // Auto-select first month when options change
-  useEffect(() => {
-    if (monthOptions.length > 0 && !selectedMonth) {
-      setSelectedMonth(monthOptions[0]);
-    } else if (
-      monthOptions.length > 0 &&
-      selectedMonth &&
-      !monthOptions.find((o) => o.year === selectedMonth.year && o.month === selectedMonth.month)
-    ) {
-      setSelectedMonth(monthOptions[0]);
-    }
-  }, [monthOptions, selectedMonth]);
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey, isAdmin]);
 
-  // ── Derived data for selected month ───────────────────────────────────────
-  const employeeRows = useMemo(() => {
-    if (!selectedMonth) return [];
-    const { year, month } = selectedMonth;
+  const model = useMemo(() => {
+    if (!store.loaded) return null;
 
-    return employees.map((emp) => {
-      // Shifts for this employee in this month
-      const empShifts = shifts.filter((s) => {
-        if (s.employee_id !== emp.id) return false;
-        const [sy, sm] = (s.shift_date || "").split("-").map(Number);
-        return sy === year && sm === month;
-      });
-
-      const totalHours = r2(empShifts.reduce((sum, s) => sum + shiftHours(s), 0));
-
-      // Payroll record for this month
-      const record = records.find(
-        (r) => r.employee_id === emp.id && r.year === year && r.month === month
-      );
-
-      // Get effective rate from rate_changes for this month
-      const effectiveRate = rateChanges.find(
-        (rc) =>
-          rc.employee_id === emp.id &&
-          (rc.effective_year < year ||
-            (rc.effective_year === year && rc.effective_month <= month))
-      );
-      const fallbackRate = record?.hourly_rate ?? effectiveRate?.hourly_rate ?? 0;
-      const grossFromShifts = r2(empShifts.reduce((sum, s) => {
-        return sum + shiftHours(s) * fallbackRate;
-      }, 0));
-      const hourlyRate = fallbackRate;
-      const monthlyBonus = record?.monthly_bonus ?? effectiveRate?.monthly_bonus ?? 0;
-      const grossExpected = r2(grossFromShifts + monthlyBonus);
-      const amountPaid = record?.amount_paid ?? 0;
-      const amountRemaining = r2(grossExpected - amountPaid);
-
-      // Use the database status (set by trigger) instead of recalculating in JS
-      const status = record?.status ?? "unpaid";
-
-      // Payments for this record
-      const recordPayments = record
-        ? payments
-            .filter((p) => p.payroll_id === record.id)
-            .sort((a, b) => new Date(b.paid_at) - new Date(a.paid_at))
-        : [];
-
-      return {
-        employee: emp,
-        totalHours,
-        hourlyRate,
-        monthlyBonus,
-        grossExpected,
-        amountPaid,
-        amountRemaining,
-        status,
-        record,
-        firstPaidAt: record?.first_paid_at ?? null,
-        payments: recordPayments,
-        shiftCount: empShifts.length,
-      };
-    });
-  }, [employees, shifts, records, payments, rateChanges, selectedMonth]);
-
-  // ── Check if selected month has fully passed ─────────────────────────────
-  const monthHasPassed = useMemo(() => {
-    if (!selectedMonth) return false;
-    const now = new Date();
-    const { year, month } = selectedMonth;
-    // First day of the month AFTER the selected month
-    const firstOfNextMonth = new Date(year, month, 1);
-    return now >= firstOfNextMonth;
-  }, [selectedMonth]);
-
-  // ── Handle payment submission ─────────────────────────────────────────────
-  const handlePayment = async ({ employeeId, amount, date, note }) => {
-    const { year, month } = selectedMonth;
-    const emp = employees.find((e) => e.id === employeeId);
-    const row = employeeRows.find((r) => r.employee.id === employeeId);
-
-    // Validate amount doesn't exceed remaining
-    const remaining = row?.amountRemaining ?? 0;
-    if (parseFloat(amount) > remaining) {
-      return {
-        error: `Amount exceeds the remaining balance. Remaining: €${r2(remaining)}`,
-      };
-    }
-
-    let payrollId;
-    let existingRecord = records.find(
-      (r) => r.employee_id === employeeId && r.year === year && r.month === month
+    // Months are offered from the shifts that exist, newest first, so an empty
+    // month never appears in the picker just because the calendar ticked over.
+    const monthsWithShifts = new Set(
+      store.shifts.map((s) => String(s.shift_date || "").slice(0, 7)).filter(Boolean)
     );
+    const months = [...monthsWithShifts]
+      .sort()
+      .reverse()
+      .slice(0, MONTHS_BACK)
+      .reverse()
+      .map((key) => {
+        const [y, m] = key.split("-").map(Number);
+        return {
+          id: key,
+          key,
+          year: y,
+          month: m,
+          label: `${MONTHS[m - 1]} ${y}`,
+          // A month still running has hours that keep changing, so paying it
+          // out would be paying against a moving total.
+          ended: new Date() >= new Date(y, m, 1),
+        };
+      });
 
-    // 1. Create payroll_records row if needed
-    if (!existingRecord) {
-      // Get effective rate from rate_changes for this month
-      const effectiveRate = rateChanges.find(
-        (rc) =>
-          rc.employee_id === employeeId &&
-          (rc.effective_year < year ||
-            (rc.effective_year === year && rc.effective_month <= month))
-      );
+    const active = months.find((m) => m.key === monthKey) ?? months[months.length - 1];
+    if (!active) return { months: [], rows: [], empty: true };
 
-      const { data, error } = await supabase
-        .from("payroll_records")
-        .insert({
-          employee_id: employeeId,
-          year,
-          month,
-          total_hours: row?.totalHours || 0,
-          hourly_rate: effectiveRate?.hourly_rate || 0,
-          monthly_bonus: effectiveRate?.monthly_bonus || 0,
-          bonus_description: effectiveRate?.bonus_description || null,
-          gross_expected: row?.grossExpected || 0,
-          amount_paid: 0,
-          status: "unpaid",
-          updated_by: user.id,
-        })
-        .select()
-        .single();
+    const rateFor = (employeeId) => {
+      const applicable = store.rates
+        .filter((r) => r.employee_id === employeeId)
+        .filter(
+          (r) =>
+            r.effective_year < active.year ||
+            (r.effective_year === active.year && r.effective_month <= active.month)
+        )
+        .sort(
+          (a, b) =>
+            b.effective_year - a.effective_year || b.effective_month - a.effective_month
+        );
+      return applicable[0] ?? null;
+    };
 
-      if (error) {
-        console.error("Create payroll record error:", JSON.stringify(error));
-        return { error: error.message || "Failed to create payroll record" };
-      }
-      payrollId = data.id;
-    } else {
-      payrollId = existingRecord.id;
+    const rows = store.staff
+      .filter((p) => p.role !== "admin")
+      .map((person) => {
+        const shifts = store.shifts.filter(
+          (s) => s.employee_id === person.id && String(s.shift_date || "").slice(0, 7) === active.key
+        );
+        const hours = round2(shifts.reduce((a, s) => a + paidHours(s), 0));
 
-      // Sync gross_expected with current shift data so the trigger calculates status correctly
-      if (row && existingRecord.gross_expected !== row.grossExpected) {
-        await supabase
-          .from("payroll_records")
-          .update({
-            total_hours: row.totalHours,
-            gross_expected: row.grossExpected,
-            updated_by: user.id,
-          })
-          .eq("id", payrollId);
-      }
-    }
+        const record = store.records.find(
+          (r) =>
+            r.employee_id === person.id && r.year === active.year && r.month === active.month
+        );
+        const effective = rateFor(person.id);
+        const rate = Number(record?.hourly_rate ?? effective?.hourly_rate ?? 0);
+        const bonus = Number(record?.monthly_bonus ?? effective?.monthly_bonus ?? 0);
+        const gross = round2(hours * rate + bonus);
 
-    // 2. Insert payment
-    const { error: payErr } = await supabase.from("payroll_payments").insert({
-      payroll_id: payrollId,
-      amount: parseFloat(amount),
-      paid_at: date,
-      payment_note: note || null,
-      created_by: user.id,
+        // amount_paid and status are kept in step by a database trigger on
+        // payroll_payments — recomputing them here would only invent a second
+        // opinion that drifts from the one the database acts on.
+        const paid = Number(record?.amount_paid ?? 0);
+        const remaining = round2(Math.max(0, gross - paid));
+        const dbStatus = record?.status ?? null;
+
+        // The trigger judges against gross_expected as it was when the record
+        // was written. Shifts added since then make the real total higher, so
+        // "paid" and "still owed" can both be true at once — and that is the
+        // case worth naming rather than papering over.
+        const staleTotal =
+          dbStatus === "paid" && remaining > 0.005 ? round2(gross - Number(record.gross_expected ?? gross)) : 0;
+
+        const payments = record
+          ? store.payments
+              .filter((p) => p.payroll_id === record.id)
+              .sort((a, b) => String(b.paid_at).localeCompare(String(a.paid_at)))
+          : [];
+
+        return {
+          person,
+          record,
+          shifts: shifts.length,
+          hours,
+          rate,
+          bonus,
+          gross,
+          paid,
+          remaining,
+          status,
+          payments,
+          dbStatus,
+          staleTotal,
+          progress: gross > 0 ? Math.min(100, (paid / gross) * 100) : 0,
+          settled: remaining <= 0.005 && gross > 0,
+        };
+      })
+      .filter((r) => r.shifts > 0 || r.gross > 0 || r.paid > 0);
+
+    const totals = rows.reduce(
+      (a, r) => ({
+        gross: a.gross + r.gross,
+        paid: a.paid + r.paid,
+        remaining: a.remaining + r.remaining,
+      }),
+      { gross: 0, paid: 0, remaining: 0 }
+    );
+    const owing = rows.filter((r) => r.remaining > 0.005).length;
+
+    return { months, active, rows, totals, owing, empty: rows.length === 0 };
+  }, [store, monthKey]);
+
+  // ── Writes ───────────────────────────────────────────────────────────────
+
+  const openPayPanel = (row) => {
+    setPanel({
+      row,
+      amount: row.remaining > 0 ? row.remaining.toFixed(2) : "",
+      date: fmtDay(new Date()),
+      note: "",
+      error: "",
     });
-
-    if (payErr) {
-      console.error("Insert payment error:", JSON.stringify(payErr));
-      return { error: payErr.message || "Failed to log payment" };
-    }
-
-    // The database trigger (sync_payroll_record) automatically updates
-    // amount_paid, status, and paid_at on payroll_records — no JS recalculation needed.
-
-    // Refresh data to pick up trigger's updates
-    await fetchAll();
-    return { error: null };
   };
 
-  // ── Delete a payment ─────────────────────────────────────────────────────
-  const handleDeletePayment = async (payment, row) => {
-    const { error } = await supabase
-      .from("payroll_payments")
-      .delete()
-      .eq("id", payment.id);
+  const logPayment = async () => {
+    if (!panel) return;
+    const { row } = panel;
+    const amount = Number(String(panel.amount).trim().replace(",", "."));
 
-    if (error) {
-      setToast({ type: "error", message: "Failed to delete payment" });
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setPanel({ ...panel, error: "Enter an amount greater than zero." });
+      return;
+    }
+    if (amount > row.remaining + 0.005) {
+      setPanel({
+        ...panel,
+        error: `That is more than the ${euro2(row.remaining)} still owed.`,
+      });
       return;
     }
 
-    // The database trigger (sync_payroll_record) automatically recalculates
-    // amount_paid and status on payroll_records — no JS recalculation needed.
+    setSaving(true);
+    let payrollId = row.record?.id;
 
-    await fetchAll();
-    setToast({ type: "success", message: "Payment deleted" });
+    // The record is created on first payment, not up front — an unpaid month
+    // has nothing to record yet.
+    if (!payrollId) {
+      const { data, error } = await supabase
+        .from("payroll_records")
+        .insert({
+          employee_id: row.person.id,
+          year: model.active.year,
+          month: model.active.month,
+          total_hours: row.hours,
+          hourly_rate: row.rate,
+          monthly_bonus: row.bonus,
+          gross_expected: row.gross,
+          amount_paid: 0,
+          status: "unpaid",
+          updated_by: user?.id,
+        })
+        .select()
+        .single();
+      if (error) {
+        setSaving(false);
+        setPanel({ ...panel, error: error.message || "Could not create the payroll record." });
+        return;
+      }
+      payrollId = data.id;
+    } else if (Math.abs(Number(row.record.gross_expected ?? 0) - row.gross) > 0.005) {
+      // Shifts may have moved since the record was made; the trigger decides
+      // "paid" against gross_expected, so it has to agree with the hours.
+      await supabase
+        .from("payroll_records")
+        .update({
+          total_hours: row.hours,
+          gross_expected: row.gross,
+          updated_by: user?.id,
+        })
+        .eq("id", payrollId);
+    }
+
+    const { error } = await supabase.from("payroll_payments").insert({
+      payroll_id: payrollId,
+      amount,
+      paid_at: panel.date,
+      payment_note: panel.note.trim() || null,
+      created_by: user?.id,
+    });
+    setSaving(false);
+
+    if (error) {
+      setPanel({ ...panel, error: error.message || "Could not log the payment." });
+      return;
+    }
+
+    setPanel(null);
+    setOpen((o) => ({ ...o, [row.person.id]: true }));
+    setToast({ type: "ok", message: `${euro2(amount)} logged for ${row.person.full_name}` });
+    reload();
   };
 
-  if (!profile || !isAdmin) return null;
+  const voidPayment = async (payment) => {
+    const { error } = await supabase.from("payroll_payments").delete().eq("id", payment.id);
+    if (error) {
+      setToast({ type: "error", message: "Could not void the payment" });
+      return;
+    }
+    setToast({ type: "ok", message: "Payment voided" });
+    reload();
+  };
+
+  // ── Render ───────────────────────────────────────────────────────────────
+
+  if (!isAdmin) {
+    return (
+      <div className="flex flex-col gap-4 md:gap-5">
+        <PageHeader title="Payroll" />
+        <EmptyState
+          title="Payroll is admin only"
+          body="Your own hours and payments are on My Payroll."
+        />
+      </div>
+    );
+  }
+
+  if (store.failure) {
+    return (
+      <div className="flex flex-col gap-4 md:gap-5">
+        <PageHeader title="Payroll" />
+        <EmptyState
+          icon={TriangleAlert}
+          title="Could not load payroll"
+          body={store.failure}
+          action="Try again"
+          onAction={reload}
+        />
+      </div>
+    );
+  }
+
+  if (!model) {
+    return <LoadingState kpis={4} shape="list" line="LOADING STAFF · SHIFTS · PAYMENTS" />;
+  }
+
+  if (!model.active) {
+    return (
+      <div className="flex flex-col gap-4 md:gap-5">
+        <PageHeader title="Payroll" sub="Hours worked, what each person is owed, and what has been paid" />
+        <EmptyState
+          title="No shifts on record"
+          body="Nobody has worked a shift yet, so there is nothing to pay. Add shifts on the calendar and the month appears here."
+        />
+      </div>
+    );
+  }
+
+  const header = (
+    <PageHeader
+      title="Payroll"
+      sub="Hours worked, what each person is owed, and what has been paid"
+      right={
+        <Segmented
+          options={model.months.map((m) => ({ id: m.id, label: m.label }))}
+          value={model.active.id}
+          onChange={setMonthKey}
+        />
+      }
+    />
+  );
+
+  const cols =
+    "gap-x-3 grid-cols-[minmax(0,1fr)_58px_86px_30px] md:grid-cols-[minmax(0,1.2fr)_60px_58px_84px_minmax(120px,1fr)_82px_112px_30px]";
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">Payroll</h1>
-          <p className="text-neutral-400 text-sm mt-1">Manage employee payments and payroll records.</p>
-        </div>
-      </div>
+    <div className="flex flex-col gap-4 md:gap-5">
+      {header}
 
-      {/* Month selector */}
-      <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 flex flex-wrap items-center gap-4">
-        <Calendar size={18} className="text-neutral-500 shrink-0" />
-        {monthOptions.length === 0 ? (
-          <p className="text-neutral-500 text-sm">No shifts logged yet</p>
-        ) : (
-        <select
-          value={selectedMonth ? `${selectedMonth.year}-${selectedMonth.month}` : ""}
-          onChange={(e) => {
-            const [y, m] = e.target.value.split("-").map(Number);
-            const opt = monthOptions.find((o) => o.year === y && o.month === m);
-            if (opt) setSelectedMonth(opt);
-          }}
-          className="bg-neutral-950 border border-neutral-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500"
-        >
-          {monthOptions.map((o) => (
-            <option key={`${o.year}-${o.month}`} value={`${o.year}-${o.month}`}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-        )}
-      </div>
+      {!model.active.ended && (
+        <div className="flex items-start gap-2.5 px-4 py-3 border border-line rounded-[10px] bg-wash-light">
+          <TriangleAlert size={15} strokeWidth={2} className="text-warn-ink shrink-0 mt-px" />
+          <span className="text-[13px] flex-1 min-w-0 text-pretty">
+            {model.active.label} is still running — hours keep changing, so payments open
+            once the month closes.
+          </span>
+        </div>
+      )}
 
-      {/* Employee list */}
-      {loading ? (
-        <div className="space-y-3">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <SkeletonBlock className="h-10 w-10 rounded-full" />
-                  <div>
-                    <SkeletonBlock className="h-4 w-36 mb-2" />
-                    <SkeletonBlock className="h-3 w-24" />
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <SkeletonBlock className="h-6 w-20 rounded-full" />
-                  <SkeletonBlock className="h-5 w-5" />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : employeeRows.length === 0 ? (
-        <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-10 text-center text-neutral-500 text-sm">
-          No active employees found.
-        </div>
+      {/* Totals */}
+      <Card className="grid grid-cols-2 md:grid-cols-4">
+        {[
+          ["GROSS", euro(model.totals.gross), "hours plus bonuses"],
+          ["PAID", euro(model.totals.paid), "logged so far"],
+          [
+            "OUTSTANDING",
+            euro(model.totals.remaining),
+            model.owing === 0
+              ? "everyone settled"
+              : `${model.owing} of ${model.rows.length} still owed`,
+          ],
+          ["MONTH", model.active.label, `${model.rows.length} people on the books`],
+        ].map(([label, value, sub], i) => (
+          <div
+            key={label}
+            className={`px-4 py-3.5 ${i < 3 ? "md:border-r" : ""} ${i < 2 ? "border-b md:border-b-0" : ""} ${
+              i === 2 ? "border-b md:border-b-0" : ""
+            } border-line`}
+          >
+            <div className="font-mono text-[10px] tracking-[0.06em] text-subtle">{label}</div>
+            <div className="text-[24px] font-semibold tracking-[-0.03em] mt-1">{value}</div>
+            <div className="text-[11px] text-subtle mt-[3px]">{sub}</div>
+          </div>
+        ))}
+      </Card>
+
+      {model.empty ? (
+        <EmptyState
+          title={`No shifts logged in ${model.active.label}`}
+          body="Nobody worked a shift in this month, so there is nothing to pay. Check the schedule if that looks wrong."
+        />
       ) : (
-        <div className="space-y-3">
-          {employeeRows.map((row) => {
-            const isOpen = expandedEmp === row.employee.id;
-            const paymentsOpen = expandedPayments === row.employee.id;
+        <Card>
+          <div
+            className={`md:hidden grid gap-y-2 px-4 py-3 font-mono text-[11px] tracking-[0.05em] text-muted ${cols}`}
+          >
+            <span>EMPLOYEE</span>
+            <span className="text-right">HOURS</span>
+            <span className="text-right">OWED</span>
+            <span />
+          </div>
+          <div
+            className={`hidden md:grid gap-y-2 px-4 py-3 font-mono text-[11px] tracking-[0.05em] text-muted ${cols}`}
+          >
+            <span>EMPLOYEE</span>
+            <span className="text-right">HOURS</span>
+            <span className="text-right">RATE</span>
+            <span className="text-right">GROSS</span>
+            <span>PAID</span>
+            <span className="text-right">OWED</span>
+            <span />
+            <span />
+          </div>
 
+          {model.rows.map((r) => {
+            const isOpen = !!open[r.person.id];
+            const canPay = model.active.ended && r.remaining > 0.005;
             return (
-              <div
-                key={row.employee.id}
-                className="bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden"
-              >
-                {/* Accordion header */}
-                <button
-                  onClick={() => setExpandedEmp(isOpen ? null : row.employee.id)}
-                  className="w-full flex items-center justify-between p-5 text-left hover:bg-white/[0.02] transition-colors"
-                >
-                  <div className="flex items-center gap-4 min-w-0">
-                    <div className="w-9 h-9 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm font-bold shrink-0">
-                      {(row.employee.full_name || "?")[0].toUpperCase()}
+              <div key={r.person.id}>
+                <div className={`grid gap-y-2 px-4 py-2.5 border-t border-line items-center ${cols}`}>
+                  <div className="min-w-0 flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-full bg-wash text-muted font-mono text-[10px] flex items-center justify-center shrink-0">
+                      {String(r.person.full_name)
+                        .split(" ")
+                        .map((p) => p[0])
+                        .slice(0, 2)
+                        .join("")}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-white font-semibold truncate">{row.employee.full_name}</p>
-                      <p className="text-neutral-500 text-xs mt-0.5">
-                        {row.shiftCount} shift{row.shiftCount !== 1 ? "s" : ""} &middot; {row.totalHours}h
-                      </p>
+                      <div className="text-[13px] font-medium truncate">
+                        {r.person.full_name}
+                      </div>
+                      <div className="text-[11px] text-muted truncate">
+                        {r.person.job_title || "Employee"}
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4 shrink-0">
-                    <div className="flex items-center gap-2">
-                      {row.status === "partial" && (
-                        <span className="text-xs font-semibold text-amber-400">
-                          €{row.amountPaid}/€{row.grossExpected}
-                        </span>
-                      )}
-                      <span
-                        className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md ${STATUS_STYLES[row.status]}`}
-                      >
-                        {row.status}
-                      </span>
-                    </div>
-                    <ChevronDown
-                      size={16}
-                      className={`text-neutral-500 transition-transform ${isOpen ? "rotate-180" : ""}`}
-                    />
-                  </div>
-                </button>
 
-                {/* Expanded content */}
-                {isOpen && (
-                  <div className="border-t border-neutral-800 p-5 space-y-5">
-                    {/* Summary grid */}
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                      <StatCell icon={<Clock size={14} />} label="Total Hours" value={`${row.totalHours}h`} />
-                      <StatCell icon={<DollarSign size={14} />} label="Hourly Rate" value={`€${row.hourlyRate}`} />
-                      <StatCell icon={<Banknote size={14} />} label="Monthly Bonus" value={`€${row.monthlyBonus}`} />
-                      <StatCell icon={<CreditCard size={14} />} label="Gross Expected" value={`€${row.grossExpected}`} highlight />
-                      <StatCell icon={<Check size={14} />} label="Amount Paid" value={`€${row.amountPaid}`} success={row.amountPaid > 0} />
-                      <StatCell
-                        icon={<DollarSign size={14} />}
-                        label="Remaining"
-                        value={`€${row.amountRemaining}`}
-                        danger={row.amountRemaining > 0}
+                  <span className="font-mono text-[13px] tabular-nums text-right">
+                    {r.hours.toFixed(1)}h
+                  </span>
+                  <span className="hidden md:block font-mono text-[13px] tabular-nums text-right text-muted">
+                    {r.rate ? euro2(r.rate) : "—"}
+                  </span>
+                  <span className="hidden md:block font-mono text-[13px] tabular-nums text-right">
+                    {euro(r.gross)}
+                  </span>
+
+                  <div className="hidden md:block min-w-0">
+                    <div className="h-1.5 bg-wash rounded-full overflow-hidden">
+                      <div
+                        className="h-full"
+                        style={{
+                          width: `${r.progress}%`,
+                          background: r.settled
+                            ? "var(--color-ink-strong)"
+                            : r.paid > 0
+                              ? "var(--color-warn)"
+                              : "var(--color-line)",
+                        }}
                       />
                     </div>
+                    <div className="flex items-baseline gap-1.5 mt-1">
+                      <span className="font-mono text-[12px] tabular-nums">{euro(r.paid)}</span>
+                      <span
+                        className="text-[11px]"
+                        style={{
+                          color: r.settled
+                            ? "var(--color-muted)"
+                            : r.paid > 0
+                              ? "var(--color-warn-ink)"
+                              : "var(--color-danger)",
+                        }}
+                        title={
+                          r.staleTotal > 0
+                            ? `Marked paid against the total recorded then; hours since have added ${euro2(r.staleTotal)}.`
+                            : undefined
+                        }
+                      >
+                        {r.settled
+                          ? "Paid"
+                          : r.staleTotal > 0
+                            ? "Paid · hours changed"
+                            : r.paid > 0
+                              ? "Partial"
+                              : "Unpaid"}
+                      </span>
+                    </div>
+                  </div>
 
-                    {row.firstPaidAt && (
-                      <p className="text-xs text-neutral-500">
-                        First payment: {new Date(row.firstPaidAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-                      </p>
+                  <span className="font-mono text-[13px] tabular-nums text-right font-medium">
+                    {r.remaining <= 0.005
+                      ? "—"
+                      : r.remaining < 1
+                        ? euro2(r.remaining)
+                        : euro(r.remaining)}
+                  </span>
+
+                  <div className="hidden md:block">
+                    {canPay ? (
+                      <button
+                        onClick={() => openPayPanel(r)}
+                        className="w-full h-[30px] px-2.5 rounded-md bg-ink-strong text-surface text-[12px] font-medium hover:bg-ink"
+                      >
+                        Log payment
+                      </button>
+                    ) : r.settled ? (
+                      <span className="flex items-center justify-center gap-1.5 text-[12px] text-muted">
+                        <Check size={13} strokeWidth={2.5} />
+                        Settled
+                      </span>
+                    ) : (
+                      <span className="block text-center text-[12px] text-faint">
+                        opens {model.active.label.split(" ")[0]} end
+                      </span>
                     )}
+                  </div>
 
-                    {/* Actions */}
-                    <div className="flex flex-wrap gap-2">
-                      <div className="relative group">
-                        <button
-                          onClick={() =>
-                            setPayModal({
-                              employeeId: row.employee.id,
-                              prefill: row.amountRemaining > 0 ? row.amountRemaining : 0,
-                            })
-                          }
-                          disabled={!monthHasPassed}
-                          className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl transition-colors ${
-                            monthHasPassed
-                              ? "bg-emerald-600 hover:bg-emerald-500 text-white"
-                              : "bg-neutral-700 text-neutral-400 cursor-not-allowed"
-                          }`}
-                        >
-                          <DollarSign size={16} />
-                          Log Payment
-                        </button>
-                        {!monthHasPassed && (
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-neutral-800 border border-neutral-700 text-neutral-300 text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                            This month has not ended yet
-                          </div>
-                        )}
-                      </div>
+                  <button
+                    onClick={() => setOpen((o) => ({ ...o, [r.person.id]: !o[r.person.id] }))}
+                    className="flex justify-end text-subtle hover:text-ink"
+                  >
+                    <ChevronDown
+                      size={14}
+                      strokeWidth={2}
+                      style={{
+                        transform: isOpen ? "rotate(180deg)" : "none",
+                        transition: "transform .15s ease",
+                      }}
+                    />
+                  </button>
+                </div>
+
+                {isOpen && (
+                  <div className="px-4 md:pl-[54px] py-3 bg-wash-light border-t border-line">
+                    <div className="font-mono text-[10px] tracking-[0.06em] text-subtle mb-2">
+                      {r.payments.length
+                        ? `${r.payments.length} payment${r.payments.length === 1 ? "" : "s"}`
+                        : "No payments yet"}
                     </div>
 
-                    {/* Payment history toggle */}
-                    {row.payments.length > 0 && (
-                      <div>
-                        <button
-                          onClick={() => setExpandedPayments(paymentsOpen ? null : row.employee.id)}
-                          className="flex items-center gap-2 text-sm text-neutral-400 hover:text-white transition-colors"
-                        >
-                          <ChevronDown
-                            size={14}
-                            className={`transition-transform ${paymentsOpen ? "rotate-180" : ""}`}
-                          />
-                          Payment History ({row.payments.length})
-                        </button>
-
-                        {paymentsOpen && (
-                          <div className="mt-3 space-y-2">
-                            {row.payments.map((p) => (
-                              <div
-                                key={p.id}
-                                className="flex items-start justify-between bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-3"
-                              >
-                                <div className="space-y-0.5">
-                                  <p className="text-sm text-white font-medium">€{p.amount}</p>
-                                  <p className="text-xs text-neutral-500">
-                                    {new Date(p.paid_at).toLocaleDateString("en-GB", {
-                                      day: "numeric",
-                                      month: "short",
-                                      year: "numeric",
-                                    })}
-                                    {p.profiles?.full_name && (
-                                      <span> &middot; by {p.profiles.full_name}</span>
-                                    )}
-                                  </p>
-                                  {p.payment_note && (
-                                    <p className="text-xs text-neutral-400 mt-1">{p.payment_note}</p>
-                                  )}
-                                </div>
-                                <button
-                                  onClick={() => handleDeletePayment(p, row)}
-                                  className="p-1.5 text-neutral-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors shrink-0 ml-3"
-                                  title="Delete payment"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
-                            ))}
+                    {r.payments.map((p) => (
+                      <div key={p.id} className="flex items-start gap-3 mb-2">
+                        <span className="font-mono text-[13px] tabular-nums w-[68px] shrink-0">
+                          {euro2(p.amount)}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[12px] text-muted">
+                            {p.paid_at}
+                            {p.profiles?.full_name ? ` · by ${p.profiles.full_name}` : ""}
                           </div>
-                        )}
+                          {p.payment_note && (
+                            <div className="text-[12px] text-muted mt-0.5 text-pretty">
+                              {p.payment_note}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => voidPayment(p)}
+                          className="h-[26px] px-2 border border-line rounded-md bg-surface text-[12px] text-muted hover:border-danger hover:text-danger shrink-0"
+                        >
+                          Void
+                        </button>
                       </div>
+                    ))}
+
+                    <div className="flex gap-5 mt-3.5 pt-3 border-t border-line">
+                      {[
+                        ["BONUS", r.bonus ? euro2(r.bonus) : "—"],
+                        ["SHIFTS", r.shifts],
+                        ["HOURS", `${r.hours.toFixed(1)}h`],
+                        ["RATE", r.rate ? euro2(r.rate) : "—"],
+                      ].map(([label, value]) => (
+                        <div key={label}>
+                          <span className="font-mono text-[10px] tracking-[0.06em] text-subtle">
+                            {label}
+                          </span>
+                          <div className="font-mono text-[13px]">{value}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* The pay button lives in the row on desktop; on phone the
+                        row has no space for it, so it belongs here. */}
+                    {canPay && (
+                      <button
+                        onClick={() => openPayPanel(r)}
+                        className="md:hidden w-full h-9 mt-3 rounded-md bg-ink-strong text-surface text-[13px] font-medium"
+                      >
+                        Log payment
+                      </button>
                     )}
                   </div>
                 )}
               </div>
             );
           })}
-        </div>
-      )}
 
-      {/* ── Payment modal ──────────────────────────────────────────────────── */}
-      {payModal && (
-        <PaymentModal
-          employeeId={payModal.employeeId}
-          prefill={payModal.prefill}
-          employeeName={employees.find((e) => e.id === payModal.employeeId)?.full_name || "Employee"}
-          onClose={() => setPayModal(null)}
-          onSubmit={async (data) => {
-            const result = await handlePayment(data);
-            if (result.error) {
-              setToast({ type: "error", message: result.error });
-            } else {
-              setToast({ type: "success", message: "Payment logged successfully" });
-              setPayModal(null);
-            }
-            return result;
-          }}
-        />
-      )}
-
-      {/* ── Toast ──────────────────────────────────────────────────────────── */}
-      {toast && (
-        <div
-          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] px-5 py-3 text-sm font-medium rounded-xl shadow-lg backdrop-blur-sm ${
-            toast.type === "error" ? "bg-red-500/90 text-white" : "bg-emerald-500/90 text-white"
-          }`}
-        >
-          {toast.message}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Stat cell ───────────────────────────────────────────────────────────────
-
-function StatCell({ icon, label, value, highlight, success, danger }) {
-  let valueColour = "text-white";
-  if (success) valueColour = "text-emerald-400";
-  if (danger) valueColour = "text-red-400";
-  if (highlight) valueColour = "text-emerald-400";
-
-  return (
-    <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3">
-      <div className="flex items-center gap-1.5 text-neutral-500 mb-1">
-        {icon}
-        <p className="text-[10px] uppercase tracking-wider font-semibold">{label}</p>
-      </div>
-      <p className={`text-sm font-bold ${valueColour}`}>{value}</p>
-    </div>
-  );
-}
-
-// ─── Payment modal ───────────────────────────────────────────────────────────
-
-function PaymentModal({ employeeId, prefill, employeeName, onClose, onSubmit }) {
-  const [amount, setAmount] = useState(prefill > 0 ? prefill.toString() : "");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [note, setNote] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError(null);
-
-    if (!amount || parseFloat(amount) <= 0) {
-      setError("Amount must be greater than 0");
-      return;
-    }
-
-    setSaving(true);
-    const result = await onSubmit({
-      employeeId,
-      amount: parseFloat(amount),
-      date,
-      note,
-    });
-
-    if (result?.error) {
-      setError(result.error);
-    }
-    setSaving(false);
-  };
-
-  return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <form
-        onSubmit={handleSubmit}
-        className="relative bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 space-y-5"
-      >
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-white">Log Payment</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 text-neutral-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+          <div
+            className={`grid gap-y-2 px-4 py-3 border-t-2 border-line items-center font-mono text-[13px] ${cols}`}
           >
-            <X size={20} />
-          </button>
-        </div>
+            <span className="tracking-[0.05em] text-muted text-[11px]">TOTAL</span>
+            <span className="tabular-nums text-right">
+              {model.rows.reduce((a, r) => a + r.hours, 0).toFixed(1)}h
+            </span>
+            <span className="hidden md:block" />
+            <span className="hidden md:block tabular-nums text-right font-medium">
+              {euro(model.totals.gross)}
+            </span>
+            <span className="hidden md:block tabular-nums">{euro(model.totals.paid)}</span>
+            <span className="tabular-nums text-right font-medium">
+              {euro(model.totals.remaining)}
+            </span>
+            <span className="hidden md:block" />
+            <span />
+          </div>
+        </Card>
+      )}
 
-        <p className="text-sm text-neutral-400">
-          Recording payment for <span className="text-white font-medium">{employeeName}</span>
-        </p>
+      {/* Log payment */}
+      <SidePanel
+        open={!!panel}
+        eyebrow="LOG PAYMENT"
+        title={panel?.row.person.full_name ?? ""}
+        onClose={() => setPanel(null)}
+        footer={
+          <div className="px-4 py-3 flex gap-2">
+            <button
+              onClick={logPayment}
+              disabled={saving}
+              className="flex-1 min-h-9 rounded-md bg-ink-strong text-surface text-[13px] font-medium hover:bg-ink disabled:opacity-50"
+            >
+              {saving ? "Logging…" : "Log payment"}
+            </button>
+            <button
+              onClick={() => setPanel(null)}
+              className="min-h-9 px-3 border border-line rounded-md bg-surface text-[13px] hover:border-line-strong"
+            >
+              Cancel
+            </button>
+          </div>
+        }
+      >
+        {panel && (
+          <div className="p-4 flex flex-col gap-3.5">
+            <div className="flex items-center justify-between gap-3 border border-line rounded-lg px-3 py-2.5 bg-wash-light">
+              <span className="text-[13px] text-muted">
+                Still owed for {model.active.label}
+              </span>
+              <span className="text-[17px] font-semibold tracking-[-0.02em]">
+                {euro2(panel.row.remaining)}
+              </span>
+            </div>
 
-        {/* Amount */}
-        <div>
-          <label className="block text-sm font-medium text-neutral-300 mb-1.5">Amount (€)</label>
-          <input
-            type="number"
-            required
-            min="0.01"
-            step="0.01"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            className="w-full px-4 py-2.5 bg-neutral-950 border border-neutral-700 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500"
-          />
-        </div>
+            <div>
+              <label className={FIELD_LABEL}>Amount</label>
+              <div className="flex gap-2">
+                <input
+                  inputMode="decimal"
+                  value={panel.amount}
+                  onChange={(e) => setPanel({ ...panel, amount: e.target.value, error: "" })}
+                  placeholder="0.00"
+                  className={FIELD_INPUT}
+                />
+                <button
+                  onClick={() =>
+                    setPanel({ ...panel, amount: panel.row.remaining.toFixed(2), error: "" })
+                  }
+                  className="h-9 px-3 border border-line rounded-md bg-surface text-[13px] whitespace-nowrap hover:border-line-strong"
+                >
+                  Pay all
+                </button>
+              </div>
+            </div>
 
-        {/* Date */}
-        <div>
-          <label className="block text-sm font-medium text-neutral-300 mb-1.5">Payment Date</label>
-          <input
-            type="date"
-            required
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="w-full px-4 py-2.5 bg-neutral-950 border border-neutral-700 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500"
-          />
-        </div>
+            <div>
+              <label className={FIELD_LABEL}>Paid on</label>
+              <input
+                type="date"
+                value={panel.date}
+                onChange={(e) => setPanel({ ...panel, date: e.target.value, error: "" })}
+                className={FIELD_INPUT}
+              />
+            </div>
 
-        {/* Note */}
-        <div>
-          <label className="block text-sm font-medium text-neutral-300 mb-1.5">Note</label>
-          <textarea
-            rows={2}
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Optional"
-            className="w-full px-4 py-2.5 bg-neutral-950 border border-neutral-700 rounded-xl text-white text-sm placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 resize-none"
-          />
-        </div>
+            <div>
+              <label className={FIELD_LABEL}>Note</label>
+              <textarea
+                value={panel.note}
+                onChange={(e) => setPanel({ ...panel, note: e.target.value })}
+                rows={2}
+                placeholder="Optional — cash, transfer, advance"
+                className="w-full px-2.5 py-2 border border-line rounded-md bg-surface text-[13px] outline-none focus:border-ink-strong resize-none placeholder:text-faint"
+              />
+            </div>
 
-        {/* Error */}
-        {error && (
-          <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 p-3 rounded-xl">
-            {error}
+            {panel.error && (
+              <p className="text-[12px] text-danger bg-[rgba(238,0,0,0.04)] border border-[rgba(238,0,0,0.15)] rounded-md px-3 py-2 text-pretty">
+                {panel.error}
+              </p>
+            )}
           </div>
         )}
+      </SidePanel>
 
-        {/* Submit */}
-        <button
-          type="submit"
-          disabled={saving}
-          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-colors"
-        >
-          {saving ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} />}
-          Log Payment
-        </button>
-      </form>
+      <Toast toast={toast} onDone={() => setToast(null)} />
     </div>
   );
 }

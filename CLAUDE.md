@@ -42,7 +42,7 @@ conventions in "Legacy UI" still apply to it.
 | Menu | `/menu` | **done** |
 | Platform Payouts | `/platform-payouts` | **done** |
 | Calendar | `/calendar` | **done** |
-| Payroll | `/payroll` | todo |
+| Payroll | `/payroll` | **done** |
 | My Payroll | `/my-payroll` | todo |
 | Settings | `/settings` | todo |
 | TV Displays | `/tv-displays` | todo |

@@ -95,6 +95,30 @@ function parseOr(expression) {
     .filter((t) => OPS[t.op]);
 }
 
+/**
+ * The one database trigger this app depends on, emulated.
+ *
+ * In production `sync_payroll_record` keeps payroll_records.amount_paid and
+ * .status in step whenever a payroll_payment is inserted or deleted, and
+ * Payroll reads those columns rather than recomputing them. Without it here,
+ * logging a payment in demo mode appears to do nothing — which looks like a bug
+ * in the screen rather than a missing trigger.
+ */
+function syncPayrollRecord(payrollId) {
+  if (!payrollId) return;
+  const tables = getTables();
+  const record = (tables.payroll_records || []).find((r) => r.id === payrollId);
+  if (!record) return;
+  const paid = (tables.payroll_payments || [])
+    .filter((p) => p.payroll_id === payrollId)
+    .reduce((a, p) => a + Number(p.amount || 0), 0);
+  record.amount_paid = Math.round(paid * 100) / 100;
+  const expected = Number(record.gross_expected || 0);
+  record.status =
+    paid <= 0 ? "unpaid" : paid + 0.005 >= expected ? "paid" : "partial";
+  if (paid > 0 && !record.first_paid_at) record.first_paid_at = new Date().toISOString();
+}
+
 class Query {
   constructor(table) {
     this.table = table;
@@ -191,6 +215,9 @@ class Query {
         ...p,
       }));
       store.push(...added);
+      if (this.table === "payroll_payments") {
+        for (const row of added) syncPayrollRecord(row.payroll_id);
+      }
       return { data: this.returnRows ? clone(added) : null, error: null };
     }
 
@@ -205,6 +232,9 @@ class Query {
       const removed = store.filter((r) => this._match(r));
       store.length = 0;
       store.push(...keep);
+      if (this.table === "payroll_payments") {
+        for (const row of removed) syncPayrollRecord(row.payroll_id);
+      }
       return { data: this.returnRows ? clone(removed) : null, error: null };
     }
 

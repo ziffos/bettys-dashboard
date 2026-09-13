@@ -19,7 +19,11 @@ The demo client is a small in-memory stand-in for the PostgREST query builder
 (`select` / `eq` / `gte` / `lte` / `in` / `like` / `ilike` / `or` / `order` /
 `limit` / `range` / `single` / `maybeSingle`, plus embedded foreign-key selects), the auth calls
 `AuthContext` needs, and no-op realtime channels. **It has no network access**,
-so demo mode cannot read from or write to production. That also makes the
+so demo mode cannot read from or write to production. It also emulates the one
+database trigger the app leans on — `sync_payroll_record`, which keeps
+`payroll_records.amount_paid` and `.status` in step with `payroll_payments` —
+because Payroll reads those columns rather than recomputing them, and without it
+logging a payment here would appear to do nothing. That also makes the
 write-capable screens — the menu editor and the TV layout editor — safe to click
 through; edits apply in memory and vanish on reload.
 

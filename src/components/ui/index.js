@@ -120,8 +120,11 @@ export function KpiCard({
 /** Daily / Weekly / Monthly, platform filters, Week / Month — one control. */
 export function Segmented({ options, value, onChange, className = "" }) {
   return (
+    // max-w-full + scroll: six month chips do not fit a 390px screen, and a
+    // control that cannot fit should scroll rather than stretch the page and
+    // leave half of itself past the edge.
     <div
-      className={`flex gap-0.5 p-0.5 border border-line rounded-lg bg-wash-light shrink-0 ${className}`}
+      className={`flex gap-0.5 p-0.5 border border-line rounded-lg bg-wash-light shrink-0 max-w-full overflow-x-auto ${className}`}
     >
       {options.map((opt) => {
         const on = opt.id === value;
@@ -129,7 +132,7 @@ export function Segmented({ options, value, onChange, className = "" }) {
           <button
             key={opt.id}
             onClick={() => onChange(opt.id)}
-            className={`px-3 py-[5px] text-[12px] font-medium rounded-md whitespace-nowrap ${
+            className={`px-3 py-[5px] text-[12px] font-medium rounded-md whitespace-nowrap shrink-0 ${
               on ? "bg-surface text-ink" : "text-subtle hover:text-muted"
             }`}
             style={on ? { boxShadow: "0 1px 2px rgba(0,0,0,0.06)" } : undefined}
