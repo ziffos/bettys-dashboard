@@ -3,32 +3,9 @@
 import { createContext, useContext, useEffect, useState, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "./supabase";
+import { ADMIN_ONLY_SLUGS, PATH_TO_SLUG, SLUG_TO_PATH, landingSlugFor } from "./access";
 
 const AuthContext = createContext({});
-
-// Map page slugs to their route paths.  Slug → path.
-const SLUG_TO_PATH = {
-  overview: "/",
-  sales: "/sales",
-  marketing: "/marketing",
-  menu: "/menu",
-  products: "/products",
-  payouts: "/platform-payouts",
-  reviews: "/reviews",
-  calendar: "/calendar",
-  "my-payroll": "/my-payroll",
-  payroll: "/payroll",
-  "tv-displays": "/tv-displays",
-  settings: "/settings",
-};
-
-// Reverse lookup: path → slug
-const PATH_TO_SLUG = Object.fromEntries(
-  Object.entries(SLUG_TO_PATH).map(([slug, path]) => [path, slug])
-);
-
-// Pages that are never shown to employees regardless of page_permissions
-const ADMIN_ONLY_SLUGS = new Set(["payroll", "settings"]);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -172,7 +149,12 @@ export const AuthProvider = ({ children }) => {
         // AuthProvider handles all post-login navigation — redirect
         // away from the login page once the profile is loaded.
         if (pathname === "/login") {
-          router.push(data.role === "admin" ? "/" : "/calendar");
+          if (data.role === "admin") {
+            router.push("/");
+          } else {
+            const slug = landingSlugFor(pageSlugs);
+            if (slug) router.push(SLUG_TO_PATH[slug]);
+          }
         }
       } catch (err) {
         console.error('Unexpected error:', err);
@@ -200,8 +182,14 @@ export const AuthProvider = ({ children }) => {
     if (!slug) return; // unknown route, let Next.js handle 404
 
     if (ADMIN_ONLY_SLUGS.has(slug) || !permissions.includes(slug)) {
+      const landing = landingSlugFor(permissions);
+      // Nowhere to send them, so say nothing and let the layout explain. The
+      // alternative is bouncing them to a page they also cannot open.
+      if (!landing) return;
+      const target = SLUG_TO_PATH[landing];
+      if (target === pathname) return;
       setToast("You don't have access to this page");
-      router.push("/calendar");
+      router.push(target);
     }
   }, [pathname, profile, permissions, router]);
 

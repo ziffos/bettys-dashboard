@@ -55,7 +55,7 @@ looking at it in a screenshot with real data, not demo data.
 - [x] Platform Payouts — statement totals vs computed sales for the same period
 - [x] Calendar — 53 shifts, Feb–Mar only. Check the empty months read as empty
 - [x] Payroll / My Payroll — 2 records, Feb 2026. Same
-- [ ] Settings — 3 profiles, permissions matrix
+- [x] Settings — 3 profiles, permissions matrix
 - [ ] TV Displays — slots vs `menu_items.tv_number` / `position`
 
 ## 6 · Charts across every filter, both widths
@@ -438,3 +438,26 @@ Checked with `tools/sql.sh` — these tables are RLS-locked too.
   Nothing is pending, so Settings correctly announces no scheduled change.
 - **Demo gave everyone a rate**, so the unpriced path could not appear in a
   screenshot. One person is now on the rota with no rate, mirroring production.
+
+### Settings (task 5)
+
+Checked with `tools/sql.sh`.
+
+- **An employee with no pages granted was stuck in a redirect loop.** Login sent
+  every employee to `/calendar`; the route guard then found they could not open
+  it and redirected them to `/calendar`, over and over, with a toast firing on
+  each pass. **`Maria Test` in production has zero `page_permissions` rows** and
+  hits exactly that. Landing is now their first granted page in rail order, and
+  when nothing has been granted the layout says so — "Nothing has been shared
+  with you yet" — with a way out. `tools/audit-access.mjs` checks every shape,
+  including grants for only a parked page or only an admin-only page, and no
+  case lands somewhere it cannot open.
+- **The access maps moved to `src/lib/access.js`**, a pure module, so the
+  landing rule can be tested outside the browser and the layout does not have to
+  import the whole auth context to ask one question.
+- **The rest of Settings is consistent with the data.** Three profiles — the
+  owner on a real address plus two test accounts — all active, `job_title` null
+  on all three. Grants: Test Employee has calendar, my-payroll and reviews;
+  Maria Test has none; no grant points at a profile that does not exist.
+- **Someone with no rate reads "—" here too**, matching what Payroll now shows,
+  and Payroll's banner points at this screen to fix it.
