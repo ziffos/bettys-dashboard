@@ -159,6 +159,12 @@ not set `job_title` — it is filled in afterwards from the Settings panel.
 
 ### The shell
 
+- **On a desktop only `main` scrolls.** The shell is `md:h-screen
+  md:overflow-hidden`, so both rails and the header are simply always there;
+  `main` is the scroll container and `ClientLayout` resets its `scrollTop` on a
+  route change, because the browser no longer does. A phone still scrolls the
+  document. Do not put `overflow-x: hidden` back on `html`/`body` — it makes
+  them scroll containers and every `position: sticky` in the app stops working
 - `ClientLayout` composes `Sidebar` (the desktop rail), `AppHeader` and
   `MobileNav`. The rail expands on hover and can be pinned; the pin is in
   localStorage under `bettys-rail-pinned`.

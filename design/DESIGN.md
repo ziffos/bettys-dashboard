@@ -332,6 +332,20 @@ Agreed with the owner before the rebuild started. Do not "fix" these back.
     describing where it is. The bottom-bar icon stays a checklist rather than a
     sparkle for the same reason — the badge on it counts open tasks.
 
+26. **The desktop shell does not scroll; the middle column does.** Both rails
+    and the header hold still because the shell is exactly the viewport and
+    hides its overflow, not because anything is sticky. Sticky was what it used
+    to be, and it never worked: `overflow-x: hidden` on html/body made them
+    scroll containers, and a sticky element inside a container that cannot
+    scroll has nothing to stick to. The rails only looked pinned because most
+    pages were short. The rule is gone, which also gives the phone back its
+    sticky header. A phone still scrolls the document — the bottom bar is
+    fixed, the address bar wants a real page scroll, and there is no second
+    column to hold still.
+27. **Settings sits at the bottom of the rail**, next to the person it
+    configures, rather than under the pages you work in. `foot: true` on its
+    group in `NAV_GROUPS` sinks it.
+
 ## Out of scope — do not touch
 
 `/qr-menu`, `/tv-display-1..4`, `/tv-display-menu-*`, `/tv-display-motion-*`

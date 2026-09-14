@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import Sidebar from "./Sidebar";
@@ -21,6 +22,13 @@ function isBare(pathname) {
 export default function ClientLayout({ children }) {
   const pathname = usePathname();
   const { loading, toast, profile, permissions, signOut } = useAuth();
+  const main = useRef(null);
+
+  // The document no longer scrolls on a desktop, so the browser no longer
+  // resets the scroll on a route change — main does, and main has to be told.
+  useEffect(() => {
+    main.current?.scrollTo(0, 0);
+  }, [pathname]);
 
   if (loading && !isBare(pathname)) {
     return (
@@ -55,14 +63,29 @@ export default function ClientLayout({ children }) {
   }
 
   return (
-    <div className="flex min-h-screen bg-canvas text-ink">
+    /*
+     * On a desktop the shell is exactly the viewport and does not scroll: the
+     * two rails and the header hold still and only `main` moves. It used to
+     * rely on `position: sticky` for that, which silently does nothing here —
+     * `overflow-x: hidden` on html/body in globals.css makes them scroll
+     * containers, and a sticky element inside one has nothing to stick to. The
+     * rails looked pinned only because most pages were short.
+     *
+     * A phone keeps scrolling the document. The bottom bar is fixed, the
+     * address bar wants a real page scroll, and there is no second column to
+     * hold still anyway.
+     */
+    <div className="flex min-h-screen md:h-screen md:overflow-hidden bg-canvas text-ink">
       <Sidebar />
 
       {/* min-w-0 so a wide table inside a page cannot stretch the whole shell */}
-      <div className="flex-1 min-w-0 flex flex-col">
+      <div className="flex-1 min-w-0 md:min-h-0 flex flex-col">
         <AppHeader />
         {/* The phone nav is fixed, so the last card needs clearance under it. */}
-        <main className="flex-1 px-3 md:px-6 pt-4 md:pt-6 pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:pb-6">
+        <main
+          ref={main}
+          className="flex-1 md:min-h-0 md:overflow-y-auto px-3 md:px-6 pt-4 md:pt-6 pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:pb-6"
+        >
           {children}
         </main>
         <MobileNav />

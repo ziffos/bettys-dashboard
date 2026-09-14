@@ -45,10 +45,14 @@
     color-scheme: light;
   }
 
-  html,
-  body {
-    @apply overflow-x-hidden;
-  }
+  /*
+   * No `overflow-x: hidden` here. It makes html and body scroll containers,
+   * and a `position: sticky` element inside a scroll container that cannot
+   * scroll has nothing to stick to — which is why the phone's header used to
+   * scroll away with the page. Nothing on any screen is wider than the
+   * viewport (tools/dom-checks.mjs asserts it at 390 and 1440); if something
+   * ever is, fix that element rather than clipping the whole document.
+   */
 
   body {
     @apply bg-canvas text-ink antialiased;

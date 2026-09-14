@@ -52,7 +52,11 @@ export const NAV_GROUPS = [
     ],
   },
   {
+    // `foot` sinks the group to the bottom of the rail. Settings is not
+    // somewhere you go often; it is somewhere you go last, and it belongs down
+    // by the person it configures rather than crowding the pages you work in.
     title: "System",
+    foot: true,
     items: [{ slug: "settings", href: "/settings", icon: Settings, label: "Settings" }],
   },
 ];
@@ -136,7 +140,7 @@ export default function Sidebar() {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{ width: open ? 224 : 60 }}
-      className="hidden md:flex shrink-0 flex-col border-r border-line bg-surface transition-[width] duration-200 overflow-hidden sticky top-0 h-screen"
+      className="hidden md:flex shrink-0 flex-col border-r border-line bg-surface transition-[width] duration-200 overflow-hidden h-screen"
     >
       {/* Brand */}
       <div className="h-14 flex items-center gap-2.5 px-3.5 border-b border-line shrink-0">
@@ -167,7 +171,10 @@ export default function Sidebar() {
       {/* Nav */}
       <nav className="flex-1 p-2 flex flex-col gap-0.5 overflow-y-auto overflow-x-hidden">
         {groups.map((group, gi) => (
-          <div key={group.title ?? `group-${gi}`} className="contents">
+          <div
+            key={group.title ?? `group-${gi}`}
+            className={group.foot ? "mt-auto flex flex-col gap-0.5" : "contents"}
+          >
             {group.title && (
               <p
                 className="font-mono text-[10px] text-subtle tracking-[0.06em] uppercase mt-3.5 mb-1 pl-2.5 whitespace-nowrap transition-opacity duration-150"
