@@ -52,13 +52,13 @@ sweep — is finished, and its findings are kept in `TASKS-audit.md`.
 - [x] Long list: first nine plus `Show N more`, and a filter field once the
       total passes the threshold
 
-## 4 · Ask AI, as a facade
+## 4 · Ask AI, as a facade — **done**
 
-- [ ] The chat: your messages right in ink, its messages left on a washed card,
+- [x] The chat: your messages right in ink, its messages left on a washed card,
       composer at the foot, no context line
-- [ ] Sending does nothing, and the code says plainly that nothing is wired up.
+- [x] Sending does nothing, and the code says plainly that nothing is wired up.
       No fake replies, no spinner pretending to think
-- [ ] An empty state that says what it will be for without promising a date
+- [x] An empty state that says what it will be for without promising a date
 
 ## 5 · Add as task
 
@@ -146,3 +146,16 @@ Recorded as they are found.
   the list — invisible behind the cap. The demo client now stamps `created_at`
   on insert for any table whose rows carry one. That was hiding a real bug in
   demo, and it would have hidden others.
+- **What you type appears; the reply says it went nowhere.** The shape cannot be
+  judged without a message in it, so the composer keeps yours — right, in ink —
+  and puts a plain line where the answer will sit: *"Not connected yet, so this
+  went nowhere."* Italic and muted on the washed card, so it reads as the panel
+  telling you what happened rather than as something answering. That is the line
+  between a facade and a lie, and it matters more here than usual: an invented
+  figure on a screen full of real ones is the most expensive kind of wrong this
+  dashboard could be.
+- **Verified it goes nowhere.** Playwright watched the network while sending:
+  **zero non-GET requests**. Messages live in component state, so a reload
+  empties them — checked, and it does. Nothing is stored, nothing is sent.
+- The panel header reads `not connected yet` on this tab instead of a count,
+  which says it before you type anything.
