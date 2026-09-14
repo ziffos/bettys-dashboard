@@ -70,16 +70,16 @@ sweep — is finished, and its findings are kept in `TASKS-audit.md`.
       when it is already there
 - [x] Nowhere else. The button belongs where a finding is, not on every card
 
-## 6 · Prove it
+## 6 · Prove it — **done**
 
-- [ ] `./tools/shot.sh --all` and look at every screen at both widths with the
+- [x] `./tools/shot.sh --all` and look at every screen at both widths with the
       panel open and shut
-- [ ] `node tools/sweep.mjs /` and `/sales` with the panel open — the pushed
+- [x] `node tools/sweep.mjs /` and `/sales` with the panel open — the pushed
       layout must not break a chart
-- [ ] A Playwright pass over the panel itself: add a task, add a note, tick,
+- [x] A Playwright pass over the panel itself: add a task, add a note, tick,
       undo, delete a note, fold a section, reopen the page and find the panel as
       you left it
-- [ ] `npm run lint` clean for the new files, `npm run build` passes
+- [x] `npm run lint` clean for the new files, `npm run build` passes
 
 ---
 
@@ -173,3 +173,23 @@ Recorded as they are found.
 - **Counts on the day:** Payouts 3, Products 6 (the banner's capped run), Menu
   1, Payroll 1. All admin-only — the button renders nothing for an employee,
   who has no panel to put it in.
+- **48 combinations, clean.** `tools/prove-panel.mjs` walks all twelve screens at
+  1440px and 390px with the panel shut and open, running the same DOM checks the
+  chart sweeps use. Nothing NaN, no chart without height, nothing wider than its
+  viewport, no page errors.
+- **The charts survive the push.** `PANEL=open node tools/sweep.mjs` re-runs the
+  full range/interval/filter sweep against the 334px-narrower layout: 30
+  combinations on Overview and 90 on Sales, both clean. The sweep gained a
+  `PANEL=open` switch that pre-seeds `localStorage` before the page loads.
+- **Looked at the screens most likely to suffer:** Sales, Products, Settings,
+  Calendar, TV Displays and Payroll with the panel open. The Calendar timeline
+  compresses cleanly, the permissions matrix keeps its columns, the stacked bar
+  chart re-fits, the TV slot grid drops to two columns per board. Nothing
+  clipped, nothing overlapping.
+- **The whole journey, driven end to end:** panel starts shut → open → add a
+  task (9→10 open) → add a note → tick it (stays in To do, Undo shown, open
+  count drops) → undo → delete the note by its x → fold To do → switch to Ask AI
+  → reload → comes back on Ask AI. Ten steps, no console errors.
+- **Lint is clean for everything new.** The six remaining repo-wide problems are
+  all in the out-of-scope files and the pre-existing `AuthContext` warning,
+  unchanged since before the panel existed.

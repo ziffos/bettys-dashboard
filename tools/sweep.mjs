@@ -18,6 +18,9 @@ const chipPattern = new RegExp(process.argv[3] || "^(Wolt|Foody|Bolt|POS)");
 // A second control the sweep does not step, but should be held in its other
 // position for a whole pass — Payouts' Fee % / Net payout, for instance.
 const holdButton = process.argv[4] || null;
+// PANEL=open pre-opens the side panel, so the sweep runs against the pushed
+// layout — 334px narrower — rather than the full-width one.
+const panelOpen = process.env.PANEL === "open";
 const BASE = "http://127.0.0.1:3007";
 const OUT = ".shots/sweep";
 mkdirSync(OUT, { recursive: true });
@@ -30,7 +33,13 @@ let checks = 0;
 const found = [];
 
 for (const [label, width, height] of [["desktop", 1440, 1000], ["phone", 390, 844]]) {
-  const p = await b.newPage({ viewport: { width, height } });
+  const ctx = await b.newContext({ viewport: { width, height } });
+  if (panelOpen) {
+    await ctx.addInitScript(() =>
+      window.localStorage.setItem("bettys-panel", JSON.stringify({ open: true, tab: "list" }))
+    );
+  }
+  const p = await ctx.newPage();
   const errs = [];
   p.on("pageerror", (e) => errs.push(String(e.message)));
   p.on("console", (m) => { if (m.type() === "error" && !/hydrat/i.test(m.text())) errs.push(m.text()); });
@@ -125,7 +134,7 @@ for (const [label, width, height] of [["desktop", 1440, 1000], ["phone", 390, 84
   await p.close();
 }
 
-console.log(`${route} [${chipPattern.source}${holdButton ? " · " + holdButton : ""}]: ${checks} combinations checked`);
+console.log(`${route} [${chipPattern.source}${holdButton ? " · " + holdButton : ""}${panelOpen ? " · panel open" : ""}]: ${checks} combinations checked`);
 if (found.length === 0) console.log("clean");
 for (const f of found) console.log(`  ${f.tag}\n    ${[...f.problems, ...f.errs].join("\n    ")}`);
 await b.close();
