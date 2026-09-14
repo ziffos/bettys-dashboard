@@ -71,7 +71,7 @@ sentence, and a filter combination that produces `NaN` or an infinite axis.
 - [x] Products
 - [x] Reviews
 - [x] Platform Payouts
-- [ ] Calendar
+- [x] Calendar
 - [ ] Payroll / My Payroll
 
 ---
@@ -545,3 +545,12 @@ in `.shots/sweep/`.
   only explained why it counts statements rather than weeks. It ends with "and
   regardless of the range above" now, matching how the Not settled card
   announces the same thing.
+- **Calendar — 32 periods, clean.** It does not follow the header range, so it
+  has its own pass: `tools/sweep-calendar.mjs` walks Week and Month ten periods
+  back and twenty forward — well past both ends of the roster — at both widths.
+  The DOM checks both sweeps run now live in `tools/dom-checks.mjs`, so there is
+  one definition of "this cannot be right" rather than two that drift.
+- Week on a phone is the per-day list (DESIGN.md departure 9) and reads
+  cleanly — names, times, hours and cost per day, with "2 on at peak" under the
+  ones that qualify. Month keeps the seven-column grid and scrolls sideways,
+  with a part-visible column as the affordance.

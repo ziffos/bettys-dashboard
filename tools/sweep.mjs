@@ -9,6 +9,7 @@
  */
 import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
+import { domProblems } from "./dom-checks.mjs";
 
 const route = process.argv[2] || "/";
 // Which toggle group to exercise, if the screen has one. Products has category
@@ -23,44 +24,6 @@ mkdirSync(OUT, { recursive: true });
 
 const RANGES = ["Today", "Last 7 days", "Last 28 days", "This month", "This quarter"];
 const INTERVALS = ["Daily", "Weekly", "Monthly"];
-
-const audit = () => {
-  const problems = [];
-  const text = document.body.innerText;
-  for (const bad of ["NaN", "Infinity", "undefined", "[object Object]"]) {
-    if (text.includes(bad)) problems.push(`text contains ${bad}`);
-  }
-  for (const el of document.querySelectorAll("svg path, svg line, svg rect, svg circle")) {
-    for (const attr of ["d", "x", "y", "x1", "y1", "x2", "y2", "width", "height", "cx", "cy", "r"]) {
-      const v = el.getAttribute(attr);
-      if (v && /NaN|Infinity/.test(v)) {
-        problems.push(`<${el.tagName}> ${attr}="${v.slice(0, 60)}"`);
-        break;
-      }
-    }
-  }
-  // charts that rendered with no height
-  for (const el of document.querySelectorAll("svg")) {
-    const r = el.getBoundingClientRect();
-    if (r.width > 40 && r.height === 0) problems.push("an svg has zero height");
-  }
-  // a series drawn outside its own plot — a fixed axis that the data escaped
-  for (const svg of document.querySelectorAll("svg[viewBox]")) {
-    const box = svg.viewBox.baseVal;
-    if (!box || !box.height) continue;
-    for (const c of svg.querySelectorAll("circle")) {
-      const cy = Number(c.getAttribute("cy"));
-      if (Number.isFinite(cy) && (cy < -0.5 || cy > box.height + 0.5)) {
-        problems.push(`a point sits at cy=${cy.toFixed(1)} outside a 0–${box.height} plot`);
-        break;
-      }
-    }
-  }
-  if (document.documentElement.scrollWidth > window.innerWidth + 1) {
-    problems.push(`content is ${document.documentElement.scrollWidth}px wide in a ${window.innerWidth}px viewport`);
-  }
-  return problems;
-};
 
 const b = await chromium.launch();
 let checks = 0;
@@ -149,7 +112,7 @@ for (const [label, width, height] of [["desktop", 1440, 1000], ["phone", 390, 84
         }
 
       errs.length = 0;
-      const problems = await p.evaluate(audit);
+      const problems = await p.evaluate(domProblems);
       checks++;
       const tag = `${route.replace(/\//g, "") || "overview"}-${label}-${range.replace(/ /g, "")}${interval ? "-" + interval : ""}${isRadio || chipCount ? "-" + chips.replace(/\s+/g, "") : ""}`;
       if (problems.length || errs.length) {
