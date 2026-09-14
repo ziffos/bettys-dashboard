@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Betty's · side panel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --canvas:#fafafa; --surface:#fff;
+    --ink:#000; --ink-strong:#171717; --muted:#666; --subtle:#8f8f8f; --faint:#b3b3b3;
+    --line:#eaeaea; --line-strong:#d4d4d4; --wash:#f2f2f2; --wash-light:#fafafa;
+    --accent:#0070f3; --danger:#ee0000; --warn:#f5a623; --warn-ink:#b26a00;
+    --shadow-card:0 1px 2px rgba(0,0,0,.03);
+    --shadow-pop:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.08);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#f0f0f0;color:var(--ink);font-family:'Geist',ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+  .mono{font-family:'Geist Mono',ui-monospace,monospace}
+
+  #chrome{position:sticky;top:0;z-index:50;background:#fff;border-bottom:1px solid var(--line);
+    padding:10px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  #chrome .grp{display:flex;gap:4px;padding:4px;background:var(--wash-light);border:1px solid var(--line);border-radius:10px}
+  #chrome .grp button{font-family:'Geist Mono',monospace;font-size:11px;color:var(--muted);padding:7px 11px;border-radius:7px;white-space:nowrap}
+  #chrome .grp button.on{background:var(--ink-strong);color:#fff}
+  #tag{font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.06em;color:var(--subtle);text-transform:uppercase;margin-right:auto}
+  #desc{width:100%;font-size:12.5px;color:var(--muted);text-wrap:pretty;line-height:1.55}
+  #desc b{color:var(--ink);font-weight:500}
+  #stage{padding:22px 16px 60px;display:flex;justify-content:center}
+  .twocol{display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap;justify-content:center}
+  .capt{font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.06em;color:var(--subtle);text-transform:uppercase;margin-bottom:8px}
+
+  /* ── app furniture ────────────────────────────────────────────── */
+  .app{background:var(--canvas);border:1px solid var(--line);border-radius:14px;overflow:hidden;
+    box-shadow:0 10px 40px rgba(0,0,0,.08);display:flex;position:relative}
+  .rail{width:56px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--line);
+    display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:16px}
+  .rail img{width:30px;height:30px;border-radius:8px;object-fit:contain}
+  .rail i{display:block;width:18px;height:18px;border-radius:5px;background:var(--wash)}
+  .rail i.on{background:var(--ink-strong)}
+  .col{flex:1;min-width:0;display:flex;flex-direction:column}
+  .hdr{height:52px;flex-shrink:0;border-bottom:1px solid var(--line);background:var(--surface);
+    display:flex;align-items:center;gap:10px;padding:0 14px}
+  .crumb{font-size:12.5px;color:var(--muted)} .crumb b{color:var(--ink);font-weight:500}
+  .pill{height:28px;border:1px solid var(--line);border-radius:8px;padding:0 10px;display:flex;align-items:center;font-size:12px;color:var(--muted);background:var(--surface)}
+  .body{flex:1;min-width:0;overflow:hidden;padding:16px;display:flex;flex-direction:column;gap:12px}
+  .kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+  .kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:11px 12px;box-shadow:var(--shadow-card);min-width:0}
+  .kpi .lab{font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:.06em;color:var(--subtle)}
+  .kpi .val{font-size:21px;font-weight:600;letter-spacing:-.03em;margin-top:3px}
+  .kpi .sub{font-size:10.5px;color:var(--subtle);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-card);flex:1;min-height:0;display:flex;flex-direction:column}
+  .card .ch{padding:12px 14px;border-bottom:1px solid var(--line);display:flex;align-items:flex-start;gap:10px}
+  .card .ct{font-size:13.5px;font-weight:600;letter-spacing:-.01em}
+  .card .cs{font-size:11.5px;color:var(--subtle);margin-top:2px}
+  .chart{flex:1;min-height:0;padding:16px 14px 8px;display:flex;align-items:flex-end;gap:3px}
+  .chart .b{flex:1;background:var(--ink-strong);border-radius:2px 2px 0 0;min-width:0}
+  .chart .b.shut{height:2px!important;background:var(--line-strong);border-radius:2px;align-self:flex-end}
+  .addbtn{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 8px;border:1px solid var(--line);
+    border-radius:6px;font-size:11px;color:var(--muted);background:var(--surface);white-space:nowrap}
+
+  /* ── panel ────────────────────────────────────────────────────── */
+  .panel{width:334px;flex-shrink:0;background:var(--surface);border-left:1px solid var(--line);
+    display:flex;flex-direction:column;min-height:0}
+  .ptop{padding:9px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+  .ptop .t{font-size:13.5px;font-weight:600;letter-spacing:-.01em}
+  .ptop .n{font-family:'Geist Mono',monospace;font-size:10px;color:var(--subtle)}
+  .pclose{margin-left:auto;width:26px;height:26px;border:1px solid var(--line);border-radius:7px;
+    display:flex;align-items:center;justify-content:center;color:var(--subtle)}
+  .plist{flex:1;min-height:0;overflow-y:auto}
+  .iconrail{width:46px;flex-shrink:0;background:var(--surface);border-left:1px solid var(--line);
+    display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:6px}
+  .iconrail button{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--subtle);position:relative}
+  .iconrail button.on{background:var(--ink-strong);color:#fff}
+  .dot{position:absolute;top:4px;right:4px;width:6px;height:6px;border-radius:50%;background:var(--danger);border:1.5px solid var(--surface)}
+  .iconrail button.on .dot{border-color:var(--ink-strong)}
+
+  /* filter row, only once the list is long enough to need it */
+  .filter{padding:8px 12px;border-bottom:1px solid var(--line);display:flex;gap:6px;align-items:center}
+  .finput{flex:1;height:28px;border:1px solid var(--line);border-radius:7px;padding:0 9px;font-size:12px;
+    color:var(--faint);display:flex;align-items:center;gap:6px}
+
+  /* sections */
+  .sh{padding:10px 12px 5px;display:flex;align-items:center;gap:6px;cursor:pointer}
+  .sh .lbl{font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:.07em;color:var(--subtle);text-transform:uppercase}
+  .sh .cnt{font-family:'Geist Mono',monospace;font-size:9.5px;color:var(--faint)}
+  .sh .chev{margin-left:auto;color:var(--faint);display:flex;transition:transform .15s}
+  .sh.closed .chev{transform:rotate(-90deg)}
+  .sh .act{margin-left:auto;font-size:11px;color:var(--subtle)}
+
+  .item{display:flex;gap:9px;padding:8px 12px;border-top:1px solid var(--wash);align-items:flex-start}
+  .box{width:15px;height:15px;border:1.5px solid var(--line-strong);border-radius:4px;flex-shrink:0;margin-top:1px;
+    display:flex;align-items:center;justify-content:center;background:var(--surface)}
+  .box.done{background:var(--ink-strong);border-color:var(--ink-strong);color:#fff}
+  .itxt{flex:1;min-width:0}
+  .itxt .t{font-size:12.5px;line-height:1.35;text-wrap:pretty}
+  .item.settling{background:var(--wash-light)}
+  .item.settling .t,.item.isdone .t{color:var(--subtle);text-decoration:line-through}
+  .meta{display:flex;gap:6px;align-items:center;margin-top:3px;flex-wrap:wrap}
+  .src{font-family:'Geist Mono',monospace;font-size:9.5px;padding:1px 5px;border-radius:4px;background:var(--wash);color:var(--subtle)}
+  .src.money{background:rgba(238,0,0,.06);color:var(--danger)}
+  .undo{margin-left:auto;font-size:11px;color:var(--accent);white-space:nowrap}
+  .note{padding:9px 12px;border-top:1px solid var(--wash);display:flex;gap:9px}
+  .note .bar{width:2px;border-radius:2px;background:var(--warn);flex-shrink:0}
+  .note .t{flex:1;min-width:0;font-size:12.5px;line-height:1.4;color:var(--muted);text-wrap:pretty}
+  .note .del{width:20px;height:20px;border-radius:5px;display:flex;align-items:center;justify-content:center;
+    color:var(--faint);flex-shrink:0;margin-top:-1px}
+  .note:hover .del{color:var(--danger);background:var(--wash)}
+  .when{font-family:'Geist Mono',monospace;font-size:9.5px;color:var(--faint)}
+  .more{width:100%;padding:9px 12px;border-top:1px solid var(--wash);text-align:left;
+    font-size:12px;color:var(--accent)}
+
+  .comp{border-top:1px solid var(--line);padding:9px 12px;background:var(--surface)}
+  .ctoggle{display:flex;gap:4px;margin-bottom:7px}
+  .ctoggle button{font-size:11px;padding:3px 9px;border-radius:6px;color:var(--subtle);border:1px solid var(--line)}
+  .ctoggle button.on{background:var(--ink-strong);color:#fff;border-color:var(--ink-strong)}
+  .cinput{width:100%;height:32px;border:1px solid var(--line);border-radius:8px;padding:0 10px;font-size:12.5px;
+    color:var(--faint);display:flex;align-items:center;justify-content:space-between}
+
+  .seg{display:flex;gap:3px;padding:3px;background:var(--wash-light);border:1px solid var(--line);border-radius:9px}
+  .seg button{flex:1;padding:5px 8px;border-radius:6px;font-size:12px;color:var(--muted);white-space:nowrap}
+  .seg button.on{background:var(--surface);color:var(--ink);font-weight:500;box-shadow:var(--shadow-card)}
+
+  .chat{flex:1;min-height:0;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+  .msg{max-width:86%;font-size:12.5px;line-height:1.45;padding:8px 11px;border-radius:12px;text-wrap:pretty}
+  .msg.me{align-self:flex-end;background:var(--ink-strong);color:#fff;border-bottom-right-radius:4px}
+  .msg.ai{align-self:flex-start;background:var(--wash-light);border:1px solid var(--line);border-bottom-left-radius:4px}
+
+  /* ── phone ────────────────────────────────────────────────────── */
+  .phone{width:390px;height:800px;background:var(--canvas);border:10px solid #111;border-radius:34px;
+    overflow:hidden;position:relative;display:flex;flex-direction:column;box-shadow:0 14px 44px rgba(0,0,0,.22)}
+  .phdr{height:50px;flex-shrink:0;border-bottom:1px solid var(--line);background:var(--surface);
+    display:flex;align-items:center;gap:9px;padding:0 13px}
+  .pnav{height:60px;flex-shrink:0;border-top:1px solid var(--line);background:rgba(255,255,255,.94);display:flex;align-items:center;padding:0 4px}
+  .pnav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:9.5px;color:var(--subtle);position:relative}
+  .pnav a.on{color:var(--ink);font-weight:500}
+  .pnav a i{width:17px;height:17px;border-radius:5px;background:var(--wash)}
+  .pnav a.on i{background:var(--ink-strong)}
+  .pnav .dot{top:-1px;right:22px}
+  .ppage{flex:1;min-height:0;display:flex;flex-direction:column;background:var(--surface)}
+  svg{display:block}
+</style>
+</head>
+<body>
+
+<div id="chrome">
+  <span id="tag">Betty's · side panel</span>
+  <div class="grp" id="devices"></div>
+  <div class="grp" id="tabs"></div>
+  <div class="grp" id="states"></div>
+  <div id="desc"></div>
+</div>
+<div id="stage"></div>
+
+<script>
+"use strict";
+
+const I = {
+  chat:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>',
+  list:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M11 12H3"/><path d="M16 6H3"/><path d="M16 18H3"/><path d="m17 12 2 2 4-4"/></svg>',
+  x:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>',
+  plus:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>',
+  chev:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
+  tick:'<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+  search:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>',
+  send:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/></svg>',
+};
+
+/* ── content ─────────────────────────────────────────────────────── */
+const NOTES = [
+  "Ask Foody why the reviews stopped in May — they are still taking orders.",
+  "Order more chicken for the weekend, Friday ran out last week.",
+];
+const NOTES_LONG = NOTES.concat([
+  "Halloumi Burger is €8.00 on Foody and €8.00 in store — Foody keeps ~48% of that.",
+  "New supplier quote for boxes, decide before the 20th.",
+]);
+
+const TASKS = [
+  { t:"Chase Wolt's statement for 6–15 June", money:"€1,264", src:"PAYOUTS" },
+  { t:"Chase Wolt's statement for 26–31 August", money:"€527", src:"PAYOUTS" },
+  { t:"Ask Foody about 6–12 September", money:"€544", src:"PAYOUTS" },
+  { t:"Add the Wolt name for Coca-Cola 330ml", src:"MENU" },
+  { t:"Add a till name for Halloumi Burger", src:"MENU" },
+  { t:"Set an hourly rate for Dinos", src:"PAYROLL" },
+  { t:"Roll March into payroll — 166 h unpaid", src:"PAYROLL" },
+  { t:"Check why Mon 17 and Tue 18 Aug have no orders at all", src:"SALES" },
+  { t:"Reprint the QR cards for the tables" },
+];
+const TASKS_LONG = TASKS.concat([
+  { t:"Reconcile August statements against the bank", money:"€2,410", src:"PAYOUTS" },
+  { t:"Query the €71.40 Foody charge that is in no column", money:"€71", src:"PAYOUTS" },
+  { t:"Deactivate Vegetable Burger — never ordered", src:"MENU" },
+  { t:"Add Wolt name for Coca-Cola Zero 330ml", src:"MENU" },
+  { t:"Add a Bolt name for Crispy Chicken", src:"MENU" },
+  { t:"Book the accountant for the quarter" },
+  { t:"Chase the box supplier for a new quote" },
+  { t:"Replace the fryer thermometer" },
+  { t:"Update the allergy sheet for the new wrap" },
+  { t:"Ask Bolt why 29 Dec reported twice our log", money:"€109", src:"PAYOUTS" },
+  { t:"Photograph the new burger for the boards", src:"MENU" },
+  { t:"Set Tomas's weekend rate", src:"PAYROLL" },
+]);
+
+const JUST_DONE = [
+  { t:"Deactivate the old lunch deal", when:"2 h ago" },
+  { t:"Fix the till name for Chicken Wrap", when:"this morning" },
+];
+const DONE = [
+  { t:"Ask Bolt about the 29 Dec statement", when:"yesterday" },
+  { t:"Print the new allergy sheet", when:"4 days ago" },
+  { t:"Chase Foody for the April statement", when:"11 days ago" },
+  { t:"Re-shoot the wrap photo", when:"26 days ago" },
+];
+
+const CHAT = [
+  { who:"me", t:"Why did Foody drop last week?" },
+  { who:"ai", t:"Foody took €1,537 against €1,758 the week before, down 12.6%. Orders fell from 103 to 90 while the average order held. The drop sits on Tuesday and Wednesday." },
+  { who:"me", t:"Is that worth doing anything about?" },
+];
+
+/* ── pieces ──────────────────────────────────────────────────────── */
+const noteRow = (t) => `
+  <div class="note">
+    <div class="bar"></div>
+    <div class="t">${t}</div>
+    <button class="del" title="Delete">${I.x}</button>
+  </div>`;
+
+const taskRow = (x, mods = "") => `
+  <div class="item ${mods}">
+    <div class="box ${mods ? "done" : ""}">${mods ? I.tick : ""}</div>
+    <div class="itxt">
+      <div class="t">${x.t}</div>
+      ${(x.money || x.src || x.when) ? `<div class="meta">
+        ${x.money ? `<span class="src money">${x.money}</span>` : ""}
+        ${x.src ? `<span class="src">${x.src}</span>` : ""}
+        ${x.when ? `<span class="when">${x.when}</span>` : ""}
+      </div>` : ""}
+    </div>
+    ${mods.includes("settling") ? `<button class="undo">Undo</button>` : ""}
+  </div>`;
+
+const sectionHead = (label, count, opts = {}) => `
+  <div class="sh ${opts.closed ? "closed" : ""}">
+    <span class="lbl">${label}</span>
+    ${count != null ? `<span class="cnt">${count}</span>` : ""}
+    ${opts.action ? `<span class="act">${opts.action}</span>` : `<span class="chev">${I.chev}</span>`}
+  </div>`;
+
+function listBody(long, doneOpen, settling) {
+  const notes = long ? NOTES_LONG : NOTES;
+  const tasks = long ? TASKS_LONG : TASKS;
+  const justDone = settling ? JUST_DONE : [];
+  const shown = long ? tasks.slice(0, 9) : tasks;
+
+  return `
+    ${long ? `<div class="filter"><div class="finput">${I.search} Filter ${tasks.length + notes.length} items…</div></div>` : ""}
+    <div class="plist">
+      ${sectionHead("Notes", notes.length)}
+      ${notes.map(noteRow).join("")}
+
+      ${sectionHead("To do", tasks.length)}
+      ${settling ? taskRow({ t: shown[0].t, money: shown[0].money, src: shown[0].src }, "settling") : ""}
+      ${justDone.map(x => taskRow(x, "isdone")).join("")}
+      ${shown.slice(settling ? 1 : 0).map(x => taskRow(x)).join("")}
+      ${long ? `<button class="more">Show ${tasks.length - 9} more</button>` : ""}
+
+      ${sectionHead("Done", DONE.length, { action: doneOpen ? "Clear" : "", closed: !doneOpen })}
+      ${doneOpen ? DONE.map(x => taskRow(x, "isdone")).join("") : ""}
+      <div style="height:8px"></div>
+    </div>
+    <div class="comp">
+      <div class="ctoggle"><button class="on">Task</button><button>Note</button></div>
+      <div class="cinput"><span>What needs doing?</span></div>
+    </div>`;
+}
+
+const chatBody = () => `
+  <div class="chat">${CHAT.map(m => `<div class="msg ${m.who}">${m.t}</div>`).join("")}</div>
+  <div class="comp"><div class="cinput"><span>Ask a question…</span><span>${I.send}</span></div></div>`;
+
+/* ── desktop ─────────────────────────────────────────────────────── */
+function desktop(s) {
+  const bars = [62,70,58,0,74,66,80,72,68,0,60,76,84,70,0,64,72,58,66,74,0,80,68];
+  const openCount = (s.long ? TASKS_LONG : TASKS).length;
+
+  const panel = s.open ? `
+    <div class="panel">
+      <div class="ptop">
+        <span class="t">${s.tab === "list" ? "Notes &amp; to-do" : "Ask AI"}</span>
+        <span class="n">${s.tab === "list" ? openCount + " open" : "new thread"}</span>
+        <button class="pclose" data-act="close">${I.x}</button>
+      </div>
+      ${s.tab === "list" ? listBody(s.long, s.doneOpen, s.settling) : chatBody()}
+    </div>` : "";
+
+  return `
+    <div class="app" style="width:${s.open ? 1186 : 900}px;height:580px">
+      <div class="rail">
+        <img src="betty_logo.png" alt="" onerror="this.style.display='none'">
+        <i class="on"></i><i></i><i></i><i></i><i></i><i></i>
+      </div>
+      <div class="col">
+        <div class="hdr">
+          <span class="crumb">Betty's Crispy Chicken › <b>Overview</b></span>
+          <span style="flex:1"></span><span class="pill">Last 28 days</span>
+        </div>
+        <div class="body">
+          <div class="kpis">
+            <div class="kpi"><div class="lab">NET REVENUE</div><div class="val">€6,037</div><div class="sub">after €2,844 in fees</div></div>
+            <div class="kpi"><div class="lab">ORDERS</div><div class="val">594</div><div class="sub">⌀ 27 per open day</div></div>
+            <div class="kpi"><div class="lab">AVERAGE ORDER</div><div class="val">€14.95</div><div class="sub">€0.30 lower</div></div>
+            <div class="kpi"><div class="lab">FEE RATE</div><div class="val">32.0%</div><div class="sub">Wolt is the expensive one</div></div>
+          </div>
+          <div class="card">
+            <div class="ch">
+              <div style="flex:1;min-width:0">
+                <div class="ct">Revenue after platform fees</div>
+                <div class="cs">Select a bar to open that day's orders</div>
+              </div>
+              <button class="addbtn">${I.plus} Add as task</button>
+            </div>
+            <div class="chart">${bars.map(h => h ? `<div class="b" style="height:${h}%"></div>` : `<div class="b shut"></div>`).join("")}</div>
+          </div>
+        </div>
+      </div>
+      ${panel}
+      <div class="iconrail">
+        <button class="${s.open && s.tab === "chat" ? "on" : ""}" data-tab="chat" title="Ask AI">${I.chat}</button>
+        <button class="${s.open && s.tab === "list" ? "on" : ""}" data-tab="list" title="Notes & to-do">
+          ${I.list}${openCount ? `<span class="dot"></span>` : ""}
+        </button>
+      </div>
+    </div>`;
+}
+
+/* ── phone ───────────────────────────────────────────────────────── */
+function phone(s) {
+  const openCount = (s.long ? TASKS_LONG : TASKS).length;
+  const nav = (active) => `
+    <div class="pnav">
+      <a class="${active ? "" : "on"}"><i></i>Overview</a>
+      <a><i></i>Sales</a><a><i></i>Reviews</a>
+      <a class="${active ? "on" : ""}"><i></i>Notes${openCount ? `<span class="dot"></span>` : ""}</a>
+      <a><i></i>More</a>
+    </div>`;
+
+  if (!s.open) {
+    return `<div class="phone">
+      <div class="phdr">
+        <img src="betty_logo.png" style="width:22px;height:22px;border-radius:6px;object-fit:contain" onerror="this.style.display='none'">
+        <b style="font-size:14px">Overview</b><span style="flex:1"></span><span class="pill" style="height:26px;font-size:11px">28 days</span>
+      </div>
+      <div style="flex:1;min-height:0;padding:13px;display:flex;flex-direction:column;gap:10px;overflow:hidden">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+          <div class="kpi"><div class="lab">NET REVENUE</div><div class="val">€6,037</div><div class="sub">after fees</div></div>
+          <div class="kpi"><div class="lab">ORDERS</div><div class="val">594</div><div class="sub">⌀ 27/day</div></div>
+        </div>
+        <div class="card"><div class="ch"><div><div class="ct">Revenue after fees</div><div class="cs">Select a bar</div></div></div>
+          <div class="chart">${[64,72,0,80,58,70,66,0,74,62,78,0,68].map(h=>h?`<div class="b" style="height:${h}%"></div>`:`<div class="b shut"></div>`).join("")}</div></div>
+      </div>
+      ${nav(false)}
+    </div>`;
+  }
+
+  return `<div class="phone">
+    <div class="ppage">
+      <div class="phdr"><b style="font-size:15px">Notes</b><span style="flex:1"></span>
+        <span class="mono" style="font-size:10px;color:var(--subtle)">${openCount} open</span></div>
+      <div style="padding:9px 12px;border-bottom:1px solid var(--line)">
+        <div class="seg">
+          <button class="${s.tab === "list" ? "on" : ""}" data-tab="list">Notes &amp; to-do</button>
+          <button class="${s.tab === "chat" ? "on" : ""}" data-tab="chat">Ask AI</button>
+        </div>
+      </div>
+      ${s.tab === "list" ? listBody(s.long, s.doneOpen, s.settling) : chatBody()}
+    </div>
+    ${nav(true)}
+  </div>`;
+}
+
+/* ── chrome ──────────────────────────────────────────────────────── */
+const DESCS = {
+  base:`<b>Desktop</b> keeps variant 3's icon rail on the far right — it mirrors the left rail, so the panel never goes out of mind, and the red dot says there is something open. <b>Mobile</b> keeps variant 2's fifth item in the bottom bar with the same dot. Everything is in English and <b>Ask AI</b> replaced "Fråga". <b>Notes sit above To&nbsp;do</b>, as you asked.`,
+  long:`<b>A long list.</b> Three sections and nothing else. To&nbsp;do shows the first nine with <b>Show N more</b> under them, so the panel opens at a readable length however much is in it, and a <b>filter field appears only once there is enough to need one</b> — it is not there for six items. Each section folds from its header.`,
+  settling:`<b>Ticking something off.</b> The row greys out and <b>stays in To&nbsp;do for 24 hours</b>, struck through, with an Undo — so you can see what you got done today and take back a mis-tap. After 24 hours it moves to Done on its own.`,
+  done:`<b>Done.</b> Folded at the foot of the list with a count, so finished work is out of the way but not gone. Open it to see what you cleared and when. <b>Rows leave Done after 30 days</b>, and Clear empties it sooner — a to-do list should not quietly become an archive.`,
+};
+
+let s = { device:"both", open:true, tab:"list", long:false, doneOpen:false, settling:false };
+
+function render() {
+  const parts = [DESCS.base];
+  if (s.long) parts.push(DESCS.long);
+  if (s.settling) parts.push(DESCS.settling);
+  if (s.doneOpen) parts.push(DESCS.done);
+  document.getElementById("desc").innerHTML = parts.join(" ");
+
+  const stage = document.getElementById("stage");
+  stage.innerHTML = s.device === "both"
+    ? `<div class="twocol"><div><div class="capt">Desktop</div>${desktop(s)}</div><div><div class="capt">Mobile</div>${phone(s)}</div></div>`
+    : s.device === "desktop" ? desktop(s) : phone(s);
+
+  stage.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { s.tab = b.dataset.tab; s.open = true; render(); });
+  stage.querySelectorAll("[data-act=close]").forEach(b => b.onclick = () => { s.open = false; render(); });
+  stage.querySelectorAll(".sh").forEach(h => h.onclick = () => {
+    if (h.textContent.trim().startsWith("Done")) { s.doneOpen = !s.doneOpen; render(); }
+  });
+
+  document.querySelectorAll("#devices button").forEach(b => b.classList.toggle("on", b.dataset.d === s.device));
+  document.querySelectorAll("#tabs button").forEach(b =>
+    b.classList.toggle("on", b.dataset.t === (s.open ? s.tab : "closed")));
+  document.querySelectorAll("#states button").forEach(b => b.classList.toggle("on", s[b.dataset.s]));
+}
+
+const mk = (host, items, fn) => items.forEach(([k, label, attr]) => {
+  const b = document.createElement("button");
+  b.dataset[attr] = k; b.textContent = label; b.onclick = () => fn(k); host.appendChild(b);
+});
+mk(document.getElementById("devices"), [["both","Both","d"],["desktop","Desktop","d"],["mobile","Mobile","d"]],
+   k => { s.device = k; render(); });
+mk(document.getElementById("tabs"), [["list","Notes & to-do","t"],["chat","Ask AI","t"],["closed","Closed","t"]],
+   k => { if (k === "closed") s.open = false; else { s.open = true; s.tab = k; } render(); });
+mk(document.getElementById("states"), [["long","Long list","s"],["settling","Just ticked","s"],["doneOpen","Done open","s"]],
+   k => { s[k] = !s[k]; if (k !== "long") { s.open = true; s.tab = "list"; } render(); });
+
+render();
+</script>
+</body>
+</html>
