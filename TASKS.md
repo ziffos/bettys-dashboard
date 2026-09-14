@@ -60,15 +60,15 @@ sweep — is finished, and its findings are kept in `TASKS-audit.md`.
       No fake replies, no spinner pretending to think
 - [x] An empty state that says what it will be for without promising a date
 
-## 5 · Add as task
+## 5 · Add as task — **done**
 
-- [ ] Platform Payouts — one per "Not settled" row, carrying the money
-- [ ] Products — from the unmatched-names banner
-- [ ] Menu — from the priced-but-unnamed banner
-- [ ] Payroll — from the unpriced-hours banner
-- [ ] Adding the same finding twice must not make two rows; the button says so
+- [x] Platform Payouts — one per "Not settled" row, carrying the money
+- [x] Products — from the unmatched-names banner
+- [x] Menu — from the priced-but-unnamed banner
+- [x] Payroll — from the unpriced-hours banner
+- [x] Adding the same finding twice must not make two rows; the button says so
       when it is already there
-- [ ] Nowhere else. The button belongs where a finding is, not on every card
+- [x] Nowhere else. The button belongs where a finding is, not on every card
 
 ## 6 · Prove it
 
@@ -159,3 +159,17 @@ Recorded as they are found.
   empties them — checked, and it does. Nothing is stored, nothing is sent.
 - The panel header reads `not connected yet` on this tab instead of a count,
   which says it before you type anything.
+- **Four screens, one button, and it writes what the screen already knows.**
+  Payouts puts one on each "Not settled" row carrying the money —
+  `Chase Wolt about 4 – 14 Sep` with `€4,654.25`. Products puts one beside each
+  unmatched name. Menu puts one beside each priced-but-unnamed dish. Payroll
+  puts one under the unpriced-hours banner, one per person.
+- **Pressing it twice cannot write two rows.** `source_key` is uniquely indexed,
+  and the button reads the keys already on the list: it flips to **"On your
+  list"** with a tick and stops responding. Exercised — clicked, saw the count
+  go 9 to 10, clicked the same button again, count unchanged.
+- **It opens the panel on the list when it adds.** A task written into a drawer
+  you cannot see is a task you will not trust; seeing it land is the point.
+- **Counts on the day:** Payouts 3, Products 6 (the banner's capped run), Menu
+  1, Payroll 1. All admin-only — the button renders nothing for an employee,
+  who has no panel to put it in.

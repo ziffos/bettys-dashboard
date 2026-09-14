@@ -16,6 +16,7 @@ import {
   Toast,
 } from "../../components/ui";
 import { MONTHS, euro, euro2, fetchAllRows, fmtDay, parseDay } from "../../lib/format";
+import AddAsTask from "../../components/panel/AddAsTask";
 
 const MONTHS_BACK = 6;
 
@@ -411,13 +412,25 @@ export default function PayrollPage() {
       {model.unpriced.length > 0 && (
         <div className="flex items-start gap-2.5 px-4 py-3 border border-line rounded-[10px] bg-wash-light">
           <TriangleAlert size={15} strokeWidth={2} className="text-warn-ink shrink-0 mt-px" />
-          <span className="text-[13px] flex-1 min-w-0 text-pretty">
-            {model.unpriced.map((r) => r.person.full_name).join(", ")} worked this month with
-            no pay rate on file, so there is nothing to price{" "}
-            {model.unpriced.length > 1 ? "their hours" : "the hours"} at. Set{" "}
-            {model.unpriced.length > 1 ? "rates" : "a rate"} in Settings and the month fills
-            in.
-          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] text-pretty">
+              {model.unpriced.map((r) => r.person.full_name).join(", ")} worked this month
+              with no pay rate on file, so there is nothing to price{" "}
+              {model.unpriced.length > 1 ? "their hours" : "the hours"} at. Set{" "}
+              {model.unpriced.length > 1 ? "rates" : "a rate"} in Settings and the month
+              fills in.
+            </p>
+            <div className="mt-1.5 flex flex-wrap gap-2">
+              {model.unpriced.map((r) => (
+                <AddAsTask
+                  key={r.person.id}
+                  source="payroll"
+                  sourceKey={`payroll:rate:${r.person.id}`}
+                  body={`Set an hourly rate for ${r.person.full_name}`}
+                />
+              ))}
+            </div>
+          </div>
         </div>
       )}
 

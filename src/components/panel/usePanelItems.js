@@ -132,6 +132,12 @@ export function usePanelItems() {
   // The dot on the rail counts work, not reading material: open tasks only.
   const openCount = todo.filter((r) => !r.done_at).length;
 
+  // Every source key on the books, including rows Done is still holding, so an
+  // "Add as task" button can tell you the finding is already in your list
+  // rather than writing it again. Deliberately not the 30-day-filtered set: a
+  // finding you cleared last month and which has come back is a new task.
+  const sourceKeys = new Set(fresh.map((r) => r.source_key).filter(Boolean));
+
   return {
     loading: isAdmin && rows === null,
     failure,
@@ -139,6 +145,7 @@ export function usePanelItems() {
     todo,
     done,
     openCount,
+    sourceKeys,
     reload: load,
     isAdmin,
   };

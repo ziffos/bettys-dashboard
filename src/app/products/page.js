@@ -31,6 +31,7 @@ import {
 } from "../../lib/format";
 import { SOURCE_IDS, dayOf } from "../../lib/salesModel";
 import { buildMenuMatcher, buildPriceLookup } from "../../lib/menuMatch";
+import AddAsTask from "../../components/panel/AddAsTask";
 
 /** The repo's own category order and colours, on the v2 palette. */
 const CATEGORIES = [
@@ -433,8 +434,16 @@ export default function ProductsPage() {
             </p>
             <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
               {model.unmatchedRows.slice(0, 6).map((u) => (
-                <span key={`${u.platform}-${u.name}`} className="font-mono text-[11px] text-subtle">
+                <span
+                  key={`${u.platform}-${u.name}`}
+                  className="inline-flex items-center gap-2 font-mono text-[11px] text-subtle"
+                >
                   {u.qty}× {PLATFORM[u.platform]?.name ?? u.platform} · {u.name}
+                  <AddAsTask
+                    source="menu"
+                    sourceKey={`menu:alias:${u.platform}:${u.name}`}
+                    body={`Add the ${PLATFORM[u.platform]?.name ?? u.platform} name for “${u.name}”`}
+                  />
                 </span>
               ))}
               {model.unmatchedRows.length > 6 && (

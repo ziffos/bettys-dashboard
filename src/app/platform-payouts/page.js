@@ -26,6 +26,7 @@ import {
   rangeTitle,
 } from "../../lib/format";
 import { buildSalesModel, dayOf, feesOf, findPayoutGaps } from "../../lib/salesModel";
+import AddAsTask from "../../components/panel/AddAsTask";
 
 const PLATFORMS = ["wolt", "foody", "bolt"];
 
@@ -434,9 +435,18 @@ export default function PayoutsPage() {
             <span className="font-mono text-[12px] text-subtle shrink-0 md:w-[112px] md:text-right">
               {g.days}d · {g.orders} orders
             </span>
-  <span className="font-mono text-[13px] shrink-0 ml-auto md:ml-0 md:w-[76px] text-right">
+            <span className="font-mono text-[13px] shrink-0 ml-auto md:ml-0 md:w-[76px] text-right">
               {euro2(g.gross)}
             </span>
+            <AddAsTask
+              className="ml-auto md:ml-0"
+              source="payouts"
+              amount={g.gross}
+              sourceKey={`payouts:${g.platform}:${g.from}`}
+              body={`${g.kind === "missing" ? "Chase" : "Ask"} ${
+                PLATFORM[g.platform]?.name ?? g.platform
+              } about ${periodLabel(g.from, g.to)}`}
+            />
           </div>
         ))}
         <div className="px-4 py-2.5 border-t border-line text-[12px] text-muted text-pretty">
