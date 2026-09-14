@@ -565,6 +565,53 @@ function build() {
     author,
   }));
 
+  // ------------------------------------------------------------- side panel
+  //
+  // Seeded in all three states the panel has to render — open, ticked within
+  // the last 24 hours, and done — so a screenshot shows every one of them
+  // without anybody having to click. The tasks are the dashboard's own
+  // findings, which is what the "Add as task" buttons will write.
+  const hoursAgo = (h) => new Date(Date.now() - h * 3600 * 1000).toISOString();
+  const daysAgo = (d) => new Date(Date.now() - d * 86400 * 1000).toISOString();
+  let panelN = 0;
+  const panelItem = (o) => ({
+    id: `demo-panel-${String(++panelN).padStart(3, "0")}`,
+    kind: "task",
+    done_at: null,
+    source: null,
+    source_amount: null,
+    source_key: null,
+    created_by: DEMO_USER_ID,
+    ...o,
+  });
+
+  const panel_items = [
+    panelItem({ kind: "note", body: "Ask Foody why the reviews stopped in May — they are still taking orders.", created_at: daysAgo(2) }),
+    panelItem({ kind: "note", body: "Order more chicken for the weekend, Friday ran out last week.", created_at: daysAgo(1) }),
+
+    panelItem({ body: "Chase Wolt's statement for 6–15 June", source: "payouts", source_amount: 1264.32, source_key: "payouts:wolt:2026-06-06", created_at: daysAgo(3) }),
+    panelItem({ body: "Chase Wolt's statement for 26–31 August", source: "payouts", source_amount: 526.52, source_key: "payouts:wolt:2026-08-26", created_at: daysAgo(3) }),
+    panelItem({ body: "Ask Foody about 6–12 September", source: "payouts", source_amount: 544.2, source_key: "payouts:foody:2026-09-06", created_at: daysAgo(2) }),
+    panelItem({ body: "Add the Wolt name for Coca-Cola 330ml", source: "menu", source_key: "menu:alias:coca-cola-330ml:wolt", created_at: daysAgo(2) }),
+    panelItem({ body: "Add a till name for Halloumi Burger", source: "menu", source_key: "menu:alias:halloumi-burger:pos", created_at: daysAgo(2) }),
+    panelItem({ body: "Set an hourly rate for Dinos", source: "payroll", source_key: "payroll:rate:dinos", created_at: daysAgo(1) }),
+    panelItem({ body: "Roll March into payroll — 166 h unpaid", source: "payroll", source_key: "payroll:month:2026-03", created_at: daysAgo(1) }),
+    panelItem({ body: "Check why Mon 17 and Tue 18 Aug have no orders at all", source: "sales", source_key: "sales:gap:2026-08-17", created_at: daysAgo(1) }),
+    panelItem({ body: "Reprint the QR cards for the tables", created_at: hoursAgo(5) }),
+
+    // ticked today — still in To do, struck through, undoable
+    panelItem({ body: "Deactivate the old lunch deal", created_at: daysAgo(4), done_at: hoursAgo(2) }),
+    panelItem({ body: "Fix the till name for Chicken Wrap", source: "menu", created_at: daysAgo(4), done_at: hoursAgo(7) }),
+
+    // older than a day — these belong in Done
+    panelItem({ body: "Ask Bolt about the 29 Dec statement", source: "payouts", source_amount: 108.6, created_at: daysAgo(9), done_at: daysAgo(1.4) }),
+    panelItem({ body: "Print the new allergy sheet", created_at: daysAgo(11), done_at: daysAgo(4) }),
+    panelItem({ body: "Chase Foody for the April statement", source: "payouts", created_at: daysAgo(20), done_at: daysAgo(11) }),
+    panelItem({ body: "Re-shoot the wrap photo", source: "menu", created_at: daysAgo(40), done_at: daysAgo(26) }),
+    // past thirty days — must not appear anywhere
+    panelItem({ body: "Order the summer menu boards", created_at: daysAgo(70), done_at: daysAgo(34) }),
+  ];
+
   return {
     profiles,
     page_permissions,
@@ -580,6 +627,7 @@ function build() {
     payroll_payments,
     rate_changes,
     quotes,
+    panel_items,
   };
 }
 

@@ -71,6 +71,11 @@ Chicken" built with **Next.js 16 App Router**, **React 19**, **Supabase** and
 - `src/app/` — Next.js App Router pages (file-based routing)
 - `src/components/` — The shell (ClientLayout, Sidebar, AppHeader, MobileNav)
 - `src/components/ui/` — The pieces every rebuilt screen composes from
+- **Done rows leave the panel after 30 days by filtering on read**, not by a
+  scheduled job. `pg_cron` is available but not installed, and enabling an
+  extension to tidy a to-do list is a worse trade than a `where` clause. The
+  rows stay in the table; a shop writing a few hundred a year will never notice,
+  and if it ever matters it is one `delete`
 - `src/lib/features.js` — Pages parked on purpose. Marketing is off until the
   social import restarts; take its slug out of `PARKED_PAGES` to bring it back
 - `src/lib/format.js` — Money, dates, sparklines, item parsing, paginated reads
@@ -116,6 +121,7 @@ All data access is direct client-side Supabase SDK queries (no API routes).
 | `menu_items` | Includes `tv_number` / `position` (the slot a dish occupies on displays 1–3) and the per-platform alias names |
 | `menu_item_price_history` | Effective-dated prices per platform |
 | `quotes` | Quote of the day |
+| `panel_items` | The side panel's notes and to-do. Admin-only RLS — the anon key sees an empty array. `kind` is task/note; a note is never ticked. `done_at` null means open. `source`/`source_amount` are provenance for rows an "Add as task" button wrote, not a grouping. `source_key` is uniquely indexed so the same finding cannot be added twice |
 
 New employees are created through the `create-employee` edge function, which does
 not set `job_title` — it is filled in afterwards from the Settings panel.

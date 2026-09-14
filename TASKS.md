@@ -12,18 +12,18 @@ its renders are `design/reference/panel-1..4.png`. Match it.
 The previous punch list — the timezone fix, the data audit and the chart
 sweep — is finished, and its findings are kept in `TASKS-audit.md`.
 
-## 1 · The table and the demo data
+## 1 · The table and the demo data — **done**
 
-- [ ] `panel_items` in Supabase: `id`, `kind` ('task' | 'note'), `body`,
+- [x] `panel_items` in Supabase: `id`, `kind` ('task' | 'note'), `body`,
       `done_at` (null until ticked), `source` (null | 'payouts' | 'menu' |
       'payroll' | 'sales'), `source_amount` (null | numeric), `created_at`,
       `created_by`
-- [ ] RLS: admins only, read and write. Employees cannot see the table at all
-- [ ] A migration through `tools/sql.sh`, and the schema noted in CLAUDE.md
-- [ ] The demo client backs it with seeded rows in the three states — open,
+- [x] RLS: admins only, read and write. Employees cannot see the table at all
+- [x] A migration through `tools/sql.sh`, and the schema noted in CLAUDE.md
+- [x] The demo client backs it with seeded rows in the three states — open,
       ticked within the last 24 h, and done — so every state is visible in a
       screenshot without clicking
-- [ ] Rows leave Done after 30 days. Decide where that runs and say why in a
+- [x] Rows leave Done after 30 days. Decide where that runs and say why in a
       comment: a DB policy, or a filter on read
 
 ## 2 · The shell
@@ -86,3 +86,21 @@ sweep — is finished, and its findings are kept in `TASKS-audit.md`.
 ## Findings
 
 Recorded as they are found.
+
+- **`panel_items` is live** with admin-only RLS matching the pattern the other
+  tables use (`exists (select 1 from profiles where id = auth.uid() and role =
+  'admin')`). Checked with the anon key: it returns `[]`, which is how PostgREST
+  reports "nothing you may see".
+- **Two constraints worth knowing.** A note can never carry a `done_at` — the
+  table refuses it, so the three sections cannot drift out of step with the
+  data. And `source_key` is uniquely indexed where it is not null, so the "Add
+  as task" buttons cannot write the same finding twice however many times they
+  are pressed.
+- **Done rows are filtered out on read after 30 days rather than deleted by a
+  job.** `pg_cron` is available but not installed; turning on an extension to
+  tidy a to-do list is a worse trade than a `where` clause. The rows stay in the
+  table, which nobody will notice at a few hundred a year, and one `delete`
+  fixes it if it ever matters. Recorded in CLAUDE.md.
+- **Demo seeds all three states plus the edge.** 2 notes, 9 open tasks, 2 ticked
+  within the last 24 h, 4 in Done, and **one ticked 34 days ago that must not
+  appear anywhere** — the 30-day rule has a test case sitting in the data.
