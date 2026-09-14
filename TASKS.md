@@ -58,7 +58,7 @@ looking at it in a screenshot with real data, not demo data.
 - [x] Settings — 3 profiles, permissions matrix
 - [x] TV Displays — slots vs `menu_items.tv_number` / `position`
 
-## 6 · Charts across every filter, both widths
+## 6 · Charts across every filter, both widths — **done**
 
 For each screen with a chart: step every range (7d/30d/90d/custom), every
 platform/source filter, and every interval (daily/weekly/monthly), at 1440px and
@@ -72,7 +72,7 @@ sentence, and a filter combination that produces `NaN` or an infinite axis.
 - [x] Reviews
 - [x] Platform Payouts
 - [x] Calendar
-- [ ] Payroll / My Payroll
+- [x] Payroll / My Payroll
 
 ---
 
@@ -554,3 +554,16 @@ in `.shots/sweep/`.
   cleanly — names, times, hours and cost per day, with "2 on at peak" under the
   ones that qualify. Month keeps the seven-column grid and scrolls sideways,
   with a part-visible column as the affordance.
+- **Payroll / My Payroll — 32 views, clean.** They pick a month rather than
+  following the header range, so `tools/sweep-payroll.mjs` steps every month the
+  picker offers (with every person's detail expanded on one of them) and every
+  row of My Payroll's month list, at both widths.
+- **Payroll could not reach production's roster at all.** The shift fetch
+  windowed six months back from *today*, and the picker only offers months that
+  have shifts inside that window. Production's shifts stop on 30 March, so from
+  September the window reached none of them and the screen said "**No shifts on
+  record — nobody has worked a shift yet**" over 53 shifts and two payroll
+  records. The window is anchored on the newest shift now, so a roster that
+  stopped is still reachable. Proved both ways by pushing demo's roster a year
+  back: before, "nobody has worked a shift yet"; after, Apr–Sep 2025 in the
+  picker with €6,910 gross and €6,008 paid.

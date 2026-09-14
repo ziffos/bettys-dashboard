@@ -15,7 +15,7 @@ import {
   SidePanel,
   Toast,
 } from "../../components/ui";
-import { MONTHS, euro, euro2, fetchAllRows, fmtDay } from "../../lib/format";
+import { MONTHS, euro, euro2, fetchAllRows, fmtDay, parseDay } from "../../lib/format";
 
 const MONTHS_BACK = 6;
 
@@ -53,11 +53,22 @@ export default function PayrollPage() {
       // .limit(1000) over every shift ever worked silently drops whichever
       // rows fall outside an arbitrary first thousand, and the hours it adds
       // up look perfectly reasonable while being wrong.
-      const from = new Date();
-      from.setMonth(from.getMonth() - MONTHS_BACK);
-      const since = fmtDay(new Date(from.getFullYear(), from.getMonth(), 1));
-
       try {
+        // Anchor the window on the newest shift, not on today. A roster that
+        // stopped in March is still the roster; windowing back from the current
+        // month would reach none of it and the screen would claim nobody has
+        // ever worked a shift.
+        const { data: newest } = await supabase
+          .from("shifts")
+          .select("shift_date")
+          .order("shift_date", { ascending: false })
+          .limit(1);
+        const latest = newest?.[0]?.shift_date ? parseDay(newest[0].shift_date) : new Date();
+        const anchor = latest > new Date() ? new Date() : latest;
+        const from = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+        from.setMonth(from.getMonth() - (MONTHS_BACK - 1));
+        const since = fmtDay(from);
+
         const [staffRes, shifts, records, payments, rateRes] = await Promise.all([
           supabase
             .from("profiles")
