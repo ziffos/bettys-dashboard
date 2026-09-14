@@ -39,17 +39,17 @@ sweep — is finished, and its findings are kept in `TASKS-audit.md`.
 - [x] Every screen, both widths, and it must not break any of the eleven
       existing screens at 1440px or 390px
 
-## 3 · Notes & to-do
+## 3 · Notes & to-do — **done**
 
-- [ ] Three sections in order — Notes, To do, Done — each folding from its
+- [x] Three sections in order — Notes, To do, Done — each folding from its
       header with a count
-- [ ] Notes: gold bar, not tickable, deleted with an `x` and nothing else
-- [ ] Ticking leaves the row in To do for 24 hours, struck through, with Undo
-- [ ] After 24 hours it moves to Done by itself
-- [ ] `Clear` in the Done header
-- [ ] The composer: `Task` / `Note` toggle and one input
-- [ ] Rows carry the money chip and the source chip, and nothing groups by them
-- [ ] Long list: first nine plus `Show N more`, and a filter field once the
+- [x] Notes: gold bar, not tickable, deleted with an `x` and nothing else
+- [x] Ticking leaves the row in To do for 24 hours, struck through, with Undo
+- [x] After 24 hours it moves to Done by itself
+- [x] `Clear` in the Done header
+- [x] The composer: `Task` / `Note` toggle and one input
+- [x] Rows carry the money chip and the source chip, and nothing groups by them
+- [x] Long list: first nine plus `Show N more`, and a filter field once the
       total passes the threshold
 
 ## 4 · Ask AI, as a facade
@@ -125,3 +125,24 @@ Recorded as they are found.
   guard rather than being shown an empty page. It is deliberately not in
   `NAV_GROUPS` or the permissions matrix — it is not a page anyone can be
   granted.
+- **Exercised in the browser, not assumed.** Added a task (it lands at the top,
+  counts rise), ticked it (it stays in To do, struck through, header count drops
+  and the row count does not), undid it, added a note, deleted it with the `x`,
+  folded To do and watched the rows go, opened Done and found Clear. No console
+  errors.
+- **The cap must never hide a row ticked today.** Applying "first nine" to all
+  of To do pushed both ticked-today rows behind "Show more", because they are
+  old tasks by `created_at` and the list is newest-first — which defeats the
+  entire point of the 24-hour window. The cap now counts only work still
+  waiting; anything ticked in the last 24 hours always renders, after the
+  capped run.
+- **Undo belongs to the window, not to Done.** It showed on every ticked row,
+  including ones cleared a fortnight ago, where it means nothing. It is now
+  offered only while the row is still sitting in To do; in Done the checkbox is
+  the way back.
+- **The demo client was inserting rows with no `created_at`.** Postgres fills it
+  from a column default and the in-memory store has no defaults, so a row added
+  through the panel sorted as if it had no age and landed at the wrong end of
+  the list — invisible behind the cap. The demo client now stamps `created_at`
+  on insert for any table whose rows carry one. That was hiding a real bug in
+  demo, and it would have hidden others.

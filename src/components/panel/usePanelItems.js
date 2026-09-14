@@ -42,6 +42,45 @@ const fetchRows = async () => {
   return data || [];
 };
 
+/** Write, then re-read. Every mutation goes through one of these. */
+export const panelActions = {
+  async add({ kind, body, source = null, source_amount = null, source_key = null }) {
+    const text = String(body || "").trim();
+    if (!text) return;
+    const { error } = await supabase
+      .from("panel_items")
+      .insert({ kind, body: text, source, source_amount, source_key });
+    if (error) throw new Error(error.message);
+    await refreshPanelItems();
+  },
+
+  /** Ticking sets the clock the 24-hour and 30-day rules both read. */
+  async setDone(id, done) {
+    const { error } = await supabase
+      .from("panel_items")
+      .update({ done_at: done ? new Date().toISOString() : null })
+      .eq("id", id);
+    if (error) throw new Error(error.message);
+    await refreshPanelItems();
+  },
+
+  async remove(id) {
+    const { error } = await supabase.from("panel_items").delete().eq("id", id);
+    if (error) throw new Error(error.message);
+    await refreshPanelItems();
+  },
+
+  /** Empty Done now rather than waiting the thirty days out. */
+  async clearDone(ids) {
+    if (!ids.length) return;
+    for (const id of ids) {
+      const { error } = await supabase.from("panel_items").delete().eq("id", id);
+      if (error) throw new Error(error.message);
+    }
+    await refreshPanelItems();
+  },
+};
+
 /** Re-read the table and tell every mounted panel. Call it after any write. */
 export async function refreshPanelItems() {
   inFlight = fetchRows();

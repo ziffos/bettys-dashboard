@@ -210,8 +210,14 @@ class Query {
     }
 
     if (this.mode === "insert") {
+      // Postgres fills created_at from its default; the in-memory store has no
+      // defaults, so a row inserted here would sort as if it had no age at all
+      // and land at the wrong end of any created_at ordering. Emulate the one
+      // default every table shares.
+      const stamped = store.some((r) => "created_at" in r);
       const added = this.payload.map((p, i) => ({
         id: p.id ?? `demo-${this.table}-new-${store.length + i + 1}`,
+        ...(stamped ? { created_at: new Date().toISOString() } : null),
         ...p,
       }));
       store.push(...added);
