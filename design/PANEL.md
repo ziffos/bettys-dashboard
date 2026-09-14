@@ -54,8 +54,11 @@ priorities, no folders.
 
 1. **Notes** — free text, one gold bar down the left. Not tickable. **Deleted
    with an `x` on the row**, nothing more: no confirm, no archive.
-2. **To do** — tickable tasks.
-3. **Done** — folded, with a count.
+2. **To do** — tickable tasks. Also deleted with the same `x`, in the same
+   place: ticking means you did it, deleting means it never needed doing, and
+   both endings have to exist.
+3. **Done** — folded, with a count. The `x` is there too, for clearing one row
+   without clearing the section.
 
 Each section header folds its section and shows a count.
 

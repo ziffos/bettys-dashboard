@@ -41,8 +41,13 @@ export default function SidePanelRail() {
 
   return (
     <>
+      {/* Pinned to the viewport, not to the page. The shell is min-h-screen and
+          grows with whatever is on it, so a panel that simply sat in the flex
+          row got as tall as Overview and put its composer a scroll below the
+          fold. h-screen with sticky keeps the whole thing — list and composer —
+          on screen whatever the page does, and the list scrolls inside itself. */}
       {panel.open && (
-        <aside className="hidden md:flex w-[334px] shrink-0 flex-col min-h-0 bg-surface border-l border-line">
+        <aside className="hidden md:flex w-[334px] shrink-0 flex-col sticky top-0 h-screen bg-surface border-l border-line">
           <div className="px-3 py-2.5 border-b border-line flex items-center gap-2 shrink-0">
             <span className="text-[13.5px] font-semibold tracking-[-0.01em]">
               {panel.tab === "list" ? "Notes & to-do" : "Ask AI"}
@@ -64,7 +69,7 @@ export default function SidePanelRail() {
         </aside>
       )}
 
-      <div className="hidden md:flex w-[46px] shrink-0 flex-col items-center gap-1.5 py-2.5 bg-surface border-l border-line">
+      <div className="hidden md:flex w-[46px] shrink-0 flex-col items-center gap-1.5 py-2.5 sticky top-0 h-screen bg-surface border-l border-line">
         {TABS.map(({ id, label, Icon }) => {
           const on = panel.open && panel.tab === id;
           return (

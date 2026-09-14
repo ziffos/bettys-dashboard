@@ -79,7 +79,7 @@ function NoteRow({ item, onDelete }) {
   );
 }
 
-function TaskRow({ item, onToggle, offerUndo }) {
+function TaskRow({ item, onToggle, onDelete, offerUndo }) {
   const ticked = !!item.done_at;
   return (
     <div className="px-3 py-2 border-t border-wash flex gap-2.5 items-start">
@@ -133,6 +133,19 @@ function TaskRow({ item, onToggle, offerUndo }) {
           Undo
         </button>
       )}
+
+      {/* Ticking a task says you did it; deleting says it never needed doing —
+          a finding that turned out to be nothing, a duplicate, a job the shop
+          dropped. Both endings have to exist, and the same x as a note, in the
+          same place, is the one people already know. */}
+      <button
+        onClick={() => onDelete(item.id)}
+        title="Delete"
+        aria-label={`Delete task: ${item.body}`}
+        className="w-5 h-5 shrink-0 -mt-px rounded flex items-center justify-center text-faint hover:text-danger hover:bg-wash"
+      >
+        <X size={12} strokeWidth={2} />
+      </button>
     </div>
   );
 }
@@ -253,7 +266,7 @@ export default function NotesAndTodo({ loading, failure, notes, todo, done }) {
             ) : (
               <>
                 {(capped ? stillOpen.slice(0, FIRST_RUN) : stillOpen).map((t) => (
-                  <TaskRow key={t.id} item={t} onToggle={toggle} offerUndo />
+                  <TaskRow key={t.id} item={t} onToggle={toggle} onDelete={remove} offerUndo />
                 ))}
                 {capped && (
                   <button
@@ -264,7 +277,7 @@ export default function NotesAndTodo({ loading, failure, notes, todo, done }) {
                   </button>
                 )}
                 {justDone.map((t) => (
-                  <TaskRow key={t.id} item={t} onToggle={toggle} offerUndo />
+                  <TaskRow key={t.id} item={t} onToggle={toggle} onDelete={remove} offerUndo />
                 ))}
               </>
             )}
@@ -293,7 +306,7 @@ export default function NotesAndTodo({ loading, failure, notes, todo, done }) {
               {q ? "Nothing matches." : "Cleared automatically after 30 days."}
             </p>
           ) : (
-            shownDone.map((t) => <TaskRow key={t.id} item={t} onToggle={toggle} />)
+            shownDone.map((t) => <TaskRow key={t.id} item={t} onToggle={toggle} onDelete={remove} />)
           ))}
         <div className="h-2" />
       </div>
