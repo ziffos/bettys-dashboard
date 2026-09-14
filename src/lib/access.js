@@ -14,6 +14,7 @@ export const SLUG_TO_PATH = {
   payroll: "/payroll",
   "tv-displays": "/tv-displays",
   settings: "/settings",
+  notes: "/notes",
 };
 
 export const PATH_TO_SLUG = Object.fromEntries(
@@ -21,7 +22,7 @@ export const PATH_TO_SLUG = Object.fromEntries(
 );
 
 /** Never shown to an employee, whatever `page_permissions` says. */
-export const ADMIN_ONLY_SLUGS = new Set(["payroll", "settings"]);
+export const ADMIN_ONLY_SLUGS = new Set(["payroll", "settings", "notes"]);
 
 /**
  * Where to send an employee who has nowhere in particular to be: their first

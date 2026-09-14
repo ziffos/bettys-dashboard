@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import Sidebar from "./Sidebar";
 import AppHeader from "./AppHeader";
 import MobileNav from "./MobileNav";
+import SidePanelRail from "./panel/SidePanelRail";
 import { useAuth } from "../lib/AuthContext";
 import { landingSlugFor } from "../lib/access";
 
@@ -66,6 +67,10 @@ export default function ClientLayout({ children }) {
         </main>
         <MobileNav />
       </div>
+
+      {/* Pushes the page rather than covering it — a flex sibling, not an
+          overlay. Renders nothing for an employee. */}
+      <SidePanelRail />
 
       {toast && (
         <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-[100] px-4 py-2.5 bg-ink-strong text-surface text-[13px] font-medium rounded-lg shadow-lg">

@@ -3,9 +3,19 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { House, ChartNoAxesCombined, Megaphone, Star, Menu, Check, LogOut } from "lucide-react";
+import {
+  House,
+  ChartNoAxesCombined,
+  Megaphone,
+  Star,
+  Menu,
+  Check,
+  ListChecks,
+  LogOut,
+} from "lucide-react";
 import { useVisibleNav } from "./Sidebar";
 import { useAuth } from "../lib/AuthContext";
+import { usePanelItems } from "./panel/usePanelItems";
 
 /**
  * The phone navigation: four destinations plus More.
@@ -26,12 +36,20 @@ const PRIMARY = [
   { slug: "reviews", href: "/reviews", icon: Star, label: "Reviews" },
 ];
 
+/**
+ * Notes sits in the bar rather than behind More, because the whole point of the
+ * panel is that a task is one thumb away from whatever you were reading. Admins
+ * only — there is no rail on a phone to hide it in.
+ */
+const NOTES = { slug: "notes", href: "/notes", icon: ListChecks, label: "Notes" };
+
 export default function MobileNav() {
   const pathname = usePathname();
   const router = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
   const groups = useVisibleNav();
   const { profile, signOut } = useAuth();
+  const { openCount } = usePanelItems();
 
   // While the sheet is up, Escape closes it and the page behind it stops
   // scrolling — otherwise a flick aimed at the sheet drags the dashboard.
@@ -51,6 +69,8 @@ export default function MobileNav() {
 
   const reachable = new Set(groups.flatMap((g) => g.items.map((i) => i.href)));
   const primary = PRIMARY.filter((i) => reachable.has(i.href));
+  const isAdmin = profile?.role === "admin";
+  const bar = isAdmin ? [...primary, NOTES] : primary;
 
   const name = profile?.full_name || "";
   const initials =
@@ -145,7 +165,7 @@ export default function MobileNav() {
             paddingBottom: "calc(0.625rem + env(safe-area-inset-bottom))",
           }}
         >
-          {primary.map((item) => {
+          {bar.map((item) => {
             const active = pathname === item.href && !moreOpen;
             const Icon = item.icon;
             return (
@@ -157,7 +177,12 @@ export default function MobileNav() {
                   active ? "text-ink" : "text-subtle"
                 }`}
               >
-                <Icon size={19} strokeWidth={1.75} />
+                <span className="relative">
+                  <Icon size={19} strokeWidth={1.75} />
+                  {item.slug === "notes" && openCount > 0 && (
+                    <span className="absolute -top-px -right-1 w-1.5 h-1.5 rounded-full bg-danger" />
+                  )}
+                </span>
                 <span className="text-[10px] font-medium">{item.label}</span>
               </Link>
             );

@@ -21,6 +21,7 @@ export const PAGE_TITLES = {
   "/tv-displays": "TV Displays",
   "/my-payroll": "My Payroll",
   "/settings": "Settings",
+  "/notes": "Notes",
 };
 
 export default function AppHeader() {

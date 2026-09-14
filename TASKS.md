@@ -26,17 +26,17 @@ sweep — is finished, and its findings are kept in `TASKS-audit.md`.
 - [x] Rows leave Done after 30 days. Decide where that runs and say why in a
       comment: a DB policy, or a filter on read
 
-## 2 · The shell
+## 2 · The shell — **done**
 
-- [ ] The 46px icon rail on the right of `ClientLayout`, mirroring the left one,
+- [x] The 46px icon rail on the right of `ClientLayout`, mirroring the left one,
       always visible for an admin, never rendered for an employee
-- [ ] Two icons; a red dot on the checklist while anything is open
-- [ ] Opening pushes the page, 334px, and does not overlay it
-- [ ] Open/closed and which tab, remembered in `localStorage` through
+- [x] Two icons; a red dot on the checklist while anything is open
+- [x] Opening pushes the page, 334px, and does not overlay it
+- [x] Open/closed and which tab, remembered in `localStorage` through
       `useSyncExternalStore`, the way the rail's pin already is
-- [ ] Phone: a fifth item in `MobileNav` labelled "Notes", with the dot, opening
+- [x] Phone: a fifth item in `MobileNav` labelled "Notes", with the dot, opening
       its own page with a `Segmented` at the top. The bar stays put
-- [ ] Every screen, both widths, and it must not break any of the eleven
+- [x] Every screen, both widths, and it must not break any of the eleven
       existing screens at 1440px or 390px
 
 ## 3 · Notes & to-do
@@ -104,3 +104,24 @@ Recorded as they are found.
 - **Demo seeds all three states plus the edge.** 2 notes, 9 open tasks, 2 ticked
   within the last 24 h, 4 in Done, and **one ticked 34 days ago that must not
   appear anywhere** — the 30-day rule has a test case sitting in the data.
+- **The push is exactly 334px.** Measured in the browser: `main` is 1334px with
+  the panel shut and 1000px with it open, at 1440px. It is a flex sibling of the
+  page column, not an overlay, so nothing floats over a table.
+- **Open, shut and which tab all survive a reload.** Opened on Ask AI, reloaded,
+  came back on Ask AI. Closed, reloaded, stayed closed with the rail still
+  there. `bettys-panel` in localStorage, read through `useSyncExternalStore`
+  like the rail's pin.
+- **One fetch, however many consumers.** The rail and the phone bar both want
+  the count and on a desktop both are mounted, so `usePanelItems` keeps a
+  module-level cache and a set of subscribers: one request, and every mounted
+  copy re-renders together when anything writes. (Not observable in demo, where
+  the client never touches the network.)
+- **The 24-hour and 30-day rules are visible in the first screenshot.** Notes 2,
+  To do 11 — nine open plus two ticked today, struck through and reading "2 h
+  ago" and "7 h ago" — and Done 4 running from yesterday to 26 days. The row
+  ticked 34 days ago appears nowhere, which is the 30-day rule doing its job.
+- **`/notes` is admin-only at the route, not just hidden.** Added to
+  `ADMIN_ONLY_SLUGS`, so an employee who types the URL is redirected by the
+  guard rather than being shown an empty page. It is deliberately not in
+  `NAV_GROUPS` or the permissions matrix — it is not a page anyone can be
+  granted.
