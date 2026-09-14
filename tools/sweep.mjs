@@ -14,6 +14,9 @@ const route = process.argv[2] || "/";
 // Which toggle group to exercise, if the screen has one. Products has category
 // chips as well as a channel picker, so the caller says which.
 const chipPattern = new RegExp(process.argv[3] || "^(Wolt|Foody|Bolt|POS)");
+// A second control the sweep does not step, but should be held in its other
+// position for a whole pass — Payouts' Fee % / Net payout, for instance.
+const holdButton = process.argv[4] || null;
 const BASE = "http://127.0.0.1:3007";
 const OUT = ".shots/sweep";
 mkdirSync(OUT, { recursive: true });
@@ -70,6 +73,13 @@ for (const [label, width, height] of [["desktop", 1440, 1000], ["phone", 390, 84
   p.on("console", (m) => { if (m.type() === "error" && !/hydrat/i.test(m.text())) errs.push(m.text()); });
   await p.goto(BASE + route, { waitUntil: "networkidle" });
   await p.waitForTimeout(1200);
+  if (holdButton) {
+    const hold = p.getByRole("button", { name: new RegExp(`^${holdButton}$`) }).first();
+    if (await hold.count()) {
+      await hold.click();
+      await p.waitForTimeout(900);
+    }
+  }
 
   for (const range of RANGES) {
     // The trigger shows the current range, so scope the option to the popup.
@@ -152,7 +162,7 @@ for (const [label, width, height] of [["desktop", 1440, 1000], ["phone", 390, 84
   await p.close();
 }
 
-console.log(`${route} [${chipPattern.source}]: ${checks} combinations checked`);
+console.log(`${route} [${chipPattern.source}${holdButton ? " · " + holdButton : ""}]: ${checks} combinations checked`);
 if (found.length === 0) console.log("clean");
 for (const f of found) console.log(`  ${f.tag}\n    ${[...f.problems, ...f.errs].join("\n    ")}`);
 await b.close();

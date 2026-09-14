@@ -70,7 +70,7 @@ sentence, and a filter combination that produces `NaN` or an infinite axis.
 - [x] Sales
 - [x] Products
 - [x] Reviews
-- [ ] Platform Payouts
+- [x] Platform Payouts
 - [ ] Calendar
 - [ ] Payroll / My Payroll
 
@@ -534,3 +534,14 @@ in `.shots/sweep/`.
 - **The star breakdown rows were `div`s with an onClick**, so the design's
   "Click a row to filter the feed" could not be done from a keyboard. They are
   buttons with `aria-pressed` now.
+- **Platform Payouts — 80 combinations, clean.** Two full passes, one held on
+  Fee % and one on Net payout, against every range and every platform at both
+  widths. The sweep grew a `holdButton` argument for exactly this: a second
+  control it does not step, but which should be pinned in its other position for
+  a whole pass.
+- **The trend quietly ignores the header range and now says so.** It plots the
+  last 12 statements per platform, so with "This quarter" selected the x-axis
+  runs from April — correct, and the reason the card exists, but the subtitle
+  only explained why it counts statements rather than weeks. It ends with "and
+  regardless of the range above" now, matching how the Not settled card
+  announces the same thing.

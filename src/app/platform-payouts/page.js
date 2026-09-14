@@ -559,7 +559,7 @@ export default function PayoutsPage() {
         <div className="border-b border-line">
           <CardHeader
             title="Are the platforms getting more expensive?"
-            sub={`The last ${TREND_STATEMENTS} statements from each platform, oldest first — statements, not weeks, because the periods are not the same length`}
+            sub={`The last ${TREND_STATEMENTS} statements from each platform, oldest first — statements rather than weeks, because the periods are not the same length, and regardless of the range above`}
             right={
               <div className="flex flex-wrap gap-3 text-[11px] text-muted">
                 {model.lines.map((l) => (
