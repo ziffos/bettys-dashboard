@@ -567,3 +567,25 @@ in `.shots/sweep/`.
   stopped is still reachable. Proved both ways by pushing demo's roster a year
   back: before, "nobody has worked a shift yet"; after, Apr–Sep 2025 in the
   picker with €6,910 gross and €6,008 paid.
+
+### Follow-up — Overview's bar chart on a phone (Sep 2026)
+
+Reported from the live dashboard: 28 days on Daily, and the day labels sat on
+top of the bars.
+
+- **Two faults, one cause: the labels were inside the bar columns.** At 28 days
+  on a 390px screen a column is **9.9px** wide. The label box measured **23px**,
+  so it spilled sideways across its neighbours' bars — and because the row is
+  `items-end`, a labelled column stood **49.5px taller** than an unlabelled one,
+  which lifted its own bar by that much. The bars did not share a baseline, so
+  the chart was misreporting relative heights as well as looking broken.
+- Bars and labels are separate rows now, with matching `flex-1` columns and
+  gaps, and each label is absolutely centred over its column with
+  `whitespace-nowrap`. Verified in the browser that all 28 columns share one
+  bottom edge at both widths.
+- **Sales already did it this way** — separate label row, nowrap, every other
+  tick hidden on a phone — so Overview was the odd one out rather than the
+  pattern being wrong.
+- **Overview's parked "Social reach" card had the same fault**, plus bar heights
+  in fixed pixels. Fixed the same way while it is off, so it does not come back
+  broken when Marketing re-opens; checked by un-parking it briefly.

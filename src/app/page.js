@@ -401,8 +401,13 @@ export default function OverviewPage() {
           </div>
 
           <div className="px-4 pt-5 pb-3">
+            {/* Bars and labels are separate rows on purpose. With 28 days on a
+                390px screen a column is ten pixels wide, and a label inside it
+                both overflowed sideways over its neighbours and — because the
+                row is bottom-aligned — lifted its own bar by the label's height,
+                so the bars no longer shared a baseline. */}
             <div className="flex items-end gap-0.5 md:gap-1.5">
-              {model.bars.map((bar, i) => {
+              {model.bars.map((bar) => {
                 const selected = openDay === bar.key;
                 const clickable = bar.days.length === 1;
                 return (
@@ -442,23 +447,35 @@ export default function OverviewPage() {
                         }}
                       />
                     </div>
-                    <div className="text-center min-w-0">
-                      {(i % labelEvery === 0 || model.bars.length <= 8) && (
-                        <>
-                          <div
-                            className="text-[11px] font-medium"
-                            style={{
-                              color: selected ? "var(--color-ink)" : "var(--color-muted)",
-                            }}
-                          >
-                            {bar.label}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div
+              className="flex gap-0.5 md:gap-1.5 mt-1"
+              style={{ height: interval === "daily" ? 30 : 16 }}
+            >
+              {model.bars.map((bar, i) => {
+                const selected = openDay === bar.key;
+                const show = i % labelEvery === 0 || model.bars.length <= 8;
+                return (
+                  <div key={bar.key} className="flex-1 min-w-0 relative">
+                    {show && (
+                      <div className="absolute top-0 left-1/2 -translate-x-1/2 text-center whitespace-nowrap">
+                        <div
+                          className="text-[11px] font-medium leading-[14px]"
+                          style={{ color: selected ? "var(--color-ink)" : "var(--color-muted)" }}
+                        >
+                          {bar.label}
+                        </div>
+                        {interval === "daily" && (
+                          <div className="text-[11px] text-muted leading-[14px]">
+                            {bar.subLabel}
                           </div>
-                          {interval === "daily" && (
-                            <div className="text-[11px] text-muted">{bar.subLabel}</div>
-                          )}
-                        </>
-                      )}
-                    </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -618,22 +635,30 @@ export default function OverviewPage() {
             </p>
           ) : (
             <>
-              <div className="flex items-end gap-1.5 h-24 mt-4">
-                {model.reachBars.map((bar, i) => (
-                  <div
-                    key={bar.key}
-                    className="flex-1 min-w-0 flex flex-col items-center gap-1.5"
-                  >
+              {/* Same shape as the revenue chart above: bars in one row so they
+                  share a baseline, labels in another so a long one cannot lift
+                  its own bar or spill over its neighbours. */}
+              <div className="flex items-end gap-1.5 h-20 mt-4">
+                {model.reachBars.map((bar) => (
+                  <div key={bar.key} className="flex-1 min-w-0 h-full flex flex-col justify-end">
                     <div
                       className="w-full rounded-t"
                       style={{
-                        height: `${Math.round((bar.value / model.reachMax) * 78)}px`,
+                        height: `${((bar.value / model.reachMax) * 100).toFixed(2)}%`,
                         background:
                           bar.key === model.bestReach?.key ? "var(--color-accent)" : "#e5e5e5",
                       }}
                     />
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-1.5 mt-1.5 h-4">
+                {model.reachBars.map((bar, i) => (
+                  <div key={bar.key} className="flex-1 min-w-0 relative">
                     {(i % labelEvery === 0 || model.reachBars.length <= 8) && (
-                      <span className="text-[11px] text-muted truncate">{bar.label}</span>
+                      <span className="absolute top-0 left-1/2 -translate-x-1/2 text-[11px] text-muted whitespace-nowrap">
+                        {bar.label}
+                      </span>
                     )}
                   </div>
                 ))}
