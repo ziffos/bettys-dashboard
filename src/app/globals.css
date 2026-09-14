@@ -64,6 +64,51 @@
     color: #fff;
   }
 
+  /*
+   * Scrollbars, in the palette rather than in the browser's.
+   *
+   * There are three of them on a desktop now — the middle column, the panel's
+   * list, the rail's nav — and the default grey slab is the widest, darkest
+   * vertical line on the screen, sitting right next to a 1px border-line. So:
+   * a 6px thumb in `line-strong` on a transparent track, rounded, with the
+   * padding faked by a transparent border and `background-clip`. It darkens to
+   * `faint` under the pointer, which is the only moment it is worth noticing.
+   *
+   * The two blocks are not duplicates and the order matters. Chrome and
+   * Firefox both honour the standard `scrollbar-width` / `scrollbar-color`,
+   * and Chrome deliberately *ignores* `::-webkit-scrollbar` once either is
+   * set — so the standard pair is what almost everyone sees, and the webkit
+   * block is the fallback for Safari before 18.2, which has the pseudo-element
+   * and not the properties. Overlay scrollbars (macOS, iOS, and this repo's
+   * headless Chromium) ignore all of it and keep their own behaviour, which is
+   * why there is no screenshot of this.
+   */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--color-line-strong);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-faint);
+  }
+
   a,
   button,
   select,

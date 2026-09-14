@@ -346,6 +346,13 @@ Agreed with the owner before the rebuild started. Do not "fix" these back.
     configures, rather than under the pages you work in. `foot: true` on its
     group in `NAV_GROUPS` sinks it.
 
+28. **Scrollbars are in the palette.** The design never drew one, and with
+    three scroll containers on a desktop — the middle column, the panel's list,
+    the rail's nav — the browser default was the widest, darkest vertical line
+    on the screen, a few pixels from a 1px `border-line`. They are `thin` in
+    `line-strong` on a transparent track, set in `globals.css`. Overlay
+    scrollbars (macOS, iOS) ignore this and keep their own behaviour.
+
 ## Out of scope — do not touch
 
 `/qr-menu`, `/tv-display-1..4`, `/tv-display-menu-*`, `/tv-display-motion-*`
