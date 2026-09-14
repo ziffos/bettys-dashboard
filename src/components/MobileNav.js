@@ -37,11 +37,15 @@ const PRIMARY = [
 ];
 
 /**
- * Notes sits in the bar rather than behind More, because the whole point of the
- * panel is that a task is one thumb away from whatever you were reading. Admins
- * only — there is no rail on a phone to hide it in.
+ * The Assistant sits in the bar rather than behind More, because the whole
+ * point of it is that a task is one thumb away from whatever you were reading.
+ * Admins only — there is no rail on a phone to hide it in.
+ *
+ * The icon stays a checklist even though the page is called Assistant: the
+ * badge on it counts open tasks, and the list is the half that is built. A
+ * sparkle would promise the chat, which is not connected to anything.
  */
-const NOTES = { slug: "notes", href: "/notes", icon: ListChecks, label: "Notes" };
+const ASSISTANT = { slug: "assistant", href: "/assistant", icon: ListChecks, label: "Assistant" };
 
 export default function MobileNav() {
   const pathname = usePathname();
@@ -70,7 +74,7 @@ export default function MobileNav() {
   const reachable = new Set(groups.flatMap((g) => g.items.map((i) => i.href)));
   const primary = PRIMARY.filter((i) => reachable.has(i.href));
   const isAdmin = profile?.role === "admin";
-  const bar = isAdmin ? [...primary, NOTES] : primary;
+  const bar = isAdmin ? [...primary, ASSISTANT] : primary;
 
   const name = profile?.full_name || "";
   const initials =
@@ -179,7 +183,7 @@ export default function MobileNav() {
               >
                 <span className="relative">
                   <Icon size={19} strokeWidth={1.75} />
-                  {item.slug === "notes" && openCount > 0 && (
+                  {item.slug === "assistant" && openCount > 0 && (
                     <span className="absolute -top-px -right-1 w-1.5 h-1.5 rounded-full bg-danger" />
                   )}
                 </span>

@@ -27,8 +27,8 @@ const TABS = [
  * covered: this is a dashboard, and the point is to read a number and write it
  * down without either hiding the other.
  *
- * Desktop only. The phone reaches the same content through /notes, which is a
- * page rather than an overlay so the bottom bar stays put.
+ * Desktop only. The phone gets its own full-screen version of
+ * the same content at /assistant — see PhoneAssistant.
  */
 export default function SidePanelRail() {
   const panel = useSyncExternalStore(subscribePanel, readPanel, readPanelOnServer);

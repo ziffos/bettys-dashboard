@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChevronDown, Loader2, Search, TriangleAlert, X } from "lucide-react";
 import { euro2 } from "../../lib/format";
 import { panelActions } from "./usePanelItems";
+import { FILTER_FROM, FIRST_RUN, SOURCE_LABEL, matcher, tickedAgo } from "./listPolicy";
 
 /**
  * Three sections, in this order, and no others: Notes, To do, Done.
@@ -12,29 +13,6 @@ import { panelActions } from "./usePanelItems";
  * which is provenance, not a category. Settled with the owner; see
  * design/PANEL.md.
  */
-
-const SOURCE_LABEL = {
-  payouts: "PAYOUTS",
-  menu: "MENU",
-  payroll: "PAYROLL",
-  sales: "SALES",
-};
-
-/** To do shows this many before it offers the rest. */
-const FIRST_RUN = 9;
-
-/** And the filter appears only once there is this much to filter. */
-const FILTER_FROM = 12;
-
-/** "2 h ago" / "yesterday" / "4 days ago" — when a task was ticked. */
-export function tickedAgo(iso) {
-  const hours = (Date.now() - new Date(iso).getTime()) / 3_600_000;
-  if (hours < 1) return "just now";
-  if (hours < 12) return `${Math.round(hours)} h ago`;
-  const days = Math.round(hours / 24);
-  if (days <= 1) return "yesterday";
-  return `${days} days ago`;
-}
 
 function SectionHead({ label, count, open, onToggle, action }) {
   return (
@@ -197,7 +175,7 @@ export default function NotesAndTodo({ loading, failure, notes, todo, done }) {
   }
 
   const q = query.trim().toLowerCase();
-  const match = (r) => !q || r.body.toLowerCase().includes(q);
+  const match = matcher(query);
   const shownNotes = notes.filter(match);
   const shownTodo = todo.filter(match);
   const shownDone = done.filter(match);

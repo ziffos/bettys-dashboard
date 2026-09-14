@@ -18,7 +18,7 @@ mkdirSync(OUT, { recursive: true });
 
 const ROUTES = [
   "/", "/sales", "/products", "/reviews", "/menu", "/platform-payouts",
-  "/calendar", "/payroll", "/my-payroll", "/tv-displays", "/settings", "/notes",
+  "/calendar", "/payroll", "/my-payroll", "/tv-displays", "/settings", "/assistant",
 ];
 
 const b = await chromium.launch();

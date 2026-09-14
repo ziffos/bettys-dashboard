@@ -318,6 +318,20 @@ Agreed with the owner before the rebuild started. Do not "fix" these back.
     dropping a day would make the dates lie, but draw a closed day as a thin
     baseline marker rather than a bar of no height.
 
+24. **The Assistant is one page with two layouts, not one responsive one.**
+    On a wide screen `/assistant` is an ordinary page — the desktop already has
+    a better door in the icon rail, and anyone arriving by URL should get the
+    page they expect. On a phone it is `fixed inset-0`: the whole screen, over
+    the header and the bottom bar, with a back chevron out. The two share a
+    store and the rules in `listPolicy.js`, and nothing else. Two layouts whose
+    measurements have almost nothing in common are cheaper to read as two
+    components than as one with a `md:` on every class.
+25. **The page is called Assistant while half of it is a facade.** Ask AI is
+    not connected to anything and says so, on the tab, in the subtitle and in
+    every reply. The name describes where the page is going; the screen keeps
+    describing where it is. The bottom-bar icon stays a checklist rather than a
+    sparkle for the same reason — the badge on it counts open tasks.
+
 ## Out of scope — do not touch
 
 `/qr-menu`, `/tv-display-1..4`, `/tv-display-menu-*`, `/tv-display-motion-*`

@@ -37,24 +37,25 @@ export default function AskAI() {
     <>
       <div className="flex-1 min-h-0 overflow-y-auto">
         {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center gap-2 px-7 text-center">
-            <MessageCircle size={18} strokeWidth={1.75} className="text-faint" />
-            <p className="text-[13.5px] font-semibold tracking-[-0.01em]">
+          <div className="h-full flex flex-col items-center justify-center gap-2.5 md:gap-2 px-8 md:px-7 text-center">
+            <MessageCircle size={24} strokeWidth={1.7} className="text-faint md:hidden" />
+            <MessageCircle size={18} strokeWidth={1.75} className="text-faint hidden md:block" />
+            <p className="text-[16px] md:text-[13.5px] font-semibold tracking-[-0.015em] md:tracking-[-0.01em]">
               Ask about the numbers
             </p>
-            <p className="text-[12px] text-subtle text-pretty leading-[1.5]">
+            <p className="text-[13.5px] md:text-[12px] text-subtle text-pretty leading-[1.55] md:leading-[1.5]">
               This is where questions about the dashboard will be answered. It is the
               shape of it only — nothing is connected behind it yet.
             </p>
           </div>
         ) : (
-          <div className="p-3 flex flex-col gap-2.5">
+          <div className="p-4 md:p-3 flex flex-col gap-3 md:gap-2.5">
             {messages.map((body, i) => (
-              <div key={i} className="flex flex-col gap-2.5">
-                <div className="self-end max-w-[86%] px-2.5 py-2 rounded-xl rounded-br-[4px] bg-ink-strong text-surface text-[12.5px] leading-[1.45] text-pretty">
+              <div key={i} className="flex flex-col gap-3 md:gap-2.5">
+                <div className="self-end max-w-[82%] md:max-w-[86%] px-3 py-2.5 md:px-2.5 md:py-2 rounded-[15px] md:rounded-xl rounded-br-[5px] md:rounded-br-[4px] bg-ink-strong text-surface text-[14.5px] md:text-[12.5px] leading-[1.45] text-pretty">
                   {body}
                 </div>
-                <div className="self-start max-w-[86%] px-2.5 py-2 rounded-xl rounded-bl-[4px] bg-wash-light border border-line text-[12.5px] leading-[1.45] text-subtle italic text-pretty">
+                <div className="self-start max-w-[82%] md:max-w-[86%] px-3 py-2.5 md:px-2.5 md:py-2 rounded-[15px] md:rounded-xl rounded-bl-[5px] md:rounded-bl-[4px] bg-wash-light border border-line text-[14.5px] md:text-[12.5px] leading-[1.45] text-subtle italic text-pretty">
                   Not connected yet, so this went nowhere. An answer will appear here once
                   it is.
                 </div>
@@ -64,19 +65,19 @@ export default function AskAI() {
         )}
       </div>
 
-      <form onSubmit={send} className="border-t border-line p-3 shrink-0">
-        <div className="h-8 pl-2.5 pr-1 border border-line rounded-lg flex items-center gap-1.5 focus-within:border-ink-strong">
+      <form onSubmit={send} className="border-t border-line p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:p-3 shrink-0">
+        <div className="h-11 md:h-8 pl-3 pr-1.5 md:pl-2.5 md:pr-1 border border-line rounded-[11px] md:rounded-lg flex items-center gap-1.5 focus-within:border-ink-strong">
           <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="Ask a question…"
-            className="flex-1 min-w-0 bg-transparent text-[12.5px] outline-none placeholder:text-faint"
+            className="flex-1 min-w-0 bg-transparent text-[14.5px] md:text-[12.5px] outline-none placeholder:text-faint"
           />
           <button
             type="submit"
             aria-label="Send"
             disabled={!draft.trim()}
-            className="w-6 h-6 shrink-0 rounded flex items-center justify-center text-faint disabled:opacity-40 enabled:hover:text-ink enabled:hover:bg-wash"
+            className="w-8 h-8 md:w-6 md:h-6 shrink-0 rounded-lg md:rounded flex items-center justify-center text-faint disabled:opacity-40 enabled:hover:text-ink enabled:hover:bg-wash"
           >
             <SendHorizontal size={13} strokeWidth={2} />
           </button>

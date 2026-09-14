@@ -1,4 +1,4 @@
-# The side panel — Notes & to-do, and Ask AI
+# The Assistant — Notes & to-do, and Ask AI
 
 Agreed with the owner in September 2026 after four prototyped directions. The
 chosen design is the working prototype at `design/panel-prototype.html` (open it
@@ -33,9 +33,18 @@ Opening puts a **334px panel to the left of the icon rail**, and it **pushes the
 page** rather than floating over it — this is a dashboard, and the point is to
 read a number and write it down without either hiding the other.
 
-**Phone.** A **fifth item in the bottom bar**, labelled "Notes", with the same
-red dot. It opens its own page, not an overlay, so the bar stays put. A
-`Segmented` at the top switches between "Notes & to-do" and "Ask AI".
+**Phone.** A **fifth item in the bottom bar**, labelled "Assistant", with the
+same red dot. It opens `/assistant`, which takes **the whole screen** — no app
+header above it, no bottom bar below, no card border around it. Two underlined
+tabs switch between "Notes & to-do" and "Ask AI", and a horizontal swipe does
+the same. There is **no composer parked at the bottom**: a round `+` raises a
+sheet when you have something to write, which buys four more rows. The filter
+hides behind a magnifier for the same reason. See `PhoneAssistant.js`.
+
+The phone runs a **larger type scale** than the desktop panel — 14.5px rows,
+20px checkboxes, 44px targets. The panel's 12.5px is sized for a 334px column
+beside a dashboard; on a 390px screen with nothing else on it, it reads as a
+widget that wandered onto the wrong device.
 
 **Everywhere.** The panel is on every screen an admin can open. That is the
 whole point of the "Add as task" buttons — a finding on Payouts has to be able

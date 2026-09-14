@@ -34,7 +34,11 @@ the design live in `design/reference/`, named to match the screenshots
 
 Screens, in rail order: `/` Overview, `/sales`, `/marketing`, `/products`,
 `/reviews`, `/menu`, `/platform-payouts`, `/calendar`, `/payroll`,
-`/my-payroll`, `/tv-displays`, `/settings`, plus `/login` and the shell.
+`/my-payroll`, `/tv-displays`, `/settings`, plus `/login`, `/assistant` and the
+shell. `/assistant` is the Assistant — notes, a to-do list and a not-yet-wired
+chat. On a desktop it is also a panel on the right of every screen
+(`SidePanelRail`); on a phone it is a full-screen route (`PhoneAssistant`).
+`design/PANEL.md` is its spec.
 
 **Out of scope, do not modify:** `/qr-menu`, `/tv-display-1..4`,
 `/tv-display-menu-*`, `/tv-display-motion-*`, `src/components/tv/`. These render
@@ -121,7 +125,7 @@ All data access is direct client-side Supabase SDK queries (no API routes).
 | `menu_items` | Includes `tv_number` / `position` (the slot a dish occupies on displays 1–3) and the per-platform alias names |
 | `menu_item_price_history` | Effective-dated prices per platform |
 | `quotes` | Quote of the day |
-| `panel_items` | The side panel's notes and to-do. Admin-only RLS — the anon key sees an empty array. `kind` is task/note; a note is never ticked. `done_at` null means open. `source`/`source_amount` are provenance for rows an "Add as task" button wrote, not a grouping. `source_key` is uniquely indexed so the same finding cannot be added twice |
+| `panel_items` | The Assistant's notes and to-do. Admin-only RLS — the anon key sees an empty array. `kind` is task/note; a note is never ticked. `done_at` null means open. `source`/`source_amount` are provenance for rows an "Add as task" button wrote, not a grouping. `source_key` is uniquely indexed so the same finding cannot be added twice |
 
 New employees are created through the `create-employee` edge function, which does
 not set `job_title` — it is filled in afterwards from the Settings panel.
