@@ -130,6 +130,7 @@ export default function OverviewPage() {
     const s = buildSalesModel(raw);
 
     const days = eachDay(range.from, range.to);
+    const open = days.filter(s.openOn);
     const buckets = bucketDays(days, interval);
 
     const bars = buckets.map((b) => {
@@ -141,6 +142,10 @@ export default function OverviewPage() {
         gross,
         fees,
         net: gross - fees,
+        // Shut for every day in the bucket — a Sunday, or a holiday. Drawn as a
+        // closed marker rather than as a bar of no height, which reads as a
+        // terrible day rather than a day that never happened.
+        closed: b.days.every((day) => !s.openOn(day)),
         estimated: b.days.some((day) => s.feeOn(day).estimated),
         label: bucketLabel(b.key, interval),
         subLabel: `${parseDay(b.key).getDate()} ${MONTHS[parseDay(b.key).getMonth()]}`,
@@ -250,12 +255,15 @@ export default function OverviewPage() {
       prevFeeRate,
       aov,
       prevAov,
-      dailyNet: days.map((day) => s.grossOn(day) - s.feeOn(day).fee),
-      dailyOrders: days.map((day) => s.ordersOn(day)),
-      dailyAov: days.map((day) =>
-        s.ordersOn(day) > 0 ? s.grossOn(day) / s.ordersOn(day) : 0
-      ),
-      dailyFeeRate: days.map((day) =>
+      // Sparklines run over trading days only. A sparkline carries no dates and
+      // no axis — it is a shape — so a zero for a Sunday the shop was shut is
+      // noise that turns every line into a sawtooth. On the average-order and
+      // fee-rate lines it is worse than noise: there is no average order on a
+      // day with no orders, and plotting €0 says trade was terrible.
+      dailyNet: open.map((day) => s.grossOn(day) - s.feeOn(day).fee),
+      dailyOrders: open.map((day) => s.ordersOn(day)),
+      dailyAov: open.map((day) => s.grossOn(day) / s.ordersOn(day)),
+      dailyFeeRate: open.map((day) =>
         s.grossOn(day) > 0 ? (s.feeOn(day).fee / s.grossOn(day)) * 100 : 0
       ),
       channels: channelRows,
@@ -427,6 +435,12 @@ export default function OverviewPage() {
                       </span>
                     )}
                     <div className="w-full flex flex-col justify-end h-[104px] md:h-[154px]">
+                      {bar.closed && (
+                        <div
+                          title="Closed"
+                          className="w-full h-[2px] rounded-full bg-line-strong"
+                        />
+                      )}
                       <div
                         className="rounded-t"
                         style={{

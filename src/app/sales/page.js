@@ -129,6 +129,8 @@ export default function SalesPage() {
     // and let the chips show what is off.
     const srcs = on.length ? on : SOURCE_IDS;
 
+    const openForSrcs = days.filter((day) => s.ordersOn(day, srcs) > 0);
+
     const now = s.sumOver(range.from, range.to, srcs);
     const before = s.sumOver(range.previous.from, range.previous.to, srcs);
 
@@ -146,6 +148,9 @@ export default function SalesPage() {
         key: b.key,
         days: b.days,
         label: bucketLabel(b.key, interval),
+        // Shut for every day in the bucket, on every source — a closed marker
+        // rather than a bar of no height.
+        closed: b.days.every((day) => !s.openOn(day)),
         total: segments.reduce((a, seg) => a + seg.value, 0),
         segments,
         gross,
@@ -334,11 +339,13 @@ export default function SalesPage() {
       heatMax,
       peak,
       weeksInRange,
-      dailyGross: days.map((day) => s.grossOn(day, srcs)),
-      dailyOrders: days.map((day) => s.ordersOn(day, srcs)),
-      dailyAov: days.map((day) =>
-        s.ordersOn(day, srcs) > 0 ? s.grossOn(day, srcs) / s.ordersOn(day, srcs) : 0
-      ),
+      // Trading days only — see the note on Overview's sparklines. A zero for a
+      // Sunday the shop was shut is noise on the gross line and a lie on the
+      // average-order one. Measured against the chosen sources, so filtering to
+      // a single platform that took nothing that day drops it too.
+      dailyGross: openForSrcs.map((day) => s.grossOn(day, srcs)),
+      dailyOrders: openForSrcs.map((day) => s.ordersOn(day, srcs)),
+      dailyAov: openForSrcs.map((day) => s.grossOn(day, srcs) / s.ordersOn(day, srcs)),
       isEmpty: now.orders === 0,
     };
   }, [raw, range, interval, on, active]);
@@ -548,6 +555,9 @@ export default function SalesPage() {
                     bar.days.length === 1 ? "cursor-pointer" : ""
                   } ${hover === i ? "bg-wash-light" : ""}`}
                 >
+                  {bar.closed && (
+                    <div title="Closed" className="w-full h-[2px] rounded-full bg-line-strong" />
+                  )}
                   {bar.segments.map((seg, si) => (
                     <div
                       key={seg.id}

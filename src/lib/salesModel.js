@@ -281,6 +281,19 @@ export function buildSalesModel({ deliveries = [], pos = [], payouts = [] }) {
     return { fee, estimated };
   };
 
+  /**
+   * Was the shop trading that day?
+   *
+   * Betty's is shut every Sunday and on the odd public holiday, and no source
+   * records a "closed" flag — so a day with not one order on any of the four is
+   * a day the kitchen was shut. That is the same rule the roster uses, and it
+   * covers holidays without anyone maintaining a calendar of them.
+   */
+  const openOn = (day) => ordersOn(day) > 0;
+
+  /** The days in a span the shop actually traded on. */
+  const tradingDays = (from, to) => eachDay(from, to).filter(openOn);
+
   /** Totals over a span, optionally narrowed to a subset of sources. */
   const sumOver = (from, to, srcs = SOURCE_IDS) => {
     const days = eachDay(from, to);
@@ -301,5 +314,7 @@ export function buildSalesModel({ deliveries = [], pos = [], payouts = [] }) {
     platformFeeOn,
     rateOf,
     sumOver,
+    openOn,
+    tradingDays,
   };
 }

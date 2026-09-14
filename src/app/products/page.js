@@ -133,6 +133,8 @@ export default function ProductsPage() {
     const priceOn = buildPriceLookup(raw.priceHistory);
     const days = eachDay(range.from, range.to);
     const dayIndex = Object.fromEntries(days.map((d, i) => [d, i]));
+    // Orders per day, so the sparkline can leave out the days the shop was shut.
+    const ordersPerDay = days.map(() => 0);
 
     // One row per menu item, filled by walking every order line in the window.
     const stats = new Map();
@@ -171,8 +173,10 @@ export default function ProductsPage() {
         if (!platform) continue;
         if (channel !== "all" && platform !== channel) continue;
 
-        if (inNow) ordersNow += 1;
-        else ordersBefore += 1;
+        if (inNow) {
+          ordersNow += 1;
+          ordersPerDay[dayIndex[day]] += 1;
+        } else ordersBefore += 1;
 
         for (const { qty, name } of parseItems(row.items)) {
           const item = match(platform, name);
@@ -253,7 +257,11 @@ export default function ProductsPage() {
     const perOrder = ordersNow > 0 ? itemsSold / ordersNow : 0;
     const prevPerOrder = ordersBefore > 0 ? prevItemsSold / ordersBefore : 0;
 
-    const dailyItems = days.map((_, i) => visible.reduce((a, r) => a + r.daily[i], 0));
+    // Trading days only, like the other sparklines: a Sunday with no orders is
+    // not a day nothing sold, it is a day the shop was shut.
+    const dailyItems = days
+      .map((_, i) => visible.reduce((a, r) => a + r.daily[i], 0))
+      .filter((_, i) => ordersPerDay[i] > 0);
 
     // ── Categories.
     const catAgg = CATEGORIES.map((c) => {

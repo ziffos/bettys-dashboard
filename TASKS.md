@@ -589,3 +589,25 @@ top of the bars.
 - **Overview's parked "Social reach" card had the same fault**, plus bar heights
   in fixed pixels. Fixed the same way while it is off, so it does not come back
   broken when Marketing re-opens; checked by un-parking it briefly.
+
+### Follow-up — closed days skewed every chart (Sep 2026)
+
+Betty's is shut every Sunday and on the odd holiday, so one day in seven was a
+zero in every series.
+
+- **Sparklines now run over trading days only.** They carry no dates and no
+  axis — a sparkline is a shape — so a zero every seventh point turned each one
+  into a sawtooth. On **average order** and **fee rate** it was worse than
+  noise: there is no average order on a day with no orders, and plotting €0 said
+  trade collapsed. Overview, Sales and Products all fixed; Sales measures
+  openness against the chosen sources, so filtering to one platform that took
+  nothing that day drops it too.
+- **The bar charts keep the column.** The x-axis is a calendar, and dropping
+  Sundays would make "18 Aug → 22 Aug" span four bars instead of five and hide
+  the weekly rhythm. A closed day is drawn as a thin baseline marker instead —
+  it reads as shut rather than as a terrible day.
+- **Closed is derived, not configured.** `openOn(day)` in `salesModel.js` is
+  "not one order on any source", which is the rule the roster already used. No
+  holiday calendar to maintain: a red day the shop was shut looks exactly like a
+  Sunday to it. `tradingDays(from, to)` is the shared span helper.
+- DESIGN.md departure 23.

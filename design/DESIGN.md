@@ -308,6 +308,15 @@ Agreed with the owner before the rebuild started. Do not "fix" these back.
     renders a "coming back" state and the page leaves the rail, the phone bar,
     the More sheet, ⌘K and the permissions matrix. Nothing is deleted — removing
     the slug from `PARKED_PAGES` restores all of it.
+23. **Closed days leave the sparklines and are marked on the bars.** Betty's
+    shuts every Sunday and the odd holiday, and nothing records a "closed"
+    flag — so a day with not one order on any source is a day the kitchen was
+    shut. A sparkline carries no dates, so a zero for a closed day is noise
+    that turns the line into a sawtooth, and on average-order and fee-rate it
+    is a value that does not exist. Those series run over trading days only.
+    The bar charts keep the column, because the x-axis is a calendar and
+    dropping a day would make the dates lie, but draw a closed day as a thin
+    baseline marker rather than a bar of no height.
 
 ## Out of scope — do not touch
 
