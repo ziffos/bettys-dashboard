@@ -85,13 +85,22 @@ the row, with Cancel and a red Delete. It is **not** a page-wide modal: it
 covers the panel, or the phone screen, and nothing else. Throwing a dialog over
 the whole application to ask about one line of a list is out of proportion.
 
-### Things that move are seen to move
+### Leaving is one movement, and it goes right
 
-Tick a to-do and it leaves the open rows and travels down to the ones you got
-through today, on its way to Done. Delete a row and it collapses where it
-stands while everything under it closes the gap. Both are real journeys and the
-list animates them with FLIP — see `useFlipList.js`. A list that repaints
-silently makes you check whether the right thing happened.
+**Ticking and deleting look the same, because they are the same event: the row
+is finished with.** The checkbox fills, the row slides **out to the right** and
+fades, and once it is gone the space it held closes. Two movements in sequence,
+not at once — overlapping them reads as a smudge.
+
+A deleted row never comes back. A ticked one returns where it now belongs,
+entering from the right it left by, which is how you know it is the same row.
+`forget()` in `useFlipList.js` is what stops the list from *also* gliding it
+there: one leaving is enough, and telling the journey twice is worse than not
+telling it at all.
+
+Everything else that shifts — the rows closing the gap — is FLIP, measured
+before and after the repaint. A list that repaints silently makes you check
+whether the right thing happened.
 
 Anyone whose machine asks for reduced motion gets none of it.
 

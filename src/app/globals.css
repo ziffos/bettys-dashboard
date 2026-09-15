@@ -70,45 +70,43 @@
   @keyframes rowEnter {
     from {
       opacity: 0;
-      transform: translateY(-6px);
+      transform: translateX(26px);
     }
   }
 
-  @keyframes rowLeave {
+  /* Leaving is two movements, not one: the row goes out to the right, and once
+     it is gone the space it held closes. Overlapping them reads as a smudge;
+     one after the other reads as a thing leaving and a list tidying up. */
+  @keyframes rowSlideOut {
     to {
       opacity: 0;
-      transform: translateX(14px);
+      transform: translateX(72px);
+    }
+  }
+
+  @keyframes rowCollapse {
+    to {
       grid-template-rows: 0fr;
     }
   }
 
-  @keyframes confirmPop {
-    from {
-      opacity: 0;
-      transform: translateY(6px) scale(0.97);
-    }
-  }
-
-  @keyframes confirmScrim {
-    from {
-      opacity: 0;
-    }
-  }
-
-  .row-enter {
-    animation: rowEnter 260ms cubic-bezier(0.2, 0.7, 0.3, 1);
-  }
-
-  /* The wrapper becomes the grid; the row itself stays whatever it was. */
+  /* The wrapper collapses; the row inside it travels. The transform has to be
+     on the child or the wrapper would carry its own clipping off to the right
+     with it, and there would be nothing left to clip against. */
   .row-leave {
     display: grid;
     grid-template-rows: 1fr;
     overflow: hidden;
-    animation: rowLeave 260ms cubic-bezier(0.4, 0, 1, 1) forwards;
+    animation: rowCollapse 150ms cubic-bezier(0.4, 0, 1, 1) 180ms forwards;
   }
 
   .row-leave > * {
     min-height: 0;
+    animation: rowSlideOut 210ms cubic-bezier(0.4, 0, 1, 1) forwards;
+  }
+
+  .row-enter {
+    animation: rowEnter 280ms cubic-bezier(0.2, 0.7, 0.3, 1);
   }
 
   /* The tick lands before the row starts travelling, so the two read as cause
@@ -128,6 +126,7 @@
   @media (prefers-reduced-motion: reduce) {
     .row-enter,
     .row-leave,
+    .row-leave > *,
     .row-ticked,
     .confirm-pop,
     .confirm-scrim {

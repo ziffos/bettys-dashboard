@@ -74,8 +74,8 @@ function NoteRow({ item, leaving, onDelete }) {
   );
 }
 
-function TaskRow({ item, leaving, onToggle, onDelete, offerUndo }) {
-  const ticked = !!item.done_at;
+function TaskRow({ item, leaving, pending, onToggle, onDelete, offerUndo }) {
+  const ticked = pending ?? !!item.done_at;
   return (
     <Row item={item} leaving={leaving}>
       <div className="px-3 py-2 border-t border-wash flex gap-2.5 items-start">
@@ -151,8 +151,8 @@ export default function NotesAndTodo({ tab, loading, failure, notes, todo, done 
   const [busy, setBusy] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [asking, setAsking] = useState(null); // the row the confirm is about
-  const [leaving, setLeaving] = useState(null); // and the one on its way out
-  const list = useFlipList();
+  const [exiting, setExiting] = useState(null); // and the one on its way out
+  const { ref: list, forget } = useFlipList();
 
   const fold = (key) => setFolded((f) => ({ ...f, [key]: !f[key] }));
   const isOpen = (key) => !folded[key];
@@ -176,24 +176,45 @@ export default function NotesAndTodo({ tab, loading, failure, notes, todo, done 
     await run(() => panelActions.add({ kind: onNotes ? "note" : "task", body }));
   };
 
-  // Confirmed: let the row collapse where it stands, then write the deletion.
-  // The row is gone from the table either way; this only decides whether you
-  // see it go.
+  const pause = () => (reducedMotion() ? Promise.resolve() : new Promise((r) => setTimeout(r, LEAVE_MS)));
+
+  // Confirmed: the row goes out to the right and the space closes behind it,
+  // then the deletion is written. The row is gone from the table either way;
+  // this only decides whether you see it go.
   const destroy = async () => {
     const item = asking;
     setAsking(null);
-    setLeaving(item.id);
-    if (!reducedMotion()) await new Promise((r) => setTimeout(r, LEAVE_MS));
+    setExiting({ id: item.id });
+    await pause();
     try {
       await panelActions.remove(item.id);
     } catch (err) {
       console.error("Panel write failed:", err);
     } finally {
-      setLeaving(null);
+      setExiting(null);
     }
   };
 
-  const toggle = (id, next) => run(() => panelActions.setDone(id, next));
+  /*
+   * Ticking is the same movement. The row shows the tick, leaves to the right,
+   * and comes back where it now belongs — below the open work if it is one of
+   * today's, or out of the section entirely.
+   *
+   * `forget` is what keeps it from also gliding there: without it the list
+   * would animate the same journey a second time, and one leaving is enough.
+   */
+  const toggle = async (id, next) => {
+    setExiting({ id, ticked: next });
+    await pause();
+    try {
+      await panelActions.setDone(id, next);
+    } catch (err) {
+      console.error("Panel write failed:", err);
+    } finally {
+      forget(id);
+      setExiting(null);
+    }
+  };
 
   if (failure) {
     return (
@@ -247,7 +268,7 @@ export default function NotesAndTodo({ tab, loading, failure, notes, todo, done 
         </div>
       )}
 
-      <div ref={list} className="flex-1 min-h-0 overflow-y-auto">
+      <div ref={list} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
         {onNotes ? (
           shownNotes.length === 0 ? (
             <p className="px-3 pt-3 text-[11.5px] text-faint">
@@ -255,7 +276,7 @@ export default function NotesAndTodo({ tab, loading, failure, notes, todo, done 
             </p>
           ) : (
             shownNotes.map((n) => (
-              <NoteRow key={n.id} item={n} leaving={leaving === n.id} onDelete={setAsking} />
+              <NoteRow key={n.id} item={n} leaving={exiting?.id === n.id} onDelete={setAsking} />
             ))
           )
         ) : (
@@ -278,7 +299,8 @@ export default function NotesAndTodo({ tab, loading, failure, notes, todo, done 
                       <TaskRow
                         key={t.id}
                         item={t}
-                        leaving={leaving === t.id}
+                        leaving={exiting?.id === t.id}
+                        pending={exiting?.id === t.id ? exiting.ticked : undefined}
                         onToggle={toggle}
                         onDelete={setAsking}
                         offerUndo
@@ -296,7 +318,8 @@ export default function NotesAndTodo({ tab, loading, failure, notes, todo, done 
                       <TaskRow
                         key={t.id}
                         item={t}
-                        leaving={leaving === t.id}
+                        leaving={exiting?.id === t.id}
+                        pending={exiting?.id === t.id ? exiting.ticked : undefined}
                         onToggle={toggle}
                         onDelete={setAsking}
                         offerUndo
@@ -333,7 +356,8 @@ export default function NotesAndTodo({ tab, loading, failure, notes, todo, done 
                   <TaskRow
                     key={t.id}
                     item={t}
-                    leaving={leaving === t.id}
+                    leaving={exiting?.id === t.id}
+                    pending={exiting?.id === t.id ? exiting.ticked : undefined}
                     onToggle={toggle}
                     onDelete={setAsking}
                   />

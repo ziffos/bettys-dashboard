@@ -19,6 +19,10 @@ import { useLayoutEffect, useRef } from "react";
  * Mark each row with `data-flip="<stable id>"` inside the returned ref's
  * subtree. Anything that appears gets the enter animation instead, and anyone
  * who has asked their machine to stop moving things gets none of it.
+ *
+ * `forget(id)` is the way to say "this one did not travel, it left and came
+ * back": a ticked row slides out to the right and returns further down, and
+ * making it also glide there would be the same journey told twice.
  */
 const REDUCED = () =>
   typeof window !== "undefined" &&
@@ -27,6 +31,7 @@ const REDUCED = () =>
 export function useFlipList() {
   const box = useRef(null);
   const seen = useRef(new Map());
+  const forget = (id) => seen.current.delete(id);
 
   useLayoutEffect(() => {
     const root = box.current;
@@ -68,11 +73,11 @@ export function useFlipList() {
     seen.current = after;
   });
 
-  return box;
+  return { ref: box, forget };
 }
 
 /** How long a row spends leaving, in ms. Must match `row-leave` in globals.css. */
-export const LEAVE_MS = 260;
+export const LEAVE_MS = 330;
 
 /** True while the machine has been asked not to animate. */
 export const reducedMotion = REDUCED;

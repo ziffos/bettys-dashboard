@@ -54,8 +54,8 @@ function Wrap({ item, leaving, children }) {
   );
 }
 
-function Row({ item, leaving, onToggle, onDelete, offerUndo }) {
-  const ticked = !!item.done_at;
+function Row({ item, leaving, pending, onToggle, onDelete, offerUndo }) {
+  const ticked = pending ?? !!item.done_at;
   return (
     <Wrap item={item} leaving={leaving}>
       <div className="px-4 py-3 border-t border-wash flex gap-3 items-start">
@@ -244,9 +244,9 @@ export default function PhoneAssistant({ tab, setTab, openCount, loading, failur
   const [showAll, setShowAll] = useState(false);
   const [composing, setComposing] = useState(false);
   const [asking, setAsking] = useState(null);
-  const [leaving, setLeaving] = useState(null);
+  const [exiting, setExiting] = useState(null);
   const swipe = useRef(null);
-  const list = useFlipList();
+  const { ref: list, forget } = useFlipList();
 
   const onNotes = tab === "notes";
   const onChat = tab === "chat";
@@ -261,15 +261,27 @@ export default function PhoneAssistant({ tab, setTab, openCount, loading, failur
       console.error("Panel write failed:", err);
     }
   };
-  const toggle = (id, next) => run(() => panelActions.setDone(id, next));
+  const pause = () => (reducedMotion() ? Promise.resolve() : new Promise((r) => setTimeout(r, LEAVE_MS)));
+
+  // Both endings are the same movement: the row shows what happened, goes out
+  // to the right, and the space closes behind it. A deleted one never returns;
+  // a ticked one comes back where it now belongs. `forget` is what stops the
+  // list from also gliding it there — one leaving is enough.
+  const toggle = async (id, next) => {
+    setExiting({ id, ticked: next });
+    await pause();
+    await run(() => panelActions.setDone(id, next));
+    forget(id);
+    setExiting(null);
+  };
 
   const destroy = async () => {
     const item = asking;
     setAsking(null);
-    setLeaving(item.id);
-    if (!reducedMotion()) await new Promise((r) => setTimeout(r, LEAVE_MS));
+    setExiting({ id: item.id });
+    await pause();
     await run(() => panelActions.remove(item.id));
-    setLeaving(null);
+    setExiting(null);
   };
 
   const back = () => {
@@ -393,7 +405,7 @@ export default function PhoneAssistant({ tab, setTab, openCount, loading, failur
             <Loader2 size={20} className="animate-spin" />
           </div>
         ) : (
-          <div ref={list} className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+          <div ref={list} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain">
             {onNotes ? (
               shownNotes.length === 0 ? (
                 <p className="px-4 pt-4 text-[13px] text-faint">
@@ -401,7 +413,7 @@ export default function PhoneAssistant({ tab, setTab, openCount, loading, failur
                 </p>
               ) : (
                 shownNotes.map((n) => (
-                  <NoteCard key={n.id} item={n} leaving={leaving === n.id} onDelete={setAsking} />
+                  <NoteCard key={n.id} item={n} leaving={exiting?.id === n.id} onDelete={setAsking} />
                 ))
               )
             ) : (
@@ -415,7 +427,7 @@ export default function PhoneAssistant({ tab, setTab, openCount, loading, failur
                   ) : (
                     <>
                       {(capped ? stillOpen.slice(0, FIRST_RUN) : stillOpen).map((t) => (
-                        <Row key={t.id} item={t} leaving={leaving === t.id} onToggle={toggle} onDelete={setAsking} offerUndo />
+                        <Row key={t.id} item={t} leaving={exiting?.id === t.id} pending={exiting?.id === t.id ? exiting.ticked : undefined} onToggle={toggle} onDelete={setAsking} offerUndo />
                       ))}
                       {capped && (
                         <button
@@ -426,7 +438,7 @@ export default function PhoneAssistant({ tab, setTab, openCount, loading, failur
                         </button>
                       )}
                       {justDone.map((t) => (
-                        <Row key={t.id} item={t} leaving={leaving === t.id} onToggle={toggle} onDelete={setAsking} offerUndo />
+                        <Row key={t.id} item={t} leaving={exiting?.id === t.id} pending={exiting?.id === t.id ? exiting.ticked : undefined} onToggle={toggle} onDelete={setAsking} offerUndo />
                       ))}
                     </>
                   ))}
@@ -454,7 +466,7 @@ export default function PhoneAssistant({ tab, setTab, openCount, loading, failur
                     </p>
                   ) : (
                     shownDone.map((t) => (
-                      <Row key={t.id} item={t} leaving={leaving === t.id} onToggle={toggle} onDelete={setAsking} />
+                      <Row key={t.id} item={t} leaving={exiting?.id === t.id} pending={exiting?.id === t.id ? exiting.ticked : undefined} onToggle={toggle} onDelete={setAsking} />
                     ))
                   ))}
               </>
