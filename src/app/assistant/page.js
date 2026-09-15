@@ -15,7 +15,8 @@ import PhoneAssistant from "../../components/panel/PhoneAssistant";
 import AskAI from "../../components/panel/AskAI";
 
 const TABS = [
-  { id: "list", label: "Notes & to-do" },
+  { id: "notes", label: "Notes" },
+  { id: "todo", label: "To-dos" },
   { id: "chat", label: "Ask AI" },
 ];
 
@@ -47,16 +48,22 @@ export default function AssistantPage() {
       <div className="hidden md:flex flex-col gap-5">
         <PageHeader
           title="Assistant"
-          sub={panel.tab === "list" ? `${openCount} open` : "Ask AI is not connected yet"}
+          sub={
+            panel.tab === "chat"
+              ? "Ask AI is not connected yet"
+              : panel.tab === "notes"
+                ? `${items.notes.length} written down`
+                : `${openCount} open`
+          }
         />
 
         <Segmented options={TABS} value={panel.tab} onChange={setTab} />
 
         <div
-          className="bg-surface border border-line rounded-xl flex flex-col min-h-[60vh]"
+          className="relative bg-surface border border-line rounded-xl flex flex-col min-h-[60vh] overflow-hidden"
           style={{ boxShadow: "var(--shadow-card)" }}
         >
-          {panel.tab === "list" ? <NotesAndTodo {...items} openCount={openCount} /> : <AskAI />}
+          {panel.tab === "chat" ? <AskAI /> : <NotesAndTodo tab={panel.tab} {...items} />}
         </div>
       </div>
     </>

@@ -59,6 +59,82 @@
     font-family: var(--font-sans);
   }
 
+  /*
+   * The panel's list animations. Movement between rows is FLIP and lives in
+   * useFlipList.js; these are the two things FLIP cannot do — arriving and
+   * leaving, where there is no "before" or no "after" to measure.
+   *
+   * A leaving row collapses through a grid track rather than a height, so
+   * nothing has to be measured: 1fr to 0fr animates, `height: auto` does not.
+   */
+  @keyframes rowEnter {
+    from {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+  }
+
+  @keyframes rowLeave {
+    to {
+      opacity: 0;
+      transform: translateX(14px);
+      grid-template-rows: 0fr;
+    }
+  }
+
+  @keyframes confirmPop {
+    from {
+      opacity: 0;
+      transform: translateY(6px) scale(0.97);
+    }
+  }
+
+  @keyframes confirmScrim {
+    from {
+      opacity: 0;
+    }
+  }
+
+  .row-enter {
+    animation: rowEnter 260ms cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+
+  /* The wrapper becomes the grid; the row itself stays whatever it was. */
+  .row-leave {
+    display: grid;
+    grid-template-rows: 1fr;
+    overflow: hidden;
+    animation: rowLeave 260ms cubic-bezier(0.4, 0, 1, 1) forwards;
+  }
+
+  .row-leave > * {
+    min-height: 0;
+  }
+
+  /* The tick lands before the row starts travelling, so the two read as cause
+     and effect rather than one blur. */
+  .row-ticked {
+    animation: rowEnter 200ms cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+
+  .confirm-pop {
+    animation: confirmPop 160ms cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+
+  .confirm-scrim {
+    animation: confirmScrim 160ms ease;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .row-enter,
+    .row-leave,
+    .row-ticked,
+    .confirm-pop,
+    .confirm-scrim {
+      animation-duration: 1ms;
+    }
+  }
+
   ::selection {
     background: #171717;
     color: #fff;

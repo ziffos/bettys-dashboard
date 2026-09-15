@@ -1,9 +1,9 @@
 /**
- * Whether the side panel is open, and which of its two tabs you left it on.
+ * Whether the side panel is open, and which of its three tabs you left it on.
  *
  * Kept in localStorage and read through `useSyncExternalStore`, the same way
- * the rail's pin is: the server gets a defined answer (shut, on the list) and
- * the client gets the stored one, with no effect that re-renders on mount.
+ * the rail's pin is: the server gets a defined answer (shut, on the to-dos)
+ * and the client gets the stored one, with no effect that re-renders on mount.
  *
  * The panel starts shut. It only stays open because you opened it.
  */
@@ -16,7 +16,15 @@ export const subscribePanel = (cb) => {
   return () => listeners.delete(cb);
 };
 
-const SHUT = { open: false, tab: "list" };
+export const PANEL_TABS = ["notes", "todo", "chat"];
+
+const SHUT = { open: false, tab: "todo" };
+
+/**
+ * Notes and to-dos used to share one tab called "list". Anyone who has used
+ * the panel has that word in their browser; it means the to-dos now.
+ */
+const readTab = (tab) => (PANEL_TABS.includes(tab) ? tab : tab === "list" ? "todo" : "todo");
 
 // The snapshot has to be referentially stable or useSyncExternalStore will
 // re-render forever, so the parsed value is cached until something writes.
@@ -31,7 +39,7 @@ export const readPanel = () => {
     const parsed = raw ? JSON.parse(raw) : null;
     cached =
       parsed && typeof parsed === "object"
-        ? { open: !!parsed.open, tab: parsed.tab === "chat" ? "chat" : "list" }
+        ? { open: !!parsed.open, tab: readTab(parsed.tab) }
         : SHUT;
   } catch {
     cached = SHUT;

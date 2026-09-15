@@ -14,6 +14,8 @@ import {
 import { euro2 } from "../../lib/format";
 import { panelActions } from "./usePanelItems";
 import { FIRST_RUN, SOURCE_LABEL, matcher, tickedAgo } from "./listPolicy";
+import { LEAVE_MS, reducedMotion, useFlipList } from "./useFlipList";
+import ConfirmDelete from "./ConfirmDelete";
 import AskAI from "./AskAI";
 
 /**
@@ -34,91 +36,105 @@ import AskAI from "./AskAI";
  *  - **No composer parked at the bottom.** That is eighty pixels of empty
  *    input sitting there all day for the one moment a week you use it. It is a
  *    round + instead, and a sheet when you actually have something to write.
- *    Four more rows fit.
+ *    Four more rows fit. Which kind it writes is decided by the tab you are
+ *    on, so the sheet has nothing to ask you.
  *  - **The filter hides behind the magnifier.** Same argument, less of it.
  *
- * Ask AI is the other tab, and says plainly that it is not connected. The page
+ * Ask AI is the third tab, and says plainly that it is not connected. The page
  * is called Assistant now; the tab it names is still a facade, and a name is
  * not a reason to start pretending otherwise.
  */
 
-function Row({ item, onToggle, onDelete, offerUndo }) {
-  const ticked = !!item.done_at;
+/** Every row is wrapped: the wrapper travels and collapses, the row is drawn. */
+function Wrap({ item, leaving, children }) {
   return (
-    <div className="px-4 py-3 border-t border-wash flex gap-3 items-start">
-      <button
-        onClick={() => onToggle(item.id, !ticked)}
-        role="checkbox"
-        aria-checked={ticked}
-        aria-label={item.body}
-        className={`w-5 h-5 mt-px shrink-0 rounded-md flex items-center justify-center border-[1.5px] ${
-          ticked ? "bg-ink-strong border-ink-strong" : "border-line-strong bg-surface"
-        }`}
-      >
-        {ticked && (
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20 6 9 17l-5-5" />
-          </svg>
-        )}
-      </button>
-
-      <div className="flex-1 min-w-0">
-        <div className={`text-[14.5px] leading-[1.4] text-pretty ${ticked ? "text-subtle line-through" : ""}`}>
-          {item.body}
-        </div>
-        {(item.source_amount != null || item.source || item.done_at) && (
-          <div className="mt-[5px] flex flex-wrap items-center gap-[7px]">
-            {item.source_amount != null && (
-              <span className="font-mono text-[10px] px-1.5 py-px rounded text-danger bg-[rgba(238,0,0,0.06)]">
-                {euro2(item.source_amount)}
-              </span>
-            )}
-            {item.source && (
-              <span className="font-mono text-[10px] px-1.5 py-px rounded bg-wash text-subtle">
-                {SOURCE_LABEL[item.source] ?? item.source.toUpperCase()}
-              </span>
-            )}
-            {item.done_at && (
-              <span className="font-mono text-[10px] text-faint">{tickedAgo(item.done_at)}</span>
-            )}
-          </div>
-        )}
-      </div>
-
-      {ticked && offerUndo && (
-        <button
-          onClick={() => onToggle(item.id, false)}
-          className="text-[12.5px] text-accent shrink-0 whitespace-nowrap pt-px"
-        >
-          Undo
-        </button>
-      )}
-      <button
-        onClick={() => onDelete(item.id)}
-        aria-label={`Delete task: ${item.body}`}
-        className="w-7 h-7 -mr-1 shrink-0 rounded-lg flex items-center justify-center text-faint"
-      >
-        <X size={15} strokeWidth={2} />
-      </button>
+    <div data-flip={item.id} className={leaving ? "row-leave" : undefined}>
+      {children}
     </div>
   );
 }
 
-function NoteCard({ item, onDelete }) {
+function Row({ item, leaving, onToggle, onDelete, offerUndo }) {
+  const ticked = !!item.done_at;
   return (
-    <div className="px-4 py-3 border-t border-wash flex gap-3">
-      <div className="w-[3px] rounded-full bg-warn shrink-0" />
-      <div className="flex-1 min-w-0 text-[14.5px] leading-[1.45] text-muted text-pretty">
-        {item.body}
+    <Wrap item={item} leaving={leaving}>
+      <div className="px-4 py-3 border-t border-wash flex gap-3 items-start">
+        <button
+          onClick={() => onToggle(item.id, !ticked)}
+          role="checkbox"
+          aria-checked={ticked}
+          aria-label={item.body}
+          className={`w-5 h-5 mt-px shrink-0 rounded-md flex items-center justify-center border-[1.5px] transition-colors duration-150 ${
+            ticked ? "bg-ink-strong border-ink-strong" : "border-line-strong bg-surface"
+          }`}
+        >
+          {ticked && (
+            <svg className="row-ticked" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+          )}
+        </button>
+
+        <div className="flex-1 min-w-0">
+          <div className={`text-[14.5px] leading-[1.4] text-pretty ${ticked ? "text-subtle line-through" : ""}`}>
+            {item.body}
+          </div>
+          {(item.source_amount != null || item.source || item.done_at) && (
+            <div className="mt-[5px] flex flex-wrap items-center gap-[7px]">
+              {item.source_amount != null && (
+                <span className="font-mono text-[10px] px-1.5 py-px rounded text-danger bg-[rgba(238,0,0,0.06)]">
+                  {euro2(item.source_amount)}
+                </span>
+              )}
+              {item.source && (
+                <span className="font-mono text-[10px] px-1.5 py-px rounded bg-wash text-subtle">
+                  {SOURCE_LABEL[item.source] ?? item.source.toUpperCase()}
+                </span>
+              )}
+              {item.done_at && (
+                <span className="font-mono text-[10px] text-faint">{tickedAgo(item.done_at)}</span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {ticked && offerUndo && (
+          <button
+            onClick={() => onToggle(item.id, false)}
+            className="text-[12.5px] text-accent shrink-0 whitespace-nowrap pt-px"
+          >
+            Undo
+          </button>
+        )}
+        <button
+          onClick={() => onDelete(item)}
+          aria-label={`Delete task: ${item.body}`}
+          className="w-7 h-7 -mr-1 shrink-0 rounded-lg flex items-center justify-center text-faint"
+        >
+          <X size={15} strokeWidth={2} />
+        </button>
       </div>
-      <button
-        onClick={() => onDelete(item.id)}
-        aria-label={`Delete note: ${item.body}`}
-        className="w-7 h-7 -mr-1 shrink-0 rounded-lg flex items-center justify-center text-faint"
-      >
-        <X size={15} strokeWidth={2} />
-      </button>
-    </div>
+    </Wrap>
+  );
+}
+
+function NoteCard({ item, leaving, onDelete }) {
+  return (
+    <Wrap item={item} leaving={leaving}>
+      <div className="px-4 py-3 border-t border-wash flex gap-3">
+        <div className="w-[3px] rounded-full bg-warn shrink-0" />
+        <div className="flex-1 min-w-0 text-[14.5px] leading-[1.45] text-muted text-pretty">
+          {item.body}
+        </div>
+        <button
+          onClick={() => onDelete(item)}
+          aria-label={`Delete note: ${item.body}`}
+          className="w-7 h-7 -mr-1 shrink-0 rounded-lg flex items-center justify-center text-faint"
+        >
+          <X size={15} strokeWidth={2} />
+        </button>
+      </div>
+    </Wrap>
   );
 }
 
@@ -140,8 +156,8 @@ function Head({ label, count, open, onToggle, action }) {
   );
 }
 
-/** The sheet the + raises. Task or note, one field, one button. */
-function Compose({ kind, setKind, onClose, onAdd }) {
+/** The sheet the + raises. The tab already said which kind, so it does not ask. */
+function Compose({ kind, onClose, onAdd }) {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const field = useRef(null);
@@ -171,7 +187,7 @@ function Compose({ kind, setKind, onClose, onAdd }) {
 
   return (
     <div className="md:hidden fixed inset-0 z-[60] flex flex-col justify-end">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/40 confirm-scrim" onClick={onClose} />
       <div
         className="relative bg-surface rounded-t-[22px] pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
         style={{ boxShadow: "0 -10px 40px rgba(0,0,0,0.2)", animation: "sheetIn .18s ease" }}
@@ -192,21 +208,6 @@ function Compose({ kind, setKind, onClose, onAdd }) {
           </button>
         </div>
         <div className="px-4">
-          <div className="flex gap-1.5 mb-2.5">
-            {["task", "note"].map((k) => (
-              <button
-                key={k}
-                onClick={() => setKind(k)}
-                className={`text-[12.5px] px-3.5 py-1.5 rounded-[9px] border ${
-                  kind === k
-                    ? "bg-ink-strong text-surface border-ink-strong"
-                    : "text-subtle border-line"
-                }`}
-              >
-                {k === "task" ? "Task" : "Note"}
-              </button>
-            ))}
-          </div>
           <textarea
             ref={field}
             value={draft}
@@ -230,7 +231,8 @@ function Compose({ kind, setKind, onClose, onAdd }) {
 }
 
 const TABS = [
-  { id: "list", label: "Notes & to-do" },
+  { id: "notes", label: "Notes" },
+  { id: "todo", label: "To-dos" },
   { id: "chat", label: "Ask AI" },
 ];
 
@@ -240,8 +242,14 @@ export default function PhoneAssistant({ tab, setTab, openCount, loading, failur
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [showAll, setShowAll] = useState(false);
-  const [composing, setComposing] = useState(null);
+  const [composing, setComposing] = useState(false);
+  const [asking, setAsking] = useState(null);
+  const [leaving, setLeaving] = useState(null);
   const swipe = useRef(null);
+  const list = useFlipList();
+
+  const onNotes = tab === "notes";
+  const onChat = tab === "chat";
 
   const fold = (key) => setFolded((f) => ({ ...f, [key]: !f[key] }));
   const isOpen = (key) => !folded[key];
@@ -254,14 +262,22 @@ export default function PhoneAssistant({ tab, setTab, openCount, loading, failur
     }
   };
   const toggle = (id, next) => run(() => panelActions.setDone(id, next));
-  const remove = (id) => run(() => panelActions.remove(id));
+
+  const destroy = async () => {
+    const item = asking;
+    setAsking(null);
+    setLeaving(item.id);
+    if (!reducedMotion()) await new Promise((r) => setTimeout(r, LEAVE_MS));
+    await run(() => panelActions.remove(item.id));
+    setLeaving(null);
+  };
 
   const back = () => {
     if (typeof window !== "undefined" && window.history.length > 1) router.back();
     else router.push("/");
   };
 
-  // Swipe between the two tabs. Only a clearly horizontal drag counts, so a
+  // Swipe between the three tabs. Only a clearly horizontal drag counts, so a
   // flick down the list never lands you in the chat.
   const onTouchStart = (e) => {
     const t = e.touches[0];
@@ -275,7 +291,9 @@ export default function PhoneAssistant({ tab, setTab, openCount, loading, failur
     const dx = t.clientX - start.x;
     const dy = t.clientY - start.y;
     if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
-    setTab(dx < 0 ? "chat" : "list");
+    const i = TABS.findIndex((x) => x.id === tab);
+    const next = TABS[Math.min(TABS.length - 1, Math.max(0, i + (dx < 0 ? 1 : -1)))];
+    setTab(next.id);
   };
 
   const match = matcher(query);
@@ -286,6 +304,12 @@ export default function PhoneAssistant({ tab, setTab, openCount, loading, failur
   const stillOpen = shownTodo.filter((r) => !r.done_at);
   const justDone = shownTodo.filter((r) => r.done_at);
   const capped = !showAll && !q && stillOpen.length > FIRST_RUN;
+
+  const subtitle = onChat
+    ? "not connected yet"
+    : onNotes
+      ? `${notes.length} written`
+      : `${openCount} open`;
 
   return (
     <div className="md:hidden fixed inset-0 z-50 bg-surface flex flex-col">
@@ -298,10 +322,8 @@ export default function PhoneAssistant({ tab, setTab, openCount, loading, failur
           <ChevronLeft size={20} strokeWidth={2} />
         </button>
         <h1 className="text-[19px] font-semibold tracking-[-0.02em]">Assistant</h1>
-        <span className="font-mono text-[11px] text-subtle truncate">
-          {tab === "list" ? `${openCount} open` : "not connected yet"}
-        </span>
-        {tab === "list" && (
+        <span className="font-mono text-[11px] text-subtle truncate">{subtitle}</span>
+        {!onChat && (
           <button
             onClick={() => {
               setSearching((s) => !s);
@@ -326,7 +348,12 @@ export default function PhoneAssistant({ tab, setTab, openCount, loading, failur
               tab === t.id ? "text-ink font-medium" : "text-subtle"
             }`}
           >
-            {t.label}
+            <span className="relative">
+              {t.label}
+              {t.id === "todo" && openCount > 0 && tab !== "todo" && (
+                <span className="absolute -top-px -right-2 w-1.5 h-1.5 rounded-full bg-danger" />
+              )}
+            </span>
             {tab === t.id && (
               <span className="absolute left-[22%] right-[22%] -bottom-px h-[2px] rounded-full bg-ink-strong" />
             )}
@@ -334,7 +361,7 @@ export default function PhoneAssistant({ tab, setTab, openCount, loading, failur
         ))}
       </div>
 
-      {tab === "list" && searching && (
+      {!onChat && searching && (
         <div className="shrink-0 px-4 py-2.5 border-b border-line">
           <div className="h-10 px-3 border border-line rounded-[10px] flex items-center gap-2 focus-within:border-ink-strong">
             <Search size={15} strokeWidth={2} className="text-faint shrink-0" />
@@ -342,7 +369,7 @@ export default function PhoneAssistant({ tab, setTab, openCount, loading, failur
               autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder={`Filter ${notes.length + todo.length} items…`}
+              placeholder={`Filter ${onNotes ? `${notes.length} notes` : `${todo.length + done.length} tasks`}…`}
               className="flex-1 min-w-0 bg-transparent text-[14.5px] outline-none placeholder:text-faint"
             />
           </div>
@@ -354,7 +381,7 @@ export default function PhoneAssistant({ tab, setTab, openCount, loading, failur
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
-        {tab === "chat" ? (
+        {onChat ? (
           <AskAI />
         ) : failure ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-2.5 px-8 text-center">
@@ -366,76 +393,82 @@ export default function PhoneAssistant({ tab, setTab, openCount, loading, failur
             <Loader2 size={20} className="animate-spin" />
           </div>
         ) : (
-          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
-            <Head label="Notes" count={shownNotes.length} open={isOpen("notes")} onToggle={() => fold("notes")} />
-            {isOpen("notes") &&
-              (shownNotes.length === 0 ? (
-                <p className="px-4 pb-2 text-[13px] text-faint">
+          <div ref={list} className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+            {onNotes ? (
+              shownNotes.length === 0 ? (
+                <p className="px-4 pt-4 text-[13px] text-faint">
                   {q ? "Nothing matches." : "Nothing written down."}
                 </p>
               ) : (
-                shownNotes.map((n) => <NoteCard key={n.id} item={n} onDelete={remove} />)
-              ))}
-
-            <Head label="To do" count={shownTodo.length} open={isOpen("todo")} onToggle={() => fold("todo")} />
-            {isOpen("todo") &&
-              (shownTodo.length === 0 ? (
-                <p className="px-4 pb-2 text-[13px] text-faint">
-                  {q ? "Nothing matches." : "Nothing to do."}
-                </p>
-              ) : (
-                <>
-                  {(capped ? stillOpen.slice(0, FIRST_RUN) : stillOpen).map((t) => (
-                    <Row key={t.id} item={t} onToggle={toggle} onDelete={remove} offerUndo />
+                shownNotes.map((n) => (
+                  <NoteCard key={n.id} item={n} leaving={leaving === n.id} onDelete={setAsking} />
+                ))
+              )
+            ) : (
+              <>
+                <Head label="To do" count={shownTodo.length} open={isOpen("todo")} onToggle={() => fold("todo")} />
+                {isOpen("todo") &&
+                  (shownTodo.length === 0 ? (
+                    <p className="px-4 pb-2 text-[13px] text-faint">
+                      {q ? "Nothing matches." : "Nothing to do."}
+                    </p>
+                  ) : (
+                    <>
+                      {(capped ? stillOpen.slice(0, FIRST_RUN) : stillOpen).map((t) => (
+                        <Row key={t.id} item={t} leaving={leaving === t.id} onToggle={toggle} onDelete={setAsking} offerUndo />
+                      ))}
+                      {capped && (
+                        <button
+                          onClick={() => setShowAll(true)}
+                          className="w-full px-4 py-3 border-t border-wash text-left text-[13.5px] text-accent"
+                        >
+                          Show {stillOpen.length - FIRST_RUN} more
+                        </button>
+                      )}
+                      {justDone.map((t) => (
+                        <Row key={t.id} item={t} leaving={leaving === t.id} onToggle={toggle} onDelete={setAsking} offerUndo />
+                      ))}
+                    </>
                   ))}
-                  {capped && (
-                    <button
-                      onClick={() => setShowAll(true)}
-                      className="w-full px-4 py-3 border-t border-wash text-left text-[13.5px] text-accent"
-                    >
-                      Show {stillOpen.length - FIRST_RUN} more
-                    </button>
-                  )}
-                  {justDone.map((t) => (
-                    <Row key={t.id} item={t} onToggle={toggle} onDelete={remove} offerUndo />
-                  ))}
-                </>
-              ))}
 
-            <Head
-              label="Done"
-              count={shownDone.length}
-              open={isOpen("done")}
-              onToggle={() => fold("done")}
-              action={
-                shownDone.length > 0 && (
-                  <button
-                    onClick={() => run(() => panelActions.clearDone(done.map((d) => d.id)))}
-                    className="text-[12.5px] text-subtle shrink-0"
-                  >
-                    Clear
-                  </button>
-                )
-              }
-            />
-            {isOpen("done") &&
-              (shownDone.length === 0 ? (
-                <p className="px-4 pb-2 text-[13px] text-faint">
-                  {q ? "Nothing matches." : "Cleared automatically after 30 days."}
-                </p>
-              ) : (
-                shownDone.map((t) => <Row key={t.id} item={t} onToggle={toggle} onDelete={remove} />)
-              ))}
+                <Head
+                  label="Done"
+                  count={shownDone.length}
+                  open={isOpen("done")}
+                  onToggle={() => fold("done")}
+                  action={
+                    shownDone.length > 0 && (
+                      <button
+                        onClick={() => run(() => panelActions.clearDone(done.map((d) => d.id)))}
+                        className="text-[12.5px] text-subtle shrink-0"
+                      >
+                        Clear
+                      </button>
+                    )
+                  }
+                />
+                {isOpen("done") &&
+                  (shownDone.length === 0 ? (
+                    <p className="px-4 pb-2 text-[13px] text-faint">
+                      {q ? "Nothing matches." : "Cleared automatically after 30 days."}
+                    </p>
+                  ) : (
+                    shownDone.map((t) => (
+                      <Row key={t.id} item={t} leaving={leaving === t.id} onToggle={toggle} onDelete={setAsking} />
+                    ))
+                  ))}
+              </>
+            )}
             {/* clearance for the + so it never covers the last row */}
             <div className="h-[86px]" />
           </div>
         )}
       </div>
 
-      {tab === "list" && !composing && (
+      {!onChat && !composing && (
         <button
-          onClick={() => setComposing("task")}
-          aria-label="New task or note"
+          onClick={() => setComposing(true)}
+          aria-label={onNotes ? "New note" : "New task"}
           className="absolute right-[18px] bottom-[calc(1.5rem+env(safe-area-inset-bottom))] w-[54px] h-[54px] rounded-full bg-ink-strong text-surface flex items-center justify-center"
           style={{ boxShadow: "0 6px 20px rgba(0,0,0,0.26)" }}
         >
@@ -445,11 +478,14 @@ export default function PhoneAssistant({ tab, setTab, openCount, loading, failur
 
       {composing && (
         <Compose
-          kind={composing}
-          setKind={setComposing}
-          onClose={() => setComposing(null)}
+          kind={onNotes ? "note" : "task"}
+          onClose={() => setComposing(false)}
           onAdd={panelActions.add}
         />
+      )}
+
+      {asking && (
+        <ConfirmDelete item={asking} onCancel={() => setAsking(null)} onConfirm={destroy} />
       )}
     </div>
   );

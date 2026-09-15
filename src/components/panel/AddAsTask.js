@@ -39,7 +39,7 @@ export default function AddAsTask({ body, source, amount = null, sourceKey, clas
         source_key: sourceKey,
       });
       // Open the panel on the list, so you can see where it went.
-      writePanel({ open: true, tab: "list" });
+      writePanel({ open: true, tab: "todo" });
     } catch (err) {
       console.error("Could not add the task:", err);
     } finally {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { MessageCircle, ListChecks, X } from "lucide-react";
+import { ListChecks, MessageCircle, StickyNote, X } from "lucide-react";
 import {
   readPanel,
   readPanelOnServer,
@@ -12,9 +12,10 @@ import { usePanelItems } from "./usePanelItems";
 import NotesAndTodo from "./NotesAndTodo";
 import AskAI from "./AskAI";
 
-const TABS = [
+export const TABS = [
+  { id: "notes", label: "Notes", Icon: StickyNote },
+  { id: "todo", label: "To-dos", Icon: ListChecks },
   { id: "chat", label: "Ask AI", Icon: MessageCircle },
-  { id: "list", label: "Notes & to-do", Icon: ListChecks },
 ];
 
 /**
@@ -27,8 +28,9 @@ const TABS = [
  * covered: this is a dashboard, and the point is to read a number and write it
  * down without either hiding the other.
  *
- * Desktop only. The phone gets its own full-screen version of
- * the same content at /assistant — see PhoneAssistant.
+ * Three tabs, not two: notes and to-dos are different things and stopped
+ * sharing a surface. Desktop only. The phone gets its own full-screen version
+ * of the same content at /assistant — see PhoneAssistant.
  */
 export default function SidePanelRail() {
   const panel = useSyncExternalStore(subscribePanel, readPanel, readPanelOnServer);
@@ -39,23 +41,28 @@ export default function SidePanelRail() {
   const pick = (tab) =>
     writePanel(panel.open && panel.tab === tab ? { open: false, tab } : { open: true, tab });
 
+  const current = TABS.find((t) => t.id === panel.tab) ?? TABS[1];
+  const subtitle =
+    panel.tab === "chat"
+      ? "not connected yet"
+      : panel.tab === "notes"
+        ? `${items.notes.length} written`
+        : `${openCount} open`;
+
   return (
     <>
       {/* Exactly the viewport, never the page. The shell holds still and only
           the middle column scrolls, so the whole panel — list and composer —
           stays on screen whatever is on the page, and the list scrolls inside
-          itself. */}
+          itself. `relative` so a confirmation covers the panel and not the
+          application behind it. */}
       {panel.open && (
-        <aside className="hidden md:flex w-[334px] shrink-0 flex-col h-screen bg-surface border-l border-line">
+        <aside className="hidden md:flex w-[334px] shrink-0 flex-col h-screen bg-surface border-l border-line relative">
           <div className="px-3 py-2.5 border-b border-line flex items-center gap-2 shrink-0">
             <span className="text-[13.5px] font-semibold tracking-[-0.01em]">
-              {panel.tab === "list" ? "Notes & to-do" : "Ask AI"}
+              {current.label}
             </span>
-            <span className="font-mono text-[10px] text-subtle">
-              {panel.tab === "list"
-                ? `${openCount} open`
-                : "not connected yet"}
-            </span>
+            <span className="font-mono text-[10px] text-subtle">{subtitle}</span>
             <button
               onClick={() => writePanel({ ...panel, open: false })}
               title="Close"
@@ -64,7 +71,7 @@ export default function SidePanelRail() {
               <X size={13} strokeWidth={2} />
             </button>
           </div>
-          {panel.tab === "list" ? <NotesAndTodo {...items} openCount={openCount} /> : <AskAI />}
+          {panel.tab === "chat" ? <AskAI /> : <NotesAndTodo tab={panel.tab} {...items} />}
         </aside>
       )}
 
@@ -82,7 +89,7 @@ export default function SidePanelRail() {
               }`}
             >
               <Icon size={15} strokeWidth={1.9} />
-              {id === "list" && openCount > 0 && (
+              {id === "todo" && openCount > 0 && (
                 <span
                   className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-danger"
                   style={{ boxShadow: `0 0 0 1.5px ${on ? "var(--color-ink-strong)" : "var(--color-surface)"}` }}

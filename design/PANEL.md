@@ -1,4 +1,4 @@
-# The Assistant — Notes & to-do, and Ask AI
+# The Assistant — Notes, To-dos, and Ask AI
 
 Agreed with the owner in September 2026 after four prototyped directions. The
 chosen design is the working prototype at `design/panel-prototype.html` (open it
@@ -10,12 +10,18 @@ Read this with `design/DESIGN.md` — the panel uses the same tokens, the same
 
 ## What it is
 
-A second panel on the right of the shell, holding two things you switch
+A second panel on the right of the shell, holding three things you switch
 between:
 
-1. **Notes & to-do** — the working surface.
-2. **Ask AI** — a chat. **Design only for now.** No integration, no model, no
+1. **Notes** — things worth remembering. Not tickable, never finished.
+2. **To-dos** — work, with **Done** folded underneath it.
+3. **Ask AI** — a chat. **Design only for now.** No integration, no model, no
    backend. It renders messages and a composer and does nothing when you send.
+
+Notes and to-dos shared one tab to begin with and were split in September 2026.
+They are different things: a note is read, a task is finished. Sharing a surface
+meant the notes sat permanently above the work, and the count in the header
+could only describe one of them.
 
 ## Who sees it
 
@@ -26,8 +32,9 @@ phone bar, not as a route.
 
 **Desktop.** A 46px icon rail pinned to the right edge of the shell, mirroring
 the navigation rail on the left. It is always visible, even when the panel is
-shut, so the panel never goes out of mind. Two icons: a chat bubble for Ask AI,
-a checklist for Notes & to-do. A red dot on the checklist when anything is open.
+shut, so the panel never goes out of mind. Three icons, in this order: a note
+for Notes, a checklist for To-dos, a bubble for Ask AI. The red dot goes on the
+checklist, because it counts open work.
 
 Opening puts a **334px panel to the left of the icon rail**, and it **pushes the
 page** rather than floating over it — this is a dashboard, and the point is to
@@ -35,10 +42,10 @@ read a number and write it down without either hiding the other.
 
 **Phone.** A **fifth item in the bottom bar**, labelled "Assistant", with the
 same red dot. It opens `/assistant`, which takes **the whole screen** — no app
-header above it, no bottom bar below, no card border around it. Two underlined
-tabs switch between "Notes & to-do" and "Ask AI", and a horizontal swipe does
-the same. There is **no composer parked at the bottom**: a round `+` raises a
-sheet when you have something to write, which buys four more rows. The filter
+header above it, no bottom bar below, no card border around it. Three underlined
+tabs — Notes, To-dos, Ask AI — and a horizontal swipe steps between them. There is **no composer parked at the bottom**: a round `+` raises a
+sheet when you have something to write, which buys four more rows. **The tab
+decides what the `+` writes**, so the sheet has nothing to ask you. The filter
 hides behind a magnifier for the same reason. See `PhoneAssistant.js`.
 
 The phone runs a **larger type scale** than the desktop panel — 14.5px rows,
@@ -54,20 +61,39 @@ to become a task without leaving Payouts.
 
 Starts **closed**, and remembers the last choice in `localStorage` — the same
 mechanism as the rail's pin (`bettys-rail-pinned`). Reopening the dashboard puts
-it back the way you left it, on whichever of the two tabs you were on.
+it back the way you left it, on whichever of the three tabs you were on. The
+old two-tab value `list` reads as `todo`; anyone who has used the panel has that
+word in their browser.
 
-## Notes & to-do
+## The two list tabs
 
-**Three sections, in this order, and no others.** No grouping by source, no
-priorities, no folders.
+No grouping by source, no priorities, no folders.
 
-1. **Notes** — free text, one gold bar down the left. Not tickable. **Deleted
-   with an `x` on the row**, nothing more: no confirm, no archive.
-2. **To do** — tickable tasks. Also deleted with the same `x`, in the same
-   place: ticking means you did it, deleting means it never needed doing, and
-   both endings have to exist.
-3. **Done** — folded, with a count. The `x` is there too, for clearing one row
-   without clearing the section.
+**Notes** — free text, one gold bar down the left. Not tickable.
+
+**To-dos** — tickable tasks, with **Done** folded underneath and counted. A
+finished task is still a task; it has nowhere else to belong.
+
+Every row carries an `x`. Ticking means you did it, deleting means it never
+needed doing, and both endings have to exist — including in Done, for clearing
+one row without clearing the section.
+
+### Deleting asks first
+
+There is no undo on a deletion, so the `x` opens a short question that quotes
+the row, with Cancel and a red Delete. It is **not** a page-wide modal: it
+covers the panel, or the phone screen, and nothing else. Throwing a dialog over
+the whole application to ask about one line of a list is out of proportion.
+
+### Things that move are seen to move
+
+Tick a to-do and it leaves the open rows and travels down to the ones you got
+through today, on its way to Done. Delete a row and it collapses where it
+stands while everything under it closes the gap. Both are real journeys and the
+list animates them with FLIP — see `useFlipList.js`. A list that repaints
+silently makes you check whether the right thing happened.
+
+Anyone whose machine asks for reduced motion gets none of it.
 
 Each section header folds its section and shows a count.
 
