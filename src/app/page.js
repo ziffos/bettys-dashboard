@@ -26,6 +26,7 @@ import {
   euro2,
   eachDay,
   fetchAllRows,
+  fmtDay,
   kfmt,
   num,
   parseDay,
@@ -55,6 +56,8 @@ export default function OverviewPage() {
   const [store, setStore] = useState({ key: null, raw: null, failure: null });
   const loading = store.key !== rangeKey;
   const raw = loading ? null : store.raw;
+  const trend = loading ? null : store.trend;
+  const trendFrom = loading ? null : store.trendFrom;
   const failure = loading ? null : store.failure;
   const [openDay, setOpenDay] = useState(null);
 
@@ -64,8 +67,18 @@ export default function OverviewPage() {
     (async () => {
       const windowFrom = range.previous.from;
       const until = `${range.to}T23:59:59.999`;
+      /*
+       * Thirteen weeks ending with the range, for the per-open-day trend only.
+       * A dashboard that only ever compares a week with the week before cannot
+       * see a slide that took a quarter to happen — and this one did: takings
+       * per open day fell from €526 a day in January to about €405 since
+       * April, then sat there. Deliberately lean: no `items`, because the menu
+       * matching does not run over this window.
+       */
+      const trendFrom = fmtDay(new Date(parseDay(range.to).getTime() - 90 * 86400000));
       try {
-        const [deliveries, pos, payouts, menuItems, social, reviews, holidays] = await Promise.all([
+        const [deliveries, pos, payouts, menuItems, social, reviews, holidays,
+               trendDeliveries, trendPos, trendPayouts] = await Promise.all([
           fetchAllRows(
             supabase,
             "delivery_purchases",
@@ -106,11 +119,35 @@ export default function OverviewPage() {
             { op: "gte", col: "day", val: windowFrom },
             { op: "lte", col: "day", val: range.to },
           ]),
+          fetchAllRows(
+            supabase,
+            "delivery_purchases",
+            "order_placed, price, delivery_status, delivery_partner",
+            [
+              { op: "gte", col: "order_placed", val: trendFrom },
+              { op: "lte", col: "order_placed", val: until },
+            ]
+          ),
+          fetchAllRows(supabase, "pos_sales", "order_placed, price", [
+            { op: "gte", col: "order_placed", val: trendFrom },
+            { op: "lte", col: "order_placed", val: until },
+          ]),
+          fetchAllRows(
+            supabase,
+            "platform_payouts",
+            "platform, period_from, period_to, gross_sales, commission_total, ad_spend, other_fees, customer_deductions",
+            [
+              { op: "gte", col: "period_to", val: trendFrom },
+              { op: "lte", col: "period_from", val: range.to },
+            ]
+          ),
         ]);
         if (cancelled) return;
         setStore({
           key: rangeKey,
           raw: { deliveries, pos, payouts, menuItems, social, reviews, holidays },
+          trend: { deliveries: trendDeliveries, pos: trendPos, payouts: trendPayouts },
+          trendFrom,
           failure: null,
         });
       } catch (err) {
@@ -130,7 +167,7 @@ export default function OverviewPage() {
   }, [rangeKey, range.from, range.to, range.previous.from]);
 
   const model = useMemo(() => {
-    if (!raw) return null;
+    if (!raw || !trend) return null;
     const s = buildSalesModel(raw);
 
     const days = eachDay(range.from, range.to);
@@ -166,6 +203,27 @@ export default function OverviewPage() {
         name: s.holidayOn(day),
         on: `${parseDay(day).getDate()} ${MONTHS[parseDay(day).getMonth()]}`,
       }));
+
+    /*
+     * Net per open day, week by week, over the thirteen weeks ending with the
+     * range. The other four sparklines run inside the range and compare with
+     * the period before it; this one deliberately does not, because the thing
+     * worth seeing here took a quarter to happen and a week-on-week comparison
+     * is blind to it. Weekly rather than daily so a closed Monday does not
+     * read as a collapse.
+     */
+    const t = buildSalesModel(trend);
+    const trendDays = eachDay(trendFrom, range.to);
+    const trendWeeks = bucketDays(trendDays, "weekly").map((b) => {
+      const openInWeek = b.days.filter(t.openOn);
+      if (openInWeek.length === 0) return null;
+      const net = openInWeek.reduce(
+        (a, day) => a + t.grossOn(day) - t.feeOn(day).fee,
+        0
+      );
+      return { key: b.key, perDay: net / openInWeek.length };
+    });
+    const perDayTrend = trendWeeks.filter(Boolean);
 
     const now = s.sumOver(range.from, range.to);
     const before = s.sumOver(range.previous.from, range.previous.to);
@@ -265,6 +323,9 @@ export default function OverviewPage() {
     return {
       bars,
       closures,
+      perDayTrend,
+      perOpenDay: now.openDays > 0 ? now.net / now.openDays : 0,
+      prevPerOpenDay: before.openDays > 0 ? before.net / before.openDays : 0,
       now,
       before,
       feeRate,
@@ -295,7 +356,7 @@ export default function OverviewPage() {
       bestReach,
       isEmpty: now.orders === 0,
     };
-  }, [raw, range.from, range.to, range.previous.from, range.previous.to, interval]);
+  }, [raw, trend, trendFrom, range.from, range.to, range.previous.from, range.previous.to, interval]);
 
   if (failure) {
     return (
@@ -350,7 +411,7 @@ export default function OverviewPage() {
     <div className="flex flex-col gap-4 md:gap-5">
       {header}
 
-      <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
         <KpiCard
           label="NET REVENUE"
           value={euro(model.now.net)}
@@ -379,11 +440,24 @@ export default function OverviewPage() {
           series={model.dailyAov}
         />
         <KpiCard
+          label="NET PER DAY"
+          value={euro(model.perOpenDay)}
+          sub={
+            model.perDayTrend.length > 1
+              ? `${euro(model.perDayTrend[0].perDay)} a day thirteen weeks ago`
+              : `${model.now.openDays} open ${model.now.openDays === 1 ? "day" : "days"}`
+          }
+          delta={pctChange(model.perOpenDay, model.prevPerOpenDay)}
+          series={model.perDayTrend.map((w) => w.perDay)}
+        />
+        <KpiCard
           label="FEE RATE"
           value={`${model.feeRate.toFixed(1)}%`}
           sub={
-            model.dearest
-              ? `${model.dearest.name} is the expensive one`
+            model.now.orders > 0
+              ? `${euro2(model.now.fees / model.now.orders)} out of an average order${
+                  model.dearest ? ` · ${model.dearest.name} is the expensive one` : ""
+                }`
               : "no platform fees in this range"
           }
           delta={model.feeRate - model.prevFeeRate}

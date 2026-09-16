@@ -63,11 +63,18 @@ and Notifications stay as they are.
 
 ## 3. Overview — revenue per open day, and fees in euros
 
-- [ ] A **per-open-day** KPI beside the others, with the three-month trend
-      behind it. This is the number the owner steers on and the one that fell
-      23%.
-- [ ] The fee-rate KPI keeps its percentage but gains the euro: what a platform
-      takes out of an average order. Nobody feels 21.8%; everybody feels €6.80.
+- [x] A **NET PER DAY** KPI beside the others, with **thirteen weekly points**
+      behind it rather than the range. The other four sparklines run inside the
+      range and compare with the period before; this one deliberately does not,
+      because a slide that took a quarter to happen is invisible to a
+      week-on-week comparison. Weekly, so a closed Monday does not read as a
+      collapse. Its sub names where the trend started: "€885 a day thirteen
+      weeks ago".
+- [x] The fee-rate KPI keeps its percentage and gains the euro: "€3.48 out of
+      an average order · Foody is the expensive one".
+- [x] The grid goes to five across, matching Sales. The label is **NET PER
+      DAY** rather than PER OPEN DAY — the longer one truncated on a phone, and
+      Sales already owns "PER DAY" for the gross figure.
 
 ## 4. Reviews — which dish is being rated
 
@@ -136,6 +143,16 @@ the day and the name, nothing else, and `openOn` still counts orders.
 is what makes the other three worth asking about: **14 April** — the Tuesday
 after Easter Monday, so probably the tail of the Easter break — and **17–18
 August**, which remain unexplained and are already a to-do in the Assistant.
+
+**The thirteen-week trend needed its own fetch, and it is worth the cost.**
+Overview loads the range and the period before it, which for a 7-day window is
+14 days — nowhere near enough to see the slide. The trend now comes from a
+second, deliberately lean query: order day, price, status and partner over 91
+days, with no `items` string, because the menu matching does not run over that
+window. On production the last thirteen weeks read €428, 329, 414, 413, 361,
+484, 391, 426, 383, 417, 414, 420, 368 — mean €404 gross per open day, flat.
+That flatness is the point: the fall happened between January and April and
+nothing has moved since.
 
 **The weather does not move takings, and the raw numbers say it does.** Over
 the whole year, days with at least 1mm of rain averaged **€469–470 against
