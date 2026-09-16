@@ -216,6 +216,11 @@ export default function PayoutsPage() {
           0
         );
         const variance = ours > 0 ? (reported - ours) / ours : 0;
+        // Orders over the same days, so advertising can be priced per order.
+        const orders = eachDay(p.period_from, p.period_to).reduce(
+          (a, day) => a + sales.ordersOn(day, [id]),
+          0
+        );
         return {
           id: p.id,
           platform: id,
@@ -227,6 +232,7 @@ export default function PayoutsPage() {
           label: periodLabel(p.period_from, p.period_to),
           reported,
           ours,
+          orders,
           variance,
           ratio: ours > 0 ? reported / ours : null,
           fees,
@@ -329,7 +335,57 @@ export default function PayoutsPage() {
 
     const flagged = inRange.filter((s) => s.flagged);
 
+    /*
+     * What the fee is actually made of.
+     *
+     * The headline "effective fee" is one number and it hides the only part
+     * worth arguing about. All three platforms charge essentially the same
+     * commission — on production Wolt 27pp, Foody 28pp, Bolt 26pp of gross —
+     * and the gap between Bolt keeping 29% and Wolt keeping 42% is entirely
+     * advertising, customer credits and "other fees". Commission is a rate;
+     * the rest is a decision, and a decision can be unmade.
+     */
+    const shape = PLATFORMS.map((id) => {
+      const mine = inRange.filter((st) => st.platform === id);
+      const grossOf = mine.reduce((a, st) => a + st.reported, 0);
+      if (grossOf <= 0) return null;
+      const sumPart = (key) =>
+        mine.reduce((a, st) => a + (st.parts.find((x) => x.key === key)?.value ?? 0), 0);
+      const commission = sumPart("commission_total");
+      const ads = sumPart("ad_spend");
+      const rest =
+        mine.reduce((a, st) => a + st.fees, 0) - commission - ads;
+      const ordersOf = mine.reduce((a, st) => a + st.orders, 0);
+      return {
+        id,
+        name: PLATFORM[id]?.name ?? id,
+        color: PLATFORM[id]?.color ?? "#8f8f8f",
+        gross: grossOf,
+        statements: mine.length,
+        orders: ordersOf,
+        commission,
+        ads,
+        rest,
+        commissionPp: (commission / grossOf) * 100,
+        adsPp: (ads / grossOf) * 100,
+        restPp: (rest / grossOf) * 100,
+        takePp: ((commission + ads + rest) / grossOf) * 100,
+        adsPerOrder: ordersOf > 0 ? ads / ordersOf : null,
+      };
+    })
+      .filter(Boolean)
+      .sort((a, b) => b.takePp - a.takePp);
+
+    const adTotal = shape.reduce((a, r) => a + r.ads, 0);
+    // Foody's itemised charges come to more than the gap between its gross and
+    // its net — the same disagreement the audit found on 33 of 118 statements.
+    // It is a real number and the card says so rather than clamping it away.
+    const overItemised = shape.some((r) => r.restPp < -0.5);
+
     return {
+      shape,
+      adTotal,
+      overItemised,
       statements,
       inRange,
       gross,
@@ -553,6 +609,120 @@ export default function PayoutsPage() {
       </div>
 
       {notSettled}
+
+      {/* What the fee is made of, and what the advertising in it bought */}
+      {model.shape.length > 0 && (
+        <div className="grid gap-3 items-start md:grid-cols-[minmax(0,1.9fr)_minmax(280px,1fr)]">
+          <Card>
+            <CardHeader
+              title="Where the fee goes"
+              sub="Commission is a rate. Advertising and credits are decisions, and a decision can be unmade"
+            />
+            <div className="hidden md:grid px-4 pb-2 gap-2 font-mono text-[11px] tracking-[0.05em] text-muted grid-cols-[minmax(0,1fr)_56px_minmax(120px,1.4fr)_64px]">
+              <span>PLATFORM</span>
+              <span className="text-right">KEEPS</span>
+              <span>COMMISSION · ADS · REST</span>
+              <span className="text-right">GROSS</span>
+            </div>
+            {model.shape.map((r) => (
+              <div
+                key={r.id}
+                className="px-4 py-3 border-t border-line grid gap-2 items-center grid-cols-[minmax(0,1fr)_56px] md:grid-cols-[minmax(0,1fr)_56px_minmax(120px,1.4fr)_64px]"
+              >
+                <span className="flex items-center gap-2 min-w-0">
+                  <span className="w-2 h-2 rounded-[2px] shrink-0" style={{ background: r.color }} />
+                  <span className="text-[13px] truncate">{r.name}</span>
+                </span>
+                <span className="font-mono text-[13px] text-right">
+                  {r.takePp.toFixed(0)}%
+                </span>
+                <div className="col-span-2 md:col-span-1 min-w-0">
+                  <div className="flex h-2 rounded-full overflow-hidden bg-wash">
+                    {(() => {
+                      /* Scaled by the positive parts, not by what the platform
+                         kept: when the itemised charges overshoot the gap
+                         between gross and net, dividing by the total would push
+                         the bar past its own width. */
+                      const segs = [
+                        { pp: r.commissionPp, color: "#171717" },
+                        { pp: r.adsPp, color: "#f5a623" },
+                        { pp: r.restPp, color: "#d4d4d4" },
+                      ].filter((seg) => seg.pp > 0);
+                      const span = segs.reduce((a, seg) => a + seg.pp, 0) || 1;
+                      return segs.map((seg, i) => (
+                        <div
+                          key={i}
+                          style={{ width: `${(seg.pp / span) * 100}%`, background: seg.color }}
+                        />
+                      ));
+                    })()}
+                  </div>
+                  <div className="mt-1 font-mono text-[11px] text-subtle">
+                    {r.commissionPp.toFixed(0)}pp · {r.adsPp.toFixed(0)}pp ·{" "}
+                    <span className={r.restPp < -0.5 ? "text-danger" : ""}>
+                      {r.restPp < 0 ? "−" : ""}
+                      {Math.abs(r.restPp).toFixed(0)}pp
+                    </span>
+                  </div>
+                </div>
+                <span className="hidden md:block font-mono text-[12px] text-subtle text-right">
+                  {euro(r.gross)}
+                </span>
+              </div>
+            ))}
+            <div className="px-4 py-2.5 border-t border-line flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-muted">
+              {[
+                { label: "Commission", color: "#171717" },
+                { label: "Advertising", color: "#f5a623" },
+                { label: "Credits and other", color: "#d4d4d4" },
+              ].map((l) => (
+                <span key={l.label} className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-[2px]" style={{ background: l.color }} />
+                  {l.label}
+                </span>
+              ))}
+            </div>
+            {model.overItemised && (
+              <div className="px-4 py-2.5 border-t border-line text-[12px] text-muted text-pretty">
+                A negative rest means the itemised charges add up to more than the gap
+                between what the platform reported and what it paid. Either the net is
+                more generous than the columns, or a column is overstated — worth a
+                question either way.
+              </div>
+            )}
+          </Card>
+
+          <Card className="px-4 py-3.5">
+            <h2 className="text-[14px] font-semibold tracking-[-0.01em]">
+              What the advertising bought
+            </h2>
+            <p className="mt-[3px] text-[12px] text-subtle text-pretty">
+              {euro(model.adTotal)} across these statements
+            </p>
+            <div className="mt-3.5 flex flex-col gap-2.5">
+              {model.shape.map((r) => (
+                <div key={r.id} className="flex items-baseline gap-2">
+                  <span className="w-2 h-2 rounded-[2px] shrink-0" style={{ background: r.color }} />
+                  <span className="text-[13px] flex-1 min-w-0 truncate">{r.name}</span>
+                  <span className="font-mono text-[13px] shrink-0">
+                    {r.ads > 0 && r.adsPerOrder != null
+                      ? `${euro2(r.adsPerOrder)}/order`
+                      : r.ads > 0
+                        ? euro(r.ads)
+                        : "none"}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3.5 text-[12px] text-muted text-pretty">
+              Spend divided by the orders the same statement covers. It is not a return
+              — nobody here knows which orders the advertising caused, and spend tends to
+              follow a busy week as readily as it makes one. Read it as what each order
+              is carrying.
+            </p>
+          </Card>
+        </div>
+      )}
 
       {/* Trend */}
       <Card>

@@ -113,12 +113,17 @@ and Notifications stay as they are.
 
 ## 6. Platform payouts — what the advertising bought
 
-- [ ] Split **pure commission** from ads, deductions and other fees. All three
-      platforms charge 26–28% commission; the spread between 28.8% and 41.9%
-      is everything else, and that is the negotiable part.
-- [ ] An **advertising card**: spend per platform per period against orders in
-      the same period, and cost per order. €6,091 in eight months deserves the
-      question.
+- [x] **Where the fee goes** — a stacked bar per platform, commission ·
+      advertising · credits and other, in points of gross, with what the
+      platform keeps beside it. Commission is a rate; the rest is a decision.
+- [x] **What the advertising bought** — spend per platform divided by the
+      orders the same statements cover. Framed as what each order carries, not
+      as a return: nobody here knows which orders the advertising caused, and
+      spend follows a busy week as readily as it makes one.
+- [x] Handles the case production actually has — Foody's itemised charges come
+      to **more** than the gap between its gross and its net, so its "rest" is
+      −8pp. The bar is scaled by its positive parts so it cannot spill, and the
+      card says what a negative rest means.
 
 ## 7. Products — what each dish does in a day
 
@@ -159,6 +164,26 @@ the day and the name, nothing else, and `openOn` still counts orders.
 is what makes the other three worth asking about: **14 April** — the Tuesday
 after Easter Monday, so probably the tail of the Easter break — and **17–18
 August**, which remain unexplained and are already a to-do in the Assistant.
+
+**Advertising is not a fixed share, which is what makes it a decision.** Wolt's
+ad spend ranges from 0.5% to 18% of a statement's gross (sd 4.7), Foody's from
+11.8% to 27.2% (sd 4.5). If it were a flat rate there would be nothing to
+decide; it is not. Foody's spend and its order count move together at r = 0.71
+across 40 statements, Wolt's at 0.30 across 32 — which is worth knowing and is
+not proof of anything, since spending more in a week that was always going to
+be busy produces exactly that correlation.
+
+Per order: Foody €3.02, Wolt €1.71, Bolt nothing at all. Foody's average order
+is €20.29, so **three euros in fifteen of every order goes to Foody's own
+advertising**, on top of 28pp of commission.
+
+**Foody's fee columns overshoot its own net by 8pp of gross.** Commission
+(28pp) plus advertising (20pp) comes to 48pp while the gap between what Foody
+reported and what it paid is 39pp. That is the same disagreement the September
+audit found on 33 of 118 statements, and it means either the net is more
+generous than the columns say or a column is overstated. The card shows it as
+a negative rest rather than clamping it to zero, and scales the bar by its
+positive parts so nothing spills.
 
 **Wolt has the lowest commission of the three and keeps the most.** Rebasing
 on each platform's own statements:
