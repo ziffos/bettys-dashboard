@@ -198,3 +198,29 @@ export function bucketLabel(key, interval) {
   if (interval === "weekly") return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
   return MONTHS[d.getMonth()];
 }
+
+/**
+ * A day's weather in a few words, from a `weather_daily` row.
+ *
+ * The codes are WMO's, which Open-Meteo returns. Only the bands that happen in
+ * Limassol are named; anything else falls back to the cloud wording rather than
+ * inventing a translation for snow nobody will see.
+ */
+export function weatherLabel(w) {
+  if (!w) return null;
+  const code = Number(w.code);
+  const rain = Number(w.rain_mm || 0);
+  const sky =
+    code === 0 ? "Clear"
+      : code <= 3 ? "Cloud"
+      : code <= 48 ? "Fog"
+      : code <= 57 ? "Drizzle"
+      : code <= 67 ? "Rain"
+      : code <= 77 ? "Snow"
+      : code <= 82 ? "Showers"
+      : code <= 86 ? "Snow"
+      : "Storm";
+  const wet = rain >= 0.1 ? ` ${rain.toFixed(rain < 1 ? 1 : 0)}mm` : "";
+  const temp = w.temp_max != null ? ` · ${Math.round(Number(w.temp_max))}°` : "";
+  return `${sky}${wet}${temp}`;
+}

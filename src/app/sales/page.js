@@ -26,6 +26,7 @@ import {
   parseDay,
   pctChange,
   rangeTitle,
+  weatherLabel,
   dayCount,
   priorPhrase,
   signedPct,
@@ -74,7 +75,7 @@ export default function SalesPage() {
       const windowFrom = range.previous.from;
       const until = `${range.to}T23:59:59.999`;
       try {
-        const [deliveries, pos, payouts, holidays] = await Promise.all([
+        const [deliveries, pos, payouts, holidays, weather] = await Promise.all([
           fetchAllRows(
             supabase,
             "delivery_purchases",
@@ -101,9 +102,13 @@ export default function SalesPage() {
             { op: "gte", col: "day", val: windowFrom },
             { op: "lte", col: "day", val: range.to },
           ]),
+          fetchAllRows(supabase, "weather_daily", "day, code, temp_max, rain_mm", [
+            { op: "gte", col: "day", val: range.from },
+            { op: "lte", col: "day", val: range.to },
+          ]),
         ]);
         if (cancelled) return;
-        setStore({ key: rangeKey, raw: { deliveries, pos, payouts, holidays }, failure: null });
+        setStore({ key: rangeKey, raw: { deliveries, pos, payouts, holidays, weather }, failure: null });
       } catch (err) {
         if (cancelled) return;
         console.error("Sales fetch failed:", err);
@@ -134,6 +139,64 @@ export default function SalesPage() {
     const srcs = on.length ? on : SOURCE_IDS;
 
     const openForSrcs = days.filter((day) => s.ordersOn(day, srcs) > 0);
+
+    /*
+     * Was it a bad night, or a bad sky?
+     *
+     * The answer this card gives is almost always "not the sky", and it has to
+     * be, because that is what the data says. Across the whole year on record,
+     * days with a millimetre of rain or more averaged €469 against €425 dry —
+     * a tempting +10%, and the obvious story for a shop that takes 70% of its
+     * money through delivery apps. It is the season. Compare wet days with dry
+     * ones *inside the same month* and the gap collapses to €17 across 46 wet
+     * days, with the sign flipping month to month: +19, −43, −49, +83, −40.
+     *
+     * Temperature looks stronger and is worse confounded: under 20°C averaged
+     * €480 against €401 in the 30–35°C band, but the cold days are January and
+     * February, when Betty's was taking €526 a day for reasons that have
+     * nothing to do with a coat.
+     *
+     * So the card shows the split, states the confound, and refuses to draw a
+     * conclusion from a handful of days. Its job is to stop a thin Tuesday
+     * being blamed on the weather when the answer is somewhere else.
+     */
+    const wx = Object.fromEntries((raw.weather ?? []).map((w) => [w.day, w]));
+    const openInRange = days.filter(s.openOn);
+    const takeOn = (day) => s.grossOn(day);
+
+    const band = (list) => {
+      if (list.length === 0) return null;
+      const total = list.reduce((a, day) => a + takeOn(day), 0);
+      return { days: list.length, perDay: total / list.length };
+    };
+    const wet = band(openInRange.filter((d) => Number(wx[d]?.rain_mm ?? 0) >= 1));
+    const dry = band(openInRange.filter((d) => Number(wx[d]?.rain_mm ?? 0) < 1 && wx[d]));
+
+    const TEMP_BANDS = [
+      { id: "cold", label: "Under 20°", test: (t) => t < 20 },
+      { id: "mild", label: "20 – 25°", test: (t) => t >= 20 && t < 25 },
+      { id: "warm", label: "25 – 30°", test: (t) => t >= 25 && t < 30 },
+      { id: "hot", label: "30 – 35°", test: (t) => t >= 30 && t < 35 },
+      { id: "scorching", label: "35° and up", test: (t) => t >= 35 },
+    ];
+    const temps = TEMP_BANDS.map((b) => ({
+      ...b,
+      ...(band(
+        openInRange.filter((d) => wx[d]?.temp_max != null && b.test(Number(wx[d].temp_max)))
+      ) ?? { days: 0, perDay: 0 }),
+    })).filter((b) => b.days > 0);
+
+    const weather = {
+      wet,
+      dry,
+      temps,
+      covered: openInRange.filter((d) => wx[d]).length,
+      openDays: openInRange.length,
+      // Four wet days cannot carry a claim. The card says so instead of drawing
+      // a difference nobody should act on.
+      thin: !wet || !dry || wet.days < 5 || dry.days < 5,
+      max: Math.max(1, ...temps.map((b) => b.perDay), wet?.perDay ?? 0, dry?.perDay ?? 0),
+    };
 
     const closures = days
       .filter((day) => !s.openOn(day) && s.holidayOn(day))
@@ -335,6 +398,8 @@ export default function SalesPage() {
     return {
       bars,
       closures,
+      weather,
+      wx,
       scale,
       now,
       before,
@@ -520,7 +585,11 @@ export default function SalesPage() {
             title="Revenue by source"
             sub={
               hovered
-                ? `${hovered.label} · ${hovered.segments
+                ? `${hovered.label}${
+                    hovered.days.length === 1 && model.wx[hovered.days[0]]
+                      ? ` · ${weatherLabel(model.wx[hovered.days[0]])}`
+                      : ""
+                  } · ${hovered.segments
                     .map((seg) => `${PLATFORM[seg.id].name} ${euro(seg.value)}`)
                     .join("  ·  ")}  ·  total ${euro(hovered.total)}`
                 : "Hover a bar for the breakdown · click a day to open its orders"
@@ -793,10 +862,93 @@ export default function SalesPage() {
         </div>
       </Card>
 
+      {/* Was it a bad night, or a bad sky? */}
+      {model.weather.covered > 0 && (
+        <Card>
+          <CardHeader
+            title="Weather and takings"
+            sub={`Gross per open day over the ${model.weather.covered} day${
+              model.weather.covered === 1 ? "" : "s"
+            } in this range with weather on record, for Limassol`}
+          />
+
+          <div className="grid gap-x-6 gap-y-3 px-4 py-3.5 md:grid-cols-2">
+            <div className="flex flex-col gap-2.5">
+              <span className="font-mono text-[11px] tracking-[0.05em] text-muted">
+                RAIN · WET IS 1MM OR MORE
+              </span>
+              {[
+                { label: "Wet days", v: model.weather.wet },
+                { label: "Dry days", v: model.weather.dry },
+              ].map((r) => (
+                <div key={r.label} className="flex items-center gap-3">
+                  <span className="text-[13px] flex-1 min-w-0 truncate">{r.label}</span>
+                  <div className="w-[38%] shrink-0 h-1.5 rounded-full bg-wash overflow-hidden">
+                    {r.v && (
+                      <div
+                        className="h-full rounded-full bg-ink-strong"
+                        style={{ width: `${(r.v.perDay / model.weather.max) * 100}%` }}
+                      />
+                    )}
+                  </div>
+                  <span className="font-mono text-[12px] w-[92px] text-right shrink-0">
+                    {r.v ? `${euro(r.v.perDay)} · ${r.v.days}d` : "none"}
+                  </span>
+                </div>
+              ))}
+              {model.weather.thin && (
+                <p className="text-[12px] text-subtle text-pretty">
+                  Not enough of one kind of day in this range to put next to the other.
+                  Limassol is dry from June to September, so a summer range will almost
+                  never have both.
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2.5">
+              <span className="font-mono text-[11px] tracking-[0.05em] text-muted">
+                HIGHEST TEMPERATURE
+              </span>
+              {model.weather.temps.length === 0 ? (
+                <span className="text-[13px] text-subtle">Nothing on record.</span>
+              ) : (
+                model.weather.temps.map((t) => (
+                  <div key={t.id} className="flex items-center gap-3">
+                    <span className="text-[13px] flex-1 min-w-0 truncate">{t.label}</span>
+                    <div className="w-[38%] shrink-0 h-1.5 rounded-full bg-wash overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-ink-strong"
+                        style={{ width: `${(t.perDay / model.weather.max) * 100}%` }}
+                      />
+                    </div>
+                    <span className="font-mono text-[12px] w-[92px] text-right shrink-0">
+                      {euro(t.perDay)} · {t.days}d
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="px-4 py-2.5 border-t border-line text-[12px] text-muted text-pretty">
+            Read this as a description of the days, not a cause of them. Over the whole
+            year on record the weather looks like it matters and it is
+            the season wearing its coat: wet days average €44 more than dry ones until
+            you compare them <strong className="font-medium text-ink">inside the
+            same month</strong>, where the gap falls to €17 across 46 wet days and
+            changes sign from month to month. Temperature is worse — the cold days are
+            January and February, which were simply better trading months. With one
+            year on record the sky and the calendar cannot be told apart, so this card
+            is here to rule the weather out, not to blame it.
+          </div>
+        </Card>
+      )}
+
       {openBar && (
         <DayDrawer
           day={openDay}
           totals={openBar}
+          weather={model.wx[openDay]}
           deliveries={raw.deliveries}
           pos={raw.pos}
           onClose={() => setOpenDay(null)}

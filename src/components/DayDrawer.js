@@ -1,14 +1,14 @@
 "use client";
 
 import { SidePanel, PLATFORM } from "./ui";
-import { euro, euro2, MONTHS, parseDay } from "../lib/format";
+import { euro, euro2, MONTHS, parseDay, weatherLabel } from "../lib/format";
 import { dayOf, timeOf } from "../lib/salesModel";
 
 /**
  * One day's orders, opened by clicking a bar. Shared by Overview and Sales
  * because both charts promise the same thing when you click a day.
  */
-export default function DayDrawer({ day, totals, deliveries, pos, onClose }) {
+export default function DayDrawer({ day, totals, weather, deliveries, pos, onClose }) {
   if (!day) return null;
 
   const rows = [];
@@ -50,7 +50,7 @@ export default function DayDrawer({ day, totals, deliveries, pos, onClose }) {
   return (
     <SidePanel
       open
-      eyebrow="DAY DETAIL"
+      eyebrow={weather ? `DAY DETAIL · ${weatherLabel(weather)}` : "DAY DETAIL"}
       title={`${date.toLocaleDateString("en-GB", { weekday: "long" })} ${date.getDate()} ${MONTHS[date.getMonth()]}`}
       onClose={onClose}
     >

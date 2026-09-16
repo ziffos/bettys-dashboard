@@ -141,15 +141,20 @@ and Notifications stay as they are.
 > with, on this evidence, *probably not — look elsewhere*, which is the more
 > useful answer and the only honest one.
 
-- [ ] A card answering *was that a bad night, or a bad sky?* — takings per open
-      day split by rain and by temperature band, over whatever range is set.
-- [ ] **State the confound.** Across the whole year wet days look €44 better
-      than dry ones, and that is the season, not the rain. Within a month the
-      gap is €17 on 46 wet days and the sign flips from month to month.
-      Temperature is worse: the cold days are the winter days, and winter was
-      simply a better trading season.
-- [ ] The day's weather in the bar tooltip and in the day drill-down.
-- [ ] Say plainly when a range holds too few wet days to mean anything.
+- [x] **Weather and takings** on Sales: gross per open day split by rain and by
+      temperature band, over whatever range is set.
+- [x] The confound is stated in the card itself, in as many words: the weather
+      looks like it matters and it is the season wearing its coat. Wet days
+      average €44 more than dry ones until you compare them inside the same
+      month, where the gap falls to €17 across 46 wet days and changes sign.
+      **The card exists to rule the weather out, not to blame it.**
+- [x] The day's weather in the bar tooltip and in the day drawer's eyebrow —
+      "DAY DETAIL · Clear · 31°". `weatherLabel` in `format.js` reads the WMO
+      codes Open-Meteo returns.
+- [x] The thin-data note is scoped to the rain half rather than the whole card,
+      because a summer range in Limassol has 23 usable days of temperature and
+      one of rain — saying "too few to compare" over the whole thing would have
+      been wrong about the half that works.
 
 ---
 
