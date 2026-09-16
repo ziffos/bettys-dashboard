@@ -26,7 +26,8 @@ import {
   rangeTitle,
   shortDate,
 } from "../../lib/format";
-import { dayOf, timeOf } from "../../lib/salesModel";
+import { dayOf, hourOf, timeOf } from "../../lib/salesModel";
+import { buildMenuMatcher } from "../../lib/menuMatch";
 
 /**
  * Google has no rows in `reviews` yet — the import only covers the three
@@ -40,6 +41,18 @@ const FEED_LIMIT = 30;
 const TARGET = 4.5;
 const WEEKS = 8;
 
+/**
+ * A dish needs this many reviews before its average says anything.
+ *
+ * Ten is low for statistics and right for a kitchen: it is the point where a
+ * pattern is worth walking into the back and tasting, not the point where it
+ * is proven.
+ */
+const MIN_DISH_REVIEWS = 10;
+
+/** Worst first, so the first dozen are the ones worth walking into the back for. */
+const DISH_FIRST_RUN = 12;
+
 export default function ReviewsPage() {
   const range = useRange();
   const rangeKey = `${range.from}|${range.to}`;
@@ -52,6 +65,7 @@ export default function ReviewsPage() {
   const [star, setStar] = useState(0);
   const [commentsOnly, setCommentsOnly] = useState(false);
   const [query, setQuery] = useState("");
+  const [allDishes, setAllDishes] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -65,15 +79,29 @@ export default function ReviewsPage() {
       const until = `${range.to}T23:59:59.999`;
 
       try {
-        const reviews = await fetchAllRows(
-          supabase,
-          "reviews",
-          "rating, review_text, review_date, source_platform, order_reference, reviewer_name",
-          [
-            { op: "gte", col: "review_date", val: windowFrom },
-            { op: "lte", col: "review_date", val: until },
-          ]
-        );
+        /*
+         * Every review on record, not just the range.
+         *
+         * Rating per dish cannot be answered inside a date picker: a 7-day
+         * window holds around ten reviews in total, which is nothing once it
+         * is split across forty dishes. The whole table is 298 rows today, so
+         * fetching it is cheaper than the query that would avoid it, and the
+         * range still governs everything else on the page.
+         */
+        const [reviews, menuItems] = await Promise.all([
+          fetchAllRows(
+            supabase,
+            "reviews",
+            "rating, review_text, review_date, source_platform, order_reference, reviewer_name",
+            [{ op: "lte", col: "review_date", val: until }]
+          ),
+          fetchAllRows(
+            supabase,
+            "menu_items",
+            "canonical_name, wolt_name, foody_name, bolt_name, pos_name",
+            []
+          ),
+        ]);
 
         // What each reviewer actually ordered, via the order they rated.
         const refs = [...new Set(reviews.map((r) => r.order_reference).filter(Boolean))];
@@ -109,7 +137,11 @@ export default function ReviewsPage() {
         );
 
         if (cancelled) return;
-        setStore({ key: rangeKey, raw: { reviews, purchases, windowFrom, lastEver }, failure: null });
+        setStore({
+          key: rangeKey,
+          raw: { reviews, purchases, menuItems, windowFrom, lastEver },
+          failure: null,
+        });
       } catch (err) {
         if (cancelled) return;
         console.error("Reviews fetch failed:", err);
@@ -138,6 +170,7 @@ export default function ReviewsPage() {
       return {
         ...r,
         day,
+        hour: hourOf(r.review_date),
         platform: (r.source_platform || "").toLowerCase(),
         text: (r.review_text || "").trim(),
         items: parseItems(itemsByRef.get(r.order_reference)),
@@ -218,13 +251,78 @@ export default function ReviewsPage() {
 
     const withComment = current.filter((r) => r.text).length;
 
+    /*
+     * Which dish is being rated.
+     *
+     * 297 of the 298 reviews on record resolve to an order, and an order knows
+     * what was in it — so the rating a dish collects has been on the record all
+     * along, just never asked for. Names go through the menu matcher because
+     * Wolt writes "Betty's Classic", Foody writes it with a backtick and the
+     * till shouts it: without that this table would rank spellings.
+     *
+     * A review is counted against every dish in its order. That is a real
+     * limitation and not a fixable one — nobody rates a line, they rate a bag
+     * — so a bad chip can drag its burger down. Worth reading as a starting
+     * point rather than a verdict.
+     */
+    const match = buildMenuMatcher(raw.menuItems);
+    const dishStats = new Map();
+    for (const r of all) {
+      if (!r.rating) continue;
+      const seen = new Set();
+      for (const line of r.items) {
+        const item = match(r.platform, line.name);
+        const name = item?.canonical_name ?? line.name;
+        if (seen.has(name)) continue; // one order, one vote per dish
+        seen.add(name);
+        const row = dishStats.get(name) ?? { name, count: 0, total: 0, bad: 0 };
+        row.count += 1;
+        row.total += r.rating;
+        if (r.rating <= 2) row.bad += 1;
+        dishStats.set(name, row);
+      }
+    }
+    const dishesAll = [...dishStats.values()];
+    const dishes = dishesAll
+      .filter((d) => d.count >= MIN_DISH_REVIEWS)
+      .map((d) => ({ ...d, avg: d.total / d.count, badShare: (d.bad / d.count) * 100 }))
+      .sort((a, b) => a.avg - b.avg);
+    const dishesThin = dishesAll.length - dishes.length;
+
+    // Rating by hour of the order, over the same everything-on-record window.
+    const hourStats = new Map();
+    for (const r of all) {
+      if (!r.rating || r.hour == null) continue;
+      const row = hourStats.get(r.hour) ?? { hour: r.hour, count: 0, total: 0, bad: 0 };
+      row.count += 1;
+      row.total += r.rating;
+      if (r.rating <= 2) row.bad += 1;
+      hourStats.set(r.hour, row);
+    }
+    const hours = [...hourStats.values()]
+      .filter((h) => h.count >= 5)
+      .map((h) => ({ ...h, avg: h.total / h.count }))
+      .sort((a, b) => a.hour - b.hour);
+
     let lastDay = null;
     for (const r of current) if (!lastDay || r.day > lastDay) lastDay = r.day;
     const daysBehind = lastDay
       ? Math.round((parseDay(range.to) - parseDay(lastDay)) / 86400000)
       : null;
 
+    /*
+     * A source that used to send reviews and has gone quiet changes what the
+     * average above means, and saying "none since 1 May" in a table cell does
+     * not make that consequence obvious.
+     */
+    const silent = platRows.filter((p) => p.count === 0 && p.lastEver);
+
     return {
+      dishes,
+      dishesThin,
+      dishTotal: all.filter((r) => r.rating).length,
+      hours,
+      silent,
       overallAvg,
       prevAvg,
       count: current.length,
@@ -391,6 +489,17 @@ export default function ReviewsPage() {
                 </span>
               </div>
             ))}
+            {/* "none since 1 May" in a cell is true and easy to read past. What
+                it means for the average above is worth a sentence. */}
+            {model.silent.length > 0 && (
+              <div className="px-4 py-2.5 border-t border-line text-[12px] text-muted text-pretty">
+                {model.silent.map((p) => p.name).join(" and ")}{" "}
+                {model.silent.length === 1 ? "has" : "have"} sent nothing since{" "}
+                {model.silent.map((p) => shortDate(p.lastEver)).join(" and ")}, while still
+                taking orders. Everything above is the other platforms only, so it does not
+                compare with a period before that.
+              </div>
+            )}
           </div>
         </Card>
 
@@ -472,6 +581,124 @@ export default function ReviewsPage() {
             className="flex-1 min-w-0 bg-transparent text-[13px] outline-none placeholder:text-faint"
           />
         </div>
+      </div>
+
+      {/* Which dish, and at what hour — both over everything on record */}
+      <div className="grid gap-3 items-start md:grid-cols-[minmax(0,1.9fr)_minmax(280px,1fr)]">
+        <Card>
+          <CardHeader
+            title="Which dish is being rated"
+            sub={`Every one of the ${num(model.dishTotal)} reviews on record, not just this range · worst first`}
+          />
+          {model.dishes.length === 0 ? (
+            <p className="px-4 py-4 text-[13px] text-subtle text-pretty">
+              No dish has reached {MIN_DISH_REVIEWS} reviews yet. Until one does, an
+              average per dish would be a coincidence with a decimal point.
+            </p>
+          ) : (
+            <>
+              <div className="hidden md:grid px-4 pb-2 gap-2 font-mono text-[11px] tracking-[0.05em] text-muted grid-cols-[minmax(0,1fr)_64px_60px_minmax(90px,140px)]">
+                <span>DISH</span>
+                <span className="text-right">REVIEWS</span>
+                <span className="text-right">AVG</span>
+                <span>1–2 STAR</span>
+              </div>
+              {(allDishes ? model.dishes : model.dishes.slice(0, DISH_FIRST_RUN)).map((d) => (
+                <div
+                  key={d.name}
+                  className="px-4 py-2.5 border-t border-line grid gap-2 items-center grid-cols-[minmax(0,1fr)_56px_52px] md:grid-cols-[minmax(0,1fr)_64px_60px_minmax(90px,140px)]"
+                >
+                  <span className="text-[13px] truncate" title={d.name}>
+                    {d.name}
+                  </span>
+                  <span className="font-mono text-[12px] text-subtle text-right">{d.count}</span>
+                  <span
+                    className="font-mono text-[13px] text-right"
+                    style={{ color: d.avg < 3.5 ? "var(--color-danger)" : "var(--color-ink)" }}
+                  >
+                    {d.avg.toFixed(2)}
+                  </span>
+                  <div className="col-span-3 md:col-span-1 flex items-center gap-2">
+                    <div className="flex-1 h-1.5 rounded-full bg-wash overflow-hidden">
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${Math.min(100, d.badShare)}%`,
+                          background: d.badShare >= 35 ? "var(--color-danger)" : "var(--color-line-strong)",
+                        }}
+                      />
+                    </div>
+                    <span className="font-mono text-[11px] text-subtle w-[34px] text-right shrink-0">
+                      {Math.round(d.badShare)}%
+                    </span>
+                  </div>
+                </div>
+              ))}
+              {!allDishes && model.dishes.length > DISH_FIRST_RUN && (
+                <button
+                  onClick={() => setAllDishes(true)}
+                  className="w-full px-4 py-2.5 border-t border-line text-left text-[13px] text-accent"
+                >
+                  Show the other {model.dishes.length - DISH_FIRST_RUN}, all better rated
+                </button>
+              )}
+              <div className="px-4 py-2.5 border-t border-line text-[12px] text-muted text-pretty">
+                A review is counted against every dish in its order — nobody rates a
+                line, they rate a bag — so a bad chip can drag its burger down. Read it
+                as somewhere to start tasting, not a verdict.
+                {model.dishesThin > 0 &&
+                  ` ${model.dishesThin} more ${
+                    model.dishesThin === 1 ? "dish has" : "dishes have"
+                  } fewer than ${MIN_DISH_REVIEWS} reviews and are left out.`}
+              </div>
+            </>
+          )}
+        </Card>
+
+        <Card className="px-4 py-3.5">
+          <h2 className="text-[14px] font-semibold tracking-[-0.01em]">By hour ordered</h2>
+          <p className="mt-[3px] text-[12px] text-subtle text-pretty">
+            Average rating against the hour the order went in
+          </p>
+          {model.hours.length === 0 ? (
+            <p className="mt-4 text-[13px] text-subtle">Not enough on record yet.</p>
+          ) : (
+            <>
+              <div className="flex items-end gap-[3px] h-[110px] mt-4">
+                {model.hours.map((h) => (
+                  <div
+                    key={h.hour}
+                    className="flex-1 min-w-0 h-full flex flex-col justify-end"
+                    title={`${String(h.hour).padStart(2, "0")}:00 · ${h.avg.toFixed(2)} over ${h.count} reviews`}
+                  >
+                    <div
+                      className="w-full rounded-t"
+                      style={{
+                        height: `${Math.max(2, ((h.avg - 1) / 4) * 100)}%`,
+                        background:
+                          h.avg < 3.5 ? "var(--color-danger)" : "var(--color-ink-strong)",
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-[3px] mt-1">
+                {model.hours.map((h, i) => (
+                  <span
+                    key={h.hour}
+                    className="flex-1 min-w-0 text-center font-mono text-[10px] text-subtle"
+                  >
+                    {i % 2 === 0 ? String(h.hour).padStart(2, "0") : ""}
+                  </span>
+                ))}
+              </div>
+              <p className="mt-3 text-[12px] text-muted text-pretty">
+                Bars run from one star to five. Red is below 3.5. Hours with fewer than
+                five reviews are left out.
+              </p>
+            </>
+          )}
+        </Card>
       </div>
 
       {/* Themes (upcoming) + weekly average */}

@@ -78,14 +78,21 @@ and Notifications stay as they are.
 
 ## 4. Reviews — which dish is being rated
 
-- [ ] Lead the page with **rating per dish**: average, count, and the share of
-      1–2 star orders, for every dish with enough reviews to mean anything.
-      297 of 298 reviews resolve to an order, so this is already on the record.
-- [ ] Rating by hour of day next to it.
-- [ ] **Tone down "What people mention"** — only 49 of 298 reviews carry text,
-      which is too little to lead with.
-- [ ] Say on the page that **Foody's feed stopped on 1 May 2026**, rather than
-      letting the average drift without explanation.
+- [x] **Which dish is being rated** leads the page under the breakdown:
+      average, count and the share of 1–2 star orders, worst first, over
+      **every review on record rather than the range** — a 7-day window holds
+      about ten reviews in total, which is nothing split across forty dishes.
+      Twelve rows, then "Show the other N, all better rated".
+- [x] **By hour ordered** beside it, bars running one star to five, red under
+      3.5, hours with fewer than five reviews left out.
+- [x] **"What people mention" demoted** — it was the first card under the
+      breakdown and is now below both new ones. It was already an
+      `UpcomingCard` that says only 49 of 298 reviews carry text, so it did
+      not need rewriting, only moving out of the lead.
+- [x] The platform table already said "none since 22 Jan" in a cell. It now
+      says what that **means** underneath: the platform has sent nothing since
+      then while still taking orders, so the average above is the other
+      platforms only and does not compare with a period before that.
 
 ## 5. Menu — what you actually keep
 
@@ -143,6 +150,27 @@ the day and the name, nothing else, and `openOn` still counts orders.
 is what makes the other three worth asking about: **14 April** — the Tuesday
 after Easter Monday, so probably the tail of the Easter break — and **17–18
 August**, which remain unexplained and are already a to-do in the Assistant.
+
+**The dish table needed the menu matcher, and it changed the answer.** Run
+through `buildMenuMatcher` — the same path Products uses — production's 297
+resolvable reviews touch 39 dishes, 21 with ten or more. Worst first:
+
+| Dish | n | Avg | 1–2 star |
+|---|---|---|---|
+| Chicken Burger Combo | 10 | 2.80 | 50% |
+| **Betty's Classic** | **39** | **3.08** | **46%** |
+| Crispy Chicken | 13 | 3.31 | 23% |
+| Spicy Wings | 32 | 3.34 | 44% |
+| Betty's Family Deal | 26 | 3.38 | 38% |
+| Double Delight | 41 | 3.54 | 27% |
+| Hungry Hero | 56 | 3.82 | 21% |
+| Chicken Stripes Combo | 27 | 4.04 | 11% |
+
+My first pass, matching on normalised strings instead, put Betty's Classic at
+2.98 on 41 reviews. The matcher collapses the spellings properly and one order
+now casts one vote per dish, which moves it to **3.08 on 39** — the finding
+stands either way, and the second-biggest seller on the menu is second from
+the bottom of its own review table.
 
 **The thirteen-week trend needed its own fetch, and it is worth the cost.**
 Overview loads the range and the period before it, which for a 7-day window is
