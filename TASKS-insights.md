@@ -96,11 +96,20 @@ and Notifications stay as they are.
 
 ## 5. Menu — what you actually keep
 
-- [ ] Beside "Markup vs POS", a **net per item per channel**: price less that
-      platform's own take rate, so €8.00 on Foody reads as what reaches the
-      bank. Rebase the take rate on each platform's own statements.
-- [ ] Image and description coverage, since both are columns already on the
-      table and both move conversion on the platforms.
+- [x] A third price mode, **What you keep**, beside Prices and Markup vs POS:
+      each platform's price less that platform's own take, from its own
+      statements rather than a rate card. Red when what is left falls below
+      three quarters of the till price, which on production is every Wolt and
+      Foody row.
+- [x] A note under the table saying the rates and where they come from, and
+      that they already include whatever advertising and customer credits the
+      platform deducted.
+- [x] Image and description coverage, as a quiet line under the table rather
+      than a banner: 13 of 40 carry a photo, 26 a description.
+- [x] **The phone carried none of this and neither did the two modes before
+      it** — a 390px screen hides all three platform columns, so Prices,
+      Markup and What you keep all looked identical there. The row now carries
+      `W €4.79 · F €4.71 · B €5.03` under the name, in the current mode.
 
 ## 6. Platform payouts — what the advertising bought
 
@@ -150,6 +159,24 @@ the day and the name, nothing else, and `openOn` still counts orders.
 is what makes the other three worth asking about: **14 April** — the Tuesday
 after Easter Monday, so probably the tail of the Easter break — and **17–18
 August**, which remain unexplained and are already a to-do in the Assistant.
+
+**Wolt has the lowest commission of the three and keeps the most.** Rebasing
+on each platform's own statements:
+
+| | Keeps | of which commission | everything else | statements |
+|---|---|---|---|---|
+| Wolt | 42% | 27pp | **16pp** | 48 |
+| Foody | 39% | 28pp | **21pp** | 40 |
+| Bolt | 29% | 26pp | 2pp | 37 |
+
+All three charge the same commission, near enough. The entire difference
+between Bolt at 29% and Wolt at 42% is advertising, customer credits and
+"other fees" — the part that is a decision rather than a rate. That is the
+negotiable half, and it is what task 6 puts on the Payouts page.
+
+What it does to a dish: Betty's Classic is €6.50 over the counter and €7.20 on
+Wolt, which after Wolt's take leaves **€4.79**. The menu's 11% platform markup
+does not begin to cover a 42% take, and until now no screen said so.
 
 **The dish table needed the menu matcher, and it changed the answer.** Run
 through `buildMenuMatcher` — the same path Products uses — production's 297

@@ -37,6 +37,7 @@ const DELIVERY = [
 const PRICE_MODES = [
   { id: "price", label: "Prices" },
   { id: "markup", label: "Markup vs POS" },
+  { id: "keep", label: "What you keep" },
 ];
 
 /** "12.40" / "12,40" / "" → 12.4 / null. Anything else stays undefined. */
@@ -83,28 +84,69 @@ export default function MenuPage() {
 
   // Bumped after every write, to pull the saved rows back rather than trusting
   // the local copy to match what the database ended up with.
+  const [payouts, setPayouts] = useState([]);
   const [reloadKey, setReloadKey] = useState(0);
   const reload = () => setReloadKey((k) => k + 1);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data, error } = await supabase.from("menu_items").select("*");
+      const [menu, statements] = await Promise.all([
+        supabase.from("menu_items").select("*"),
+        supabase
+          .from("platform_payouts")
+          .select("platform, gross_sales, net_payout, commission_total"),
+      ]);
       if (cancelled) return;
-      if (error) {
-        setFailure(error.message || "Could not load the menu.");
+      if (menu.error) {
+        setFailure(menu.error.message || "Could not load the menu.");
         return;
       }
       setFailure(null);
-      setItems(data || []);
+      setItems(menu.data || []);
+      setPayouts(statements.data || []);
     })();
     return () => {
       cancelled = true;
     };
   }, [reloadKey]);
 
+  /*
+   * What each platform keeps, from its own statements rather than a rate card.
+   *
+   * `take` is everything between what the customer paid and what reached the
+   * bank — commission, advertising, customer credits, the lot — because that
+   * is the honest answer to "what do I get for this price". `commission` is
+   * the part that is purely the platform's cut, so the note underneath can say
+   * how much of the gap is the fee and how much is choices that could be
+   * unmade. On production: Wolt takes 41.9% all-in against 26.7% commission,
+   * Foody 39.4% against 27.7%, Bolt 28.8% against 26.0%.
+   */
+  const rates = useMemo(() => {
+    const out = {};
+    for (const id of DELIVERY.map((d) => d.id)) {
+      const mine = payouts.filter((p) => (p.platform || "").toLowerCase() === id);
+      const gross = mine.reduce((a, p) => a + Number(p.gross_sales || 0), 0);
+      if (gross <= 0) continue;
+      const net = mine.reduce((a, p) => a + Number(p.net_payout || 0), 0);
+      const comm = mine.reduce((a, p) => a + Number(p.commission_total || 0), 0);
+      out[id] = { take: 1 - net / gross, commission: comm / gross, statements: mine.length };
+    }
+    return out;
+  }, [payouts]);
+
   const model = useMemo(() => {
     if (!items) return null;
+    const withImage = items.filter((it) => it.image_url).length;
+    const withDesc = items.filter((it) => (it.description || "").trim()).length;
+    const rateNote = DELIVERY.map(({ id }) => {
+      const r = rates[id];
+      return r
+        ? `${PLATFORM[id].name} keeps ${(r.take * 100).toFixed(0)}% (${(r.commission * 100).toFixed(0)}pp of it commission)`
+        : null;
+    })
+      .filter(Boolean)
+      .join(", ");
 
     const sorted = [...items].sort(
       (a, b) =>
@@ -156,8 +198,19 @@ export default function MenuPage() {
       })).filter((c) => c.count > 0),
     ];
 
-    return { sorted, visible, flagged, unnamed, isFlagged, chips, total: sorted.length };
-  }, [items, category, query, flaggedOnly]);
+    return {
+      sorted,
+      visible,
+      flagged,
+      unnamed,
+      isFlagged,
+      chips,
+      withImage,
+      withDesc,
+      rateNote,
+      total: sorted.length,
+    };
+  }, [items, rates, category, query, flaggedOnly]);
 
   // ── Writes ───────────────────────────────────────────────────────────────
 
@@ -354,6 +407,16 @@ export default function MenuPage() {
     if (priceMode === "price") {
       return { text: euro2(value), tone: under ? "text-danger" : "" };
     }
+    if (priceMode === "keep") {
+      // Nothing stands between the till and the bank.
+      const id = field.replace("_price", "");
+      if (id === "pos") return { text: euro2(value), tone: "" };
+      const rate = rates[id];
+      if (!rate) return { text: "—", tone: "text-muted" };
+      const keep = Number(value) * (1 - rate.take);
+      const worse = pos != null && keep < Number(pos) * 0.75;
+      return { text: euro2(keep), tone: worse ? "text-danger" : "" };
+    }
     if (pos == null || Number(pos) === 0) return { text: "—", tone: "text-muted" };
     const markup = (Number(value) / Number(pos) - 1) * 100;
     return {
@@ -526,8 +589,20 @@ export default function MenuPage() {
                   {item.description && (
                     <div className="text-[11px] text-subtle truncate">{item.description}</div>
                   )}
-                  <div className="md:hidden font-mono text-[11px] text-subtle">
-                    {cat.short}
+                  {/* A phone hides the three platform columns, which left the
+                      Prices / Markup / What you keep switch doing nothing at
+                      all at this width. The row carries them instead. */}
+                  <div className="md:hidden font-mono text-[11px] text-subtle flex flex-wrap items-center gap-x-1.5">
+                    <span>{cat.short}</span>
+                    {DELIVERY.map((d) => {
+                      const cell = priceCell(item, d.price);
+                      if (cell.text === "—") return null;
+                      return (
+                        <span key={d.id} className={cell.tone}>
+                          · {PLATFORM[d.id].name.slice(0, 1)} {cell.text}
+                        </span>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -580,6 +655,22 @@ export default function MenuPage() {
             </div>
           );
         })}
+
+        {priceMode === "keep" && model.rateNote && (
+          <div className="px-4 py-2.5 border-t border-line text-[12px] text-muted text-pretty">
+            {model.rateNote} Taken from each platform&apos;s own statements, not a
+            rate card — so it already includes whatever advertising and customer
+            credits that platform deducted.
+          </div>
+        )}
+
+        {/* Two columns that already exist on every row and quietly decide how
+            a dish looks on a platform. Neither is worth a banner. */}
+        <div className="px-4 py-2.5 border-t border-line text-[12px] text-subtle text-pretty">
+          {model.withImage} of {model.total} items carry a photo and {model.withDesc} a
+          description. On the platforms a dish with neither is a line of text next to
+          one with a picture.
+        </div>
       </Card>
 
       {/* Add / edit */}
