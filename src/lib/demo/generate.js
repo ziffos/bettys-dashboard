@@ -131,7 +131,51 @@ function build() {
       fn(new Date(firstDay.getTime() + i * DAY), i);
     }
   };
-  const isOpen = (d) => d.getDay() !== 0;
+  /*
+   * Cyprus public holidays, on the real calendar, with the moveable feasts
+   * computed from Orthodox Easter. Betty's trades through most of them — in
+   * 2026 it worked New Year's Day, Epiphany, Greek Independence Day, Cyprus
+   * National Day, Good Friday and Labour Day — and shuts for four, which is
+   * what `SHUT_FOR` carries. Anything else would make the demo disagree with
+   * production about a thing the screens now name out loud.
+   */
+  const orthodoxEaster = (y) => {
+    const a = y % 4, b = y % 7, c = y % 19;
+    const d = (19 * c + 15) % 30;
+    const e = (2 * a + 4 * b - d + 34) % 7;
+    return new Date(y, ((d + e + 114) / 31 | 0) - 1, ((d + e + 114) % 31) + 1 + 13);
+  };
+  const shiftDays = (dt, n) => new Date(dt.getFullYear(), dt.getMonth(), dt.getDate() + n);
+
+  const public_holidays = [];
+  for (const y of [today.getFullYear() - 1, today.getFullYear(), today.getFullYear() + 1]) {
+    const e = orthodoxEaster(y);
+    for (const [md, name] of [
+      ["01-01", "New Year's Day"], ["01-06", "Epiphany"],
+      ["03-25", "Greek Independence Day"], ["04-01", "Cyprus National Day"],
+      ["05-01", "Labour Day"], ["08-15", "Assumption of the Virgin Mary"],
+      ["10-01", "Cyprus Independence Day"], ["10-28", "Ochi Day"],
+      ["12-24", "Christmas Eve"], ["12-25", "Christmas Day"], ["12-26", "Boxing Day"],
+    ]) public_holidays.push({ day: `${y}-${md}`, name });
+    public_holidays.push(
+      { day: iso(shiftDays(e, -48)), name: "Green Monday" },
+      { day: iso(shiftDays(e, -2)), name: "Orthodox Good Friday" },
+      { day: iso(e), name: "Orthodox Easter Sunday" },
+      { day: iso(shiftDays(e, 1)), name: "Orthodox Easter Monday" },
+      { day: iso(shiftDays(e, 50)), name: "Kataklysmos" },
+    );
+  }
+  public_holidays.sort((a, b) => a.day.localeCompare(b.day));
+
+  const SHUT_FOR = new Set([
+    "Green Monday", "Orthodox Easter Monday", "Kataklysmos",
+    "Assumption of the Virgin Mary",
+  ]);
+  const shutDays = new Set(
+    public_holidays.filter((h) => SHUT_FOR.has(h.name)).map((h) => h.day)
+  );
+
+  const isOpen = (d) => d.getDay() !== 0 && !shutDays.has(iso(d));
 
   const hourTotal = HOUR_WEIGHTS.reduce((s, [, w]) => s + w, 0);
   const randomHour = () => {
@@ -628,6 +672,7 @@ function build() {
     rate_changes,
     quotes,
     panel_items,
+    public_holidays,
   };
 }
 

@@ -74,7 +74,7 @@ export default function SalesPage() {
       const windowFrom = range.previous.from;
       const until = `${range.to}T23:59:59.999`;
       try {
-        const [deliveries, pos, payouts] = await Promise.all([
+        const [deliveries, pos, payouts, holidays] = await Promise.all([
           fetchAllRows(
             supabase,
             "delivery_purchases",
@@ -97,9 +97,13 @@ export default function SalesPage() {
               { op: "lte", col: "period_from", val: range.to },
             ]
           ),
+          fetchAllRows(supabase, "public_holidays", "day, name", [
+            { op: "gte", col: "day", val: windowFrom },
+            { op: "lte", col: "day", val: range.to },
+          ]),
         ]);
         if (cancelled) return;
-        setStore({ key: rangeKey, raw: { deliveries, pos, payouts }, failure: null });
+        setStore({ key: rangeKey, raw: { deliveries, pos, payouts, holidays }, failure: null });
       } catch (err) {
         if (cancelled) return;
         console.error("Sales fetch failed:", err);
@@ -131,6 +135,13 @@ export default function SalesPage() {
 
     const openForSrcs = days.filter((day) => s.ordersOn(day, srcs) > 0);
 
+    const closures = days
+      .filter((day) => !s.openOn(day) && s.holidayOn(day))
+      .map((day) => ({
+        name: s.holidayOn(day),
+        on: `${parseDay(day).getDate()} ${MONTHS[parseDay(day).getMonth()]}`,
+      }));
+
     const now = s.sumOver(range.from, range.to, srcs);
     const before = s.sumOver(range.previous.from, range.previous.to, srcs);
 
@@ -151,6 +162,7 @@ export default function SalesPage() {
         // Shut for every day in the bucket, on every source — a closed marker
         // rather than a bar of no height.
         closed: b.days.every((day) => !s.openOn(day)),
+        closedFor: [...new Set(b.days.map(s.holidayOn).filter(Boolean))].join(" · "),
         total: segments.reduce((a, seg) => a + seg.value, 0),
         segments,
         gross,
@@ -322,6 +334,7 @@ export default function SalesPage() {
 
     return {
       bars,
+      closures,
       scale,
       now,
       before,
@@ -556,7 +569,10 @@ export default function SalesPage() {
                   } ${hover === i ? "bg-wash-light" : ""}`}
                 >
                   {bar.closed && (
-                    <div title="Closed" className="w-full h-[2px] rounded-full bg-line-strong" />
+                    <div
+                      title={bar.closedFor ? `Closed · ${bar.closedFor}` : "Closed"}
+                      className="w-full h-[2px] rounded-full bg-line-strong"
+                    />
                   )}
                   {bar.segments.map((seg, si) => (
                     <div
@@ -596,6 +612,11 @@ export default function SalesPage() {
             ))}
           </div>
         </div>
+        {model.closures.length > 0 && (
+          <div className="border-t border-line px-4 py-2.5 text-[12px] text-subtle text-pretty">
+            Shut for {model.closures.map((c) => `${c.name} (${c.on})`).join(", ")}
+          </div>
+        )}
       </Card>
 
       {/* Platforms + what was lost */}

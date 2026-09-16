@@ -190,7 +190,7 @@ export function findPayoutGaps({ statements = [], sales, lastDay }) {
   return out.sort((a, b) => b.from.localeCompare(a.from));
 }
 
-export function buildSalesModel({ deliveries = [], pos = [], payouts = [] }) {
+export function buildSalesModel({ deliveries = [], pos = [], payouts = [], holidays = [] }) {
   // A delivery only counts as revenue once it reached someone.
   const sold = deliveries.filter(
     (d) => (d.delivery_status || "").toLowerCase() === "delivered"
@@ -284,12 +284,29 @@ export function buildSalesModel({ deliveries = [], pos = [], payouts = [] }) {
   /**
    * Was the shop trading that day?
    *
-   * Betty's is shut every Sunday and on the odd public holiday, and no source
+   * Betty's is shut every Sunday and on some public holidays, and no source
    * records a "closed" flag — so a day with not one order on any of the four is
-   * a day the kitchen was shut. That is the same rule the roster uses, and it
-   * covers holidays without anyone maintaining a calendar of them.
+   * a day the kitchen was shut. That is the same rule the roster uses.
    */
   const openOn = (day) => ordersOn(day) > 0;
+
+  /**
+   * The name of the public holiday on a day, if there is one.
+   *
+   * A holiday is **not** the same as a closed day and the two are kept apart on
+   * purpose. Betty's traded through New Year's Day, Epiphany, Greek
+   * Independence Day, Cyprus National Day, Good Friday and Labour Day in 2026,
+   * and shut for Green Monday, Easter Monday, Kataklysmos and the Assumption.
+   * Only the orders know which; the calendar only supplies the name.
+   *
+   * What it buys is that a closed day stops being anonymous. Four of the seven
+   * non-Sunday closures this year were holidays, which makes the three that
+   * were not — 14 April, and 17–18 August — worth asking about.
+   */
+  const holidayNames = Object.fromEntries(
+    holidays.filter((h) => h?.day).map((h) => [h.day, h.name])
+  );
+  const holidayOn = (day) => holidayNames[day] ?? null;
 
   /** The days in a span the shop actually traded on. */
   const tradingDays = (from, to) => eachDay(from, to).filter(openOn);
@@ -315,6 +332,7 @@ export function buildSalesModel({ deliveries = [], pos = [], payouts = [] }) {
     rateOf,
     sumOver,
     openOn,
+    holidayOn,
     tradingDays,
   };
 }

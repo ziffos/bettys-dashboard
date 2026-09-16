@@ -125,6 +125,7 @@ All data access is direct client-side Supabase SDK queries (no API routes).
 | `menu_items` | Includes `tv_number` / `position` (the slot a dish occupies on displays 1–3) and the per-platform alias names |
 | `menu_item_price_history` | Effective-dated prices per platform |
 | `quotes` | Quote of the day |
+| `public_holidays` | Cyprus public holidays, 2025–2027, moveable feasts computed from Orthodox Easter. **The day and the name, and nothing else** — a holiday is not a closure. Betty's traded through six of 2026's holidays and shut for four; only the orders know which, so `openOn` still counts orders and `holidayOn` only supplies a name |
 | `panel_items` | The Assistant's notes and to-do. Admin-only RLS — the anon key sees an empty array. `kind` is task/note; a note is never ticked. `done_at` null means open. `source`/`source_amount`/`source_key` are provenance on the rows the September audit seeded, kept because those rows still carry them; nothing writes them any more — to-dos are typed in by hand |
 
 New employees are created through the `create-employee` edge function, which does

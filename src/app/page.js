@@ -65,7 +65,7 @@ export default function OverviewPage() {
       const windowFrom = range.previous.from;
       const until = `${range.to}T23:59:59.999`;
       try {
-        const [deliveries, pos, payouts, menuItems, social, reviews] = await Promise.all([
+        const [deliveries, pos, payouts, menuItems, social, reviews, holidays] = await Promise.all([
           fetchAllRows(
             supabase,
             "delivery_purchases",
@@ -102,11 +102,15 @@ export default function OverviewPage() {
               { op: "lte", col: "review_date", val: until },
             ]
           ),
+          fetchAllRows(supabase, "public_holidays", "day, name", [
+            { op: "gte", col: "day", val: windowFrom },
+            { op: "lte", col: "day", val: range.to },
+          ]),
         ]);
         if (cancelled) return;
         setStore({
           key: rangeKey,
-          raw: { deliveries, pos, payouts, menuItems, social, reviews },
+          raw: { deliveries, pos, payouts, menuItems, social, reviews, holidays },
           failure: null,
         });
       } catch (err) {
@@ -146,11 +150,22 @@ export default function OverviewPage() {
         // closed marker rather than as a bar of no height, which reads as a
         // terrible day rather than a day that never happened.
         closed: b.days.every((day) => !s.openOn(day)),
+        // A closed day with a name on it stops being anonymous. Four of this
+        // year's seven non-Sunday closures were public holidays.
+        closedFor: [...new Set(b.days.map(s.holidayOn).filter(Boolean))].join(" · "),
         estimated: b.days.some((day) => s.feeOn(day).estimated),
         label: bucketLabel(b.key, interval),
         subLabel: `${parseDay(b.key).getDate()} ${MONTHS[parseDay(b.key).getMonth()]}`,
       };
     });
+
+    // The named closures inside the range, for the line under the chart.
+    const closures = days
+      .filter((day) => !s.openOn(day) && s.holidayOn(day))
+      .map((day) => ({
+        name: s.holidayOn(day),
+        on: `${parseDay(day).getDate()} ${MONTHS[parseDay(day).getMonth()]}`,
+      }));
 
     const now = s.sumOver(range.from, range.to);
     const before = s.sumOver(range.previous.from, range.previous.to);
@@ -249,6 +264,7 @@ export default function OverviewPage() {
 
     return {
       bars,
+      closures,
       now,
       before,
       feeRate,
@@ -437,7 +453,7 @@ export default function OverviewPage() {
                     <div className="w-full flex flex-col justify-end h-[104px] md:h-[154px]">
                       {bar.closed && (
                         <div
-                          title="Closed"
+                          title={bar.closedFor ? `Closed · ${bar.closedFor}` : "Closed"}
                           className="w-full h-[2px] rounded-full bg-line-strong"
                         />
                       )}
@@ -508,6 +524,14 @@ export default function OverviewPage() {
             <span>
               Net <strong className="font-mono text-ink font-medium">{euro(model.now.net)}</strong>
             </span>
+            {/* A tooltip nobody hovers is a fact nobody has. A zero on a bar is
+                worth explaining where there is an explanation. */}
+            {model.closures.length > 0 && (
+              <span className="text-subtle">
+                Shut for{" "}
+                {model.closures.map((c) => `${c.name} (${c.on})`).join(", ")}
+              </span>
+            )}
           </div>
         </Card>
 
