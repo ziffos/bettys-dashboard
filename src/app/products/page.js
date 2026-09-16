@@ -285,6 +285,28 @@ export default function ProductsPage() {
     const slipping = byDelta.filter((r) => r.delta < 0).slice(-3).reverse();
 
     const dead = visible.filter((r) => r.qty === 0);
+
+    /*
+     * Per open day, and how few dishes carry the volume.
+     *
+     * A raw unit count cannot be compared across ranges — 117 over a week and
+     * 117 over a month are different dishes — and the Sundays have to come out
+     * of the denominator or every number is a fifth too low. Betty's is shut
+     * one day in seven.
+     *
+     * The Pareto line is the other half of the same question: forty items are
+     * on the menu, the top five are about a third of everything sold and the
+     * top fourteen about two thirds. A dish is a decision, and the decision
+     * needs a number next to it.
+     */
+    const openDays = ordersPerDay.filter((n) => n > 0).length;
+    const byQty = [...visible].sort((a, b) => b.qty - a.qty);
+    const totalQty = byQty.reduce((a, r) => a + r.qty, 0);
+    const shareOfTop = (n) =>
+      totalQty > 0
+        ? (byQty.slice(0, n).reduce((a, r) => a + r.qty, 0) / totalQty) * 100
+        : 0;
+    const pareto = { top5: shareOfTop(5), top14: shareOfTop(14), items: visible.length };
     const maxRevenue = Math.max(1, ...visible.map((r) => r.revenue));
 
     const chips = CATEGORIES.map((c) => ({
@@ -296,6 +318,8 @@ export default function ProductsPage() {
     const activeCount = raw.menuItems.filter((m) => m.is_active).length;
 
     return {
+      openDays,
+      pareto,
       rows: sorted,
       itemsSold,
       prevItemsSold,
@@ -668,9 +692,16 @@ export default function ProductsPage() {
                   ))
                 )}
               </div>
-              <span className="font-mono text-[12px] tabular-nums text-right">
-                {num(r.qty)}
-              </span>
+              <div className="text-right min-w-0">
+                <div className="font-mono text-[12px] tabular-nums">{num(r.qty)}</div>
+                {/* Per open day, so a week and a month can be read side by side
+                    and a shut Sunday does not drag the number down. */}
+                {model.openDays > 0 && r.qty > 0 && (
+                  <div className="font-mono text-[10.5px] tabular-nums text-subtle">
+                    {(r.qty / model.openDays).toFixed(r.qty / model.openDays < 10 ? 1 : 0)}/day
+                  </div>
+                )}
+              </div>
               <span className="font-mono text-[12px] tabular-nums text-right">
                 {euro(r.revenue)}
               </span>
@@ -690,6 +721,18 @@ export default function ProductsPage() {
             </div>
           );
         })}
+
+        {/* How few dishes carry the volume. A menu is a set of decisions and
+            each one needs a number next to it. */}
+        {model.pareto.items > 5 && model.pareto.top5 > 0 && (
+          <div className="px-4 py-2.5 border-t border-line text-[12px] text-muted text-pretty">
+            The five biggest sellers are {model.pareto.top5.toFixed(0)}% of everything
+            sold here
+            {model.pareto.items > 14 &&
+              `, and the top fourteen ${model.pareto.top14.toFixed(0)}%`}
+            , across {model.pareto.items} items.
+          </div>
+        )}
 
         <div className="px-4 py-3 border-t border-line bg-wash-light flex items-center gap-2.5 flex-wrap">
           <CircleAlert size={14} strokeWidth={2} className="text-warn shrink-0" />

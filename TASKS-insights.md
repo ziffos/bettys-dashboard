@@ -127,9 +127,12 @@ and Notifications stay as they are.
 
 ## 7. Products — what each dish does in a day
 
-- [ ] **Sold per open day** per item, so a slow dish is a decision rather than
-      a feeling, and so ranges of different lengths compare.
-- [ ] A Pareto read on the movers table: how few dishes carry the volume.
+- [x] **Sold per open day** under the unit count on every row, so a week and a
+      month can be read side by side. Open days, not calendar days: Betty's is
+      shut one day in seven and the Sundays have to come out of the
+      denominator or every dish reads a fifth slower than it is.
+- [x] A **Pareto line** under the table — how much of everything sold is
+      carried by the five biggest sellers, and by the top fourteen.
 
 ## 8. Sales — weather and takings
 
@@ -164,6 +167,13 @@ the day and the name, nothing else, and `openOn` still counts orders.
 is what makes the other three worth asking about: **14 April** — the Tuesday
 after Easter Monday, so probably the tail of the Easter break — and **17–18
 August**, which remain unexplained and are already a to-do in the Assistant.
+
+**Per open day is stable across ranges, which is the whole point.** The same
+dish reads 8.6/day over seven days and 8.5/day over twenty-eight. The raw unit
+count moves from 60 to 238 between those two and says nothing about whether
+anything changed. On production the menu is a Pareto: **the top five names are
+31% of all units and the top fourteen 62%**, out of 195 distinct order-line
+names.
 
 **Advertising is not a fixed share, which is what makes it a decision.** Wolt's
 ad spend ranges from 0.5% to 18% of a statement's gross (sd 4.7), Foody's from
