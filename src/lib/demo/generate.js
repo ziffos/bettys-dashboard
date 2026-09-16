@@ -147,6 +147,33 @@ function build() {
   };
   const shiftDays = (dt, n) => new Date(dt.getFullYear(), dt.getMonth(), dt.getDate() + n);
 
+  /*
+   * Limassol's weather, generated rather than fetched, because the demo is
+   * anchored to today and half its days are in the future. The shape is the
+   * real one: a sinusoid peaking around 33°C in August and bottoming near
+   * 17°C in January, rain almost entirely between November and March.
+   *
+   * Production fills the same table from the Open-Meteo archive through
+   * tools/weather.mjs. Nothing here should be read as a measurement.
+   */
+  const weather_daily = [];
+  eachDay((d) => {
+    const doy = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / DAY);
+    const season = Math.cos(((doy - 205) / 365) * 2 * Math.PI); // 1 in August
+    const max = round2(25 + season * 8 + between(-2.5, 2.5));
+    const wetSeason = (1 - season) / 2; // 1 in January
+    const rain = rnd() < wetSeason * 0.45 ? round2(between(0.2, 18) * wetSeason) : 0;
+    weather_daily.push({
+      day: iso(d),
+      // 0 clear, 1-3 cloud, 61/63 rain — the WMO codes the app reads.
+      code: rain >= 5 ? 63 : rain > 0 ? 61 : rnd() < 0.25 ? 2 : 0,
+      temp_max: max,
+      temp_min: round2(max - between(6, 10)),
+      rain_mm: rain,
+      wind_kmh: round2(between(8, 26)),
+    });
+  });
+
   const public_holidays = [];
   for (const y of [today.getFullYear() - 1, today.getFullYear(), today.getFullYear() + 1]) {
     const e = orthodoxEaster(y);
@@ -673,6 +700,7 @@ function build() {
     quotes,
     panel_items,
     public_holidays,
+    weather_daily,
   };
 }
 

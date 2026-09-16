@@ -50,12 +50,16 @@ and Notifications stay as they are.
 
 ## 2. Weather for Limassol, in the database
 
-- [ ] A `weather_daily` table: `day date primary key, code smallint,
+- [x] A `weather_daily` table: `day date primary key, code smallint,
       temp_max numeric, temp_min numeric, rain_mm numeric, wind_kmh numeric`.
-- [ ] Backfill from 2026-01-01 through the Open-Meteo archive API — no key,
-      `latitude=34.707&longitude=33.022&timezone=Europe/Nicosia`.
-- [ ] `tools/weather.mjs` to top it up, documented in CLAUDE.md.
-- [ ] Nothing renders yet. Task 8 is where it earns its place.
+- [x] Backfilled **290 days, 1 Dec 2025 – 16 Sep 2026** from the Open-Meteo
+      archive — no key, `latitude=34.707&longitude=33.022&timezone=Europe/Nicosia`.
+- [x] `tools/weather.mjs` tops it up and re-fetches the last stored day,
+      because the archive revises recent ones. Documented in CLAUDE.md.
+- [x] The demo generates a Limassol year rather than fetching one — it is
+      anchored to today and half its days are in the future.
+- [x] Nothing renders yet. Task 8 is where it earns its place — **and task 8
+      now has to say something different from what I expected**, see below.
 
 ## 3. Overview — revenue per open day, and fees in euros
 
@@ -101,8 +105,18 @@ and Notifications stay as they are.
 
 ## 8. Sales — weather and takings
 
+> **Rewritten after task 2 measured it.** The card cannot say rain sells
+> chicken, because within a month it does not. It answers *was it the sky?*
+> with, on this evidence, *probably not — look elsewhere*, which is the more
+> useful answer and the only honest one.
+
 - [ ] A card answering *was that a bad night, or a bad sky?* — takings per open
       day split by rain and by temperature band, over whatever range is set.
+- [ ] **State the confound.** Across the whole year wet days look €44 better
+      than dry ones, and that is the season, not the rain. Within a month the
+      gap is €17 on 46 wet days and the sign flips from month to month.
+      Temperature is worse: the cold days are the winter days, and winter was
+      simply a better trading season.
 - [ ] The day's weather in the bar tooltip and in the day drill-down.
 - [ ] Say plainly when a range holds too few wet days to mean anything.
 
@@ -122,6 +136,18 @@ the day and the name, nothing else, and `openOn` still counts orders.
 is what makes the other three worth asking about: **14 April** — the Tuesday
 after Easter Monday, so probably the tail of the Easter break — and **17–18
 August**, which remain unexplained and are already a to-do in the Assistant.
+
+**The weather does not move takings, and the raw numbers say it does.** Over
+the whole year, days with at least 1mm of rain averaged **€469–470 against
+€425 on dry days** — a tempting +10%. It is the season. Compare wet and dry
+days *inside the same month* and the gap collapses to **+€17 across 46 wet
+days**, with the sign flipping month to month: +19, −43, −49, +83, −40.
+Temperature looks even stronger and is even more confounded — days under 20°C
+averaged €480 against €401 in the 30–35°C band, but the cold days are January
+and February, when Betty's was taking €526 a day for reasons that have nothing
+to do with a coat. With one year on record the season and the weather cannot be
+told apart, and the Sales card has to say so rather than flatter the obvious
+story.
 
 **The demo had to learn the calendar too.** Its closed days were Sundays only,
 so a range containing 15 August showed a trading Saturday in demo and a closed
