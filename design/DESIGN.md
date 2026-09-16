@@ -353,6 +353,22 @@ Agreed with the owner before the rebuild started. Do not "fix" these back.
     `line-strong` on a transparent track, set in `globals.css`. Overlay
     scrollbars (macOS, iOS) ignore this and keep their own behaviour.
 
+29. **The range popover has its own calendar.** The design drew presets only,
+    and "Custom range…" sat disabled for most of the build. It works now, and
+    it picks days on a month grid drawn in these tokens rather than through
+    `<input type="date">`: the platform picker arrives in the browser's chrome,
+    the browser's colours and the browser's date order — `08/01/2026` is two
+    different days depending on whose machine it is — inside a popover drawn to
+    match everything else. `RangeCalendar.js`. Nothing past today, because the
+    dashboard is defined relative to today and a range reaching into next week
+    can only ever be empty.
+30. **Nothing writes the to-do list but the person using it.** Payouts, Menu,
+    Products and Payroll carried "Add as task" buttons next to their findings
+    until September 2026. A screen that proposes your work decides what your
+    work is. The rows the audit seeded keep their `source` chips because they
+    genuinely came from those pages; nothing new will write one, and the
+    columns stay in the table for those rows' sake.
+
 ## Out of scope — do not touch
 
 `/qr-menu`, `/tv-display-1..4`, `/tv-display-menu-*`, `/tv-display-motion-*`

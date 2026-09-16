@@ -7,6 +7,7 @@ import { Search, Calendar, Download, Bell, ChevronRight, ChevronDown, ChevronLef
 import logo from "../../public/images/betty_logo.png";
 import { todayISO, useRange } from "../lib/RangeContext";
 import CommandPalette from "./CommandPalette";
+import RangeCalendar from "./RangeCalendar";
 
 export const PAGE_TITLES = {
   "/": "Overview",
@@ -25,80 +26,62 @@ export const PAGE_TITLES = {
 };
 
 /**
- * Two dates and an Apply, in the same popover the presets live in.
+ * A month grid and an Apply, in the same popover the presets live in.
  *
- * It replaces the list rather than growing beside it: the popover is 248px on
- * a phone as well as a desktop, and a picker that pushes five presets off the
- * bottom of the screen is worse than one that borrows their space and gives it
- * back. `type="date"` on purpose — the platform's own picker is a better
- * calendar than one built here would be, and it is the one already on the
- * phone.
+ * It replaces the list rather than growing beside it: the popover has to work
+ * on a phone as well, and a picker that pushes five presets off the bottom of
+ * the screen is worse than one that borrows their space and gives it back.
  *
  * Nothing past today: the dashboard is defined relative to today and a range
  * that reaches into next week can only ever be empty.
  */
 function CustomRange({ value, onChange, onBack, onApply }) {
   const today = todayISO();
+  const days = Math.round((new Date(value.to) - new Date(value.from)) / 86400000) + 1;
   const valid = value.from && value.to && value.from <= value.to && value.to <= today;
-  const field =
-    "w-full h-9 px-2.5 border border-line rounded-lg bg-surface text-[13px] outline-none focus:border-ink-strong";
 
   return (
     <div
-      className="absolute right-0 top-[calc(100%+6px)] w-[248px] bg-surface border border-line rounded-[10px] p-1 z-50"
+      className="absolute right-0 top-[calc(100%+6px)] w-[276px] bg-surface border border-line rounded-[10px] p-2 z-50"
       style={{ boxShadow: "var(--shadow-pop)", animation: "riseIn .12s ease" }}
     >
-      <div className="flex items-center gap-1 px-1 pt-0.5 pb-1.5">
+      <div className="flex items-center gap-1 px-1 pb-1.5">
         <button
           onClick={onBack}
           aria-label="Back to the presets"
-          className="w-6 h-6 -ml-0.5 rounded flex items-center justify-center text-subtle hover:text-ink hover:bg-wash"
+          className="w-6 h-6 -ml-1 rounded flex items-center justify-center text-subtle hover:text-ink hover:bg-wash"
         >
           <ChevronLeft size={14} strokeWidth={2} />
         </button>
         <span className="text-[13px] font-medium">Custom range</span>
       </div>
 
-      <div className="px-1 pb-1 flex flex-col gap-1.5">
-        <label className="flex flex-col gap-1">
-          <span className="font-mono text-[10px] tracking-[0.06em] text-subtle uppercase">From</span>
-          <input
-            type="date"
-            max={value.to || today}
-            value={value.from}
-            onChange={(e) => onChange({ ...value, from: e.target.value })}
-            className={field}
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="font-mono text-[10px] tracking-[0.06em] text-subtle uppercase">To</span>
-          <input
-            type="date"
-            min={value.from || undefined}
-            max={today}
-            value={value.to}
-            onChange={(e) => onChange({ ...value, to: e.target.value })}
-            className={field}
-          />
-        </label>
+      <RangeCalendar value={value} max={today} onChange={onChange} />
 
+      <div className="flex items-center gap-2 pt-2 mt-1.5 border-t border-line">
+        <span className="font-mono text-[11px] text-subtle flex-1 min-w-0 truncate">
+          {valid ? `${span(value.from, value.to)} · ${days}d` : "Pick two days"}
+        </span>
         <button
           onClick={() => onApply(value.from, value.to)}
           disabled={!valid}
-          className="h-9 mt-0.5 rounded-lg bg-ink-strong text-surface text-[13px] font-medium disabled:opacity-40"
+          className="h-8 px-3.5 rounded-lg bg-ink-strong text-surface text-[13px] font-medium disabled:opacity-40"
         >
           Apply
         </button>
-        {!valid && value.from && value.to && (
-          <p className="px-0.5 pb-0.5 text-[11.5px] text-warn-ink text-pretty">
-            {value.from > value.to
-              ? "The first date has to come first."
-              : "There is no data after today."}
-          </p>
-        )}
       </div>
     </div>
   );
+}
+
+/** "1 – 14 Aug" for the read-out under the grid. */
+function span(from, to) {
+  const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const [, am, ad] = from.split("-").map(Number);
+  const [, bm, bd] = to.split("-").map(Number);
+  if (from === to) return `${ad} ${MON[am - 1]}`;
+  if (am === bm) return `${ad} – ${bd} ${MON[bm - 1]}`;
+  return `${ad} ${MON[am - 1]} – ${bd} ${MON[bm - 1]}`;
 }
 
 export default function AppHeader() {
