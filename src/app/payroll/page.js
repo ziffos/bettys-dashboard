@@ -16,7 +16,6 @@ import {
   Toast,
 } from "../../components/ui";
 import { MONTHS, euro, euro2, fetchAllRows, fmtDay, parseDay } from "../../lib/format";
-import AddAsTask from "../../components/panel/AddAsTask";
 
 const MONTHS_BACK = 6;
 
@@ -420,16 +419,6 @@ export default function PayrollPage() {
               {model.unpriced.length > 1 ? "rates" : "a rate"} in Settings and the month
               fills in.
             </p>
-            <div className="mt-1.5 flex flex-wrap gap-2">
-              {model.unpriced.map((r) => (
-                <AddAsTask
-                  key={r.person.id}
-                  source="payroll"
-                  sourceKey={`payroll:rate:${r.person.id}`}
-                  body={`Set an hourly rate for ${r.person.full_name}`}
-                />
-              ))}
-            </div>
           </div>
         </div>
       )}

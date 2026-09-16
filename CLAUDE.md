@@ -125,7 +125,7 @@ All data access is direct client-side Supabase SDK queries (no API routes).
 | `menu_items` | Includes `tv_number` / `position` (the slot a dish occupies on displays 1–3) and the per-platform alias names |
 | `menu_item_price_history` | Effective-dated prices per platform |
 | `quotes` | Quote of the day |
-| `panel_items` | The Assistant's notes and to-do. Admin-only RLS — the anon key sees an empty array. `kind` is task/note; a note is never ticked. `done_at` null means open. `source`/`source_amount` are provenance for rows an "Add as task" button wrote, not a grouping. `source_key` is uniquely indexed so the same finding cannot be added twice |
+| `panel_items` | The Assistant's notes and to-do. Admin-only RLS — the anon key sees an empty array. `kind` is task/note; a note is never ticked. `done_at` null means open. `source`/`source_amount`/`source_key` are provenance on the rows the September audit seeded, kept because those rows still carry them; nothing writes them any more — to-dos are typed in by hand |
 
 New employees are created through the `create-employee` edge function, which does
 not set `job_title` — it is filled in afterwards from the Settings panel.

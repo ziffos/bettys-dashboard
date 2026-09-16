@@ -53,9 +53,15 @@ The phone runs a **larger type scale** than the desktop panel — 14.5px rows,
 beside a dashboard; on a 390px screen with nothing else on it, it reads as a
 widget that wandered onto the wrong device.
 
-**Everywhere.** The panel is on every screen an admin can open. That is the
-whole point of the "Add as task" buttons — a finding on Payouts has to be able
-to become a task without leaving Payouts.
+**Everywhere.** The panel is on every screen an admin can open, so whatever you
+are reading, writing it down is one click away.
+
+**Nothing writes to it but you.** Pages used to carry "Add as task" buttons
+next to their findings; they were taken out in September 2026. A screen that
+proposes your work decides what your work is, and the list stops being yours
+the moment it fills itself. The rows the audit seeded still carry their
+`source` chips, because they genuinely came from those pages — nothing new
+will.
 
 ## Open and closed
 

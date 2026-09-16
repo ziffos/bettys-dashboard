@@ -31,6 +31,12 @@ function cyprusToday() {
   return { y, m, d };
 }
 
+/** Today in Cyprus as `YYYY-MM-DD`. The furthest a custom range can reach. */
+export function todayISO() {
+  const { y, m, d } = cyprusToday();
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
 const fmt = (date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
     date.getDate()
@@ -98,7 +104,7 @@ export function RangeProvider({ children }) {
   const value = useMemo(() => {
     const active =
       rangeId === "custom" && custom
-        ? { id: "custom", label: "Custom range", ...custom, hint: shortSpan(custom.from, custom.to) }
+        ? { id: "custom", label: "Custom", ...custom, hint: shortSpan(custom.from, custom.to) }
         : options.find((r) => r.id === rangeId) || options[1];
 
     const days = dayCount(active.from, active.to);

@@ -16,7 +16,6 @@ import {
   Toast,
 } from "../../components/ui";
 import { euro2 } from "../../lib/format";
-import AddAsTask from "../../components/panel/AddAsTask";
 
 const CATEGORIES = [
   { name: "Fried Chicken Combos", short: "Chicken", color: "#171717" },
@@ -389,13 +388,6 @@ export default function MenuPage() {
                   className="inline-flex items-center gap-2 font-mono text-[11px] text-subtle"
                 >
                   {u.item.canonical_name} · no {u.channels.join(", ")} name
-                  <AddAsTask
-                    source="menu"
-                    sourceKey={`menu:unnamed:${u.item.id}`}
-                    body={`Add the ${u.channels.join(", ")} name${
-                      u.channels.length > 1 ? "s" : ""
-                    } for ${u.item.canonical_name}`}
-                  />
                 </span>
               ))}
             </div>
