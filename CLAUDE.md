@@ -125,6 +125,7 @@ All data access is direct client-side Supabase SDK queries (no API routes).
 | `menu_items` | Includes `tv_number` / `position` (the slot a dish occupies on displays 1–3) and the per-platform alias names |
 | `menu_item_price_history` | Effective-dated prices per platform |
 | `quotes` | Quote of the day |
+| `site_traffic` | Daily traffic for bettyscrispychicken.com from the Vercel Web Analytics API, long format: one row per day per dimension value, `dimension` being total/referrer/route/country/device. Filled by `node tools/traffic.mjs`. **It keeps its own history on purpose** — Vercel's Hobby plan reports 30 days and every screen here compares periods, so after a month of syncing the window stops mattering |
 | `weather_daily` | Daily weather over Limassol (34.707, 33.022) from the Open-Meteo archive, in Europe/Nicosia days. `code` is a WMO code. Filled by `node tools/weather.mjs`, which takes over from the last day on record and re-fetches it, since the archive revises the most recent days |
 | `public_holidays` | Cyprus public holidays, 2025–2027, moveable feasts computed from Orthodox Easter. **The day and the name, and nothing else** — a holiday is not a closure. Betty's traded through six of 2026's holidays and shut for four; only the orders know which, so `openOn` still counts orders and `holidayOn` only supplies a name |
 | `panel_items` | The Assistant's notes and to-do. Admin-only RLS — the anon key sees an empty array. `kind` is task/note; a note is never ticked. `done_at` null means open. `source`/`source_amount`/`source_key` are provenance on the rows the September audit seeded, kept because those rows still carry them; nothing writes them any more — to-dos are typed in by hand |
@@ -188,6 +189,14 @@ not set `job_title` — it is filled in afterwards from the Settings panel.
   (the screenshot tool)
 - `next build` and `next dev` share `.next/` — stop the dev server before
   building, or the screenshots come back from a half-written bundle
+
+## Tokens
+
+`SUPABASE_ACCESS_TOKEN` and `VERCEL_TOKEN` live in the `env` block of
+`~/.claude/settings.json` and are read by the sync scripts in `tools/`. **Neither
+may ever reach the app.** Every page is a client component, so anything the app
+holds is public; the scripts write to Supabase and the app reads Supabase with
+the anon key under RLS.
 
 ## Deployment
 
