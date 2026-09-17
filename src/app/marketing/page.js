@@ -22,7 +22,9 @@ import {
   fetchAllRows,
   kfmt,
   niceScale,
+  num,
   parseDay,
+  shortDate,
   pctChange,
   rangeTitle,
   priorPhrase,
@@ -89,6 +91,41 @@ const polyline = (values, w, h, min, max) => {
  * Parked until the social import restarts — see src/lib/features.js. The screen
  * below is untouched and comes back with its slug.
  */
+/** One list of values with a bar each — referrers, countries, devices, pages. */
+const Breakdown = ({ title, sub, cut }) => (
+  <Card className="px-4 py-3.5">
+    <h2 className="text-[14px] font-semibold tracking-[-0.01em]">{title}</h2>
+    <p className="mt-[3px] text-[12px] text-subtle text-pretty">{sub}</p>
+    <div className="mt-3.5 flex flex-col gap-2.5">
+      {cut.rows.length === 0 ? (
+        <span className="text-[13px] text-subtle">Nothing in this range.</span>
+      ) : (
+        cut.rows.map((r) => (
+          <div key={r.value} className="flex items-center gap-3">
+            <span className="text-[13px] flex-1 min-w-0 truncate" title={r.value}>
+              {r.value}
+            </span>
+            <div className="w-[34%] shrink-0 h-1.5 rounded-full bg-wash overflow-hidden">
+              <div
+                className="h-full rounded-full bg-ink-strong"
+                style={{ width: `${Math.max(2, r.share)}%` }}
+              />
+            </div>
+            <span className="font-mono text-[12px] w-[62px] text-right shrink-0">
+              {r.visitors} · {Math.round(r.share)}%
+            </span>
+          </div>
+        ))
+      )}
+      {cut.others > 0 && (
+        <span className="font-mono text-[11px] text-faint">
+          and {cut.others} more
+        </span>
+      )}
+    </div>
+  </Card>
+);
+
 export default function MarketingPage() {
   if (isParked("marketing")) return <MarketingParked />;
   return <MarketingScreen />;
@@ -125,7 +162,7 @@ function MarketingScreen() {
       const windowFrom = range.previous.from;
       const until = `${range.to}T23:59:59.999`;
       try {
-        const [social, deliveries, pos] = await Promise.all([
+        const [social, deliveries, traffic, pos] = await Promise.all([
           fetchAllRows(
             supabase,
             "social_stats",
@@ -144,13 +181,17 @@ function MarketingScreen() {
               { op: "lte", col: "order_placed", val: until },
             ]
           ),
+          fetchAllRows(supabase, "site_traffic", "day, dimension, value, pageviews, visitors", [
+            { op: "gte", col: "day", val: range.previous.from },
+            { op: "lte", col: "day", val: range.to },
+          ]),
           fetchAllRows(supabase, "pos_sales", "order_placed, price", [
             { op: "gte", col: "order_placed", val: windowFrom },
             { op: "lte", col: "order_placed", val: until },
           ]),
         ]);
         if (cancelled) return;
-        setStore({ key: rangeKey, raw: { social, deliveries, pos }, failure: null });
+        setStore({ key: rangeKey, raw: { social, deliveries, traffic, pos }, failure: null });
       } catch (err) {
         if (cancelled) return;
         console.error("Marketing fetch failed:", err);
@@ -166,6 +207,85 @@ function MarketingScreen() {
       cancelled = true;
     };
   }, [rangeKey, range.from, range.to, range.previous.from]);
+
+  /*
+   * The website, which is the half of this page that has data.
+   *
+   * Social stopped on 24 Apr 2026 and the page was parked for it. Web traffic
+   * answers the same question — did people who do not know us find us? — and
+   * it is arriving daily, so the page leads with it and says plainly what
+   * happened to the other half.
+   *
+   * Everything comes from `site_traffic`, which a nightly sync fills from the
+   * Vercel Web Analytics API. It is stored rather than read live because the
+   * free plan only reports thirty days and this page compares periods.
+   */
+  const site = useMemo(() => {
+    const rows = raw?.traffic ?? [];
+    if (rows.length === 0) return null;
+
+    const inRange = (r) => r.day >= range.from && r.day <= range.to;
+    const inPrev = (r) =>
+      r.day >= range.previous.from && r.day <= range.previous.to;
+
+    const sumOf = (list, dim) =>
+      list
+        .filter((r) => r.dimension === dim)
+        .reduce(
+          (a, r) => ({
+            visitors: a.visitors + Number(r.visitors || 0),
+            pageviews: a.pageviews + Number(r.pageviews || 0),
+          }),
+          { visitors: 0, pageviews: 0 }
+        );
+
+    const now = sumOf(rows.filter(inRange), "total");
+    const before = sumOf(rows.filter(inPrev), "total");
+
+    const days = eachDay(range.from, range.to);
+    const byDay = Object.fromEntries(
+      rows.filter((r) => r.dimension === "total").map((r) => [r.day, r])
+    );
+    const daily = days.map((d) => Number(byDay[d]?.visitors ?? 0));
+    // Days the site had nobody on it are days, not gaps — unlike the kitchen's
+    // closed Sundays, a website is open. They stay in the line.
+    const covered = days.filter((d) => byDay[d]).length;
+
+    const cut = (dim, limit = 6) => {
+      const totals = new Map();
+      for (const r of rows.filter(inRange)) {
+        if (r.dimension !== dim) continue;
+        totals.set(r.value, (totals.get(r.value) ?? 0) + Number(r.visitors || 0));
+      }
+      const all = [...totals.entries()]
+        .map(([value, visitors]) => ({ value, visitors }))
+        .filter((x) => x.visitors > 0)
+        .sort((a, b) => b.visitors - a.visitors);
+      const sum = all.reduce((a, x) => a + x.visitors, 0) || 1;
+      return {
+        rows: all.slice(0, limit).map((x) => ({ ...x, share: (x.visitors / sum) * 100 })),
+        others: all.length - Math.min(all.length, limit),
+        total: sum,
+      };
+    };
+
+    return {
+      now,
+      before,
+      daily,
+      covered,
+      perDay: covered > 0 ? now.visitors / covered : 0,
+      prevPerDay:
+        before.visitors > 0
+          ? before.visitors / Math.max(1, eachDay(range.previous.from, range.previous.to).length)
+          : 0,
+      referrer: cut("referrer"),
+      country: cut("country"),
+      device: cut("device", 4),
+      route: cut("route", 5),
+      first: rows.reduce((a, r) => (a && a < r.day ? a : r.day), null),
+    };
+  }, [raw, range]);
 
   const model = useMemo(() => {
     if (!raw) return null;
@@ -390,7 +510,7 @@ function MarketingScreen() {
   const header = (
     <PageHeader
       title="Marketing"
-      sub={`${rangeTitle(range.from, range.to)} · Facebook and Instagram · compared with ${priorPhrase(range.days)}`}
+      sub={`${rangeTitle(range.from, range.to)} · the website, Facebook and Instagram · compared with ${priorPhrase(range.days)}`}
       right={
         model.lastStatDate && (
           <div className="flex items-center gap-[7px] h-[26px] px-2.5 border border-line rounded-full font-mono text-[11px] text-subtle whitespace-nowrap">
@@ -411,19 +531,6 @@ function MarketingScreen() {
     />
   );
 
-  if (model.isEmpty) {
-    return (
-      <div className="flex flex-col gap-4 md:gap-5">
-        {header}
-        <EmptyState
-          title={`Nothing was posted between ${rangeTitle(range.from, range.to)}`}
-          body="No reach, spend or follower movement to report. Social stats are imported separately from orders and often lag behind them by weeks."
-          action="Jump to the last 28 days"
-          onAction={() => range.setRange("28d")}
-        />
-      </div>
-    );
-  }
 
   const hovered = hover >= 0 ? hover : null;
   const labelEvery = Math.ceil(model.days.length / 7);
@@ -433,6 +540,77 @@ function MarketingScreen() {
     <div className="flex flex-col gap-4 md:gap-5">
       {header}
 
+      {site && (
+        <>
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+            <KpiCard
+              label="VISITORS"
+              value={num(site.now.visitors)}
+              sub={`${num(site.now.pageviews)} page views`}
+              delta={pctChange(site.now.visitors, site.before.visitors)}
+              series={site.daily}
+            />
+            <KpiCard
+              label="PER DAY"
+              value={site.perDay.toFixed(1)}
+              sub={`over ${site.covered} day${site.covered === 1 ? "" : "s"} with traffic`}
+              delta={pctChange(site.perDay, site.prevPerDay)}
+              series={site.daily}
+            />
+            <KpiCard
+              label="FROM INSTAGRAM"
+              value={`${Math.round(
+                site.referrer.rows.find((r) => r.value.includes("instagram"))?.share ?? 0
+              )}%`}
+              sub="of everyone who arrived"
+              showDelta={false}
+              series={site.daily}
+            />
+            <KpiCard
+              label="ON A PHONE"
+              value={`${Math.round(
+                site.device.rows.find((r) => r.value === "mobile")?.share ?? 0
+              )}%`}
+              sub="of everyone who arrived"
+              showDelta={false}
+              series={site.daily}
+            />
+          </div>
+
+          <div className="grid gap-3 items-start md:grid-cols-2">
+            <Breakdown
+              title="Where they came from"
+              sub="Direct means they typed the address or came from an app that sends no referrer"
+              cut={site.referrer}
+            />
+            <Breakdown title="Which country" sub="By visitors in this range" cut={site.country} />
+            <Breakdown title="Which page" sub="Where they landed" cut={site.route} />
+            <Breakdown title="What they used" sub="Phone, desktop or tablet" cut={site.device} />
+          </div>
+
+          <div className="px-4 py-2.5 border border-line rounded-[10px] bg-wash-light text-[12px] text-muted text-pretty">
+            From the website, synced nightly from Vercel and kept here.{" "}
+            {site.first &&
+              `Nothing before ${shortDate(site.first)} — Vercel's free plan only reports thirty days, so the history starts the day this sync did and grows from there.`}
+          </div>
+        </>
+      )}
+
+      {model.isEmpty ? (
+        <div className="px-4 py-3.5 border border-line rounded-[10px] bg-surface">
+          <h2 className="text-[14px] font-semibold tracking-[-0.01em]">
+            Facebook and Instagram
+          </h2>
+          <p className="mt-1 text-[12.5px] text-muted text-pretty max-w-[62ch]">
+            Nothing between {rangeTitle(range.from, range.to)}. Social stats are imported
+            separately from orders and the feed stopped
+            {model.lastStatDate ? ` on ${shortDate(model.lastStatDate)}` : ""}. Reach,
+            spend and follower movement come back on their own once the import restarts —
+            the page above does not depend on them.
+          </p>
+        </div>
+      ) : (
+        <>
       <div className="flex flex-wrap items-center gap-2">
         <Segmented options={PLATFORMS} value={platform} onChange={setPlatform} />
         <div className="flex-1 min-w-1" />
@@ -806,6 +984,8 @@ function MarketingScreen() {
           </div>
         ))}
       </Card>
+        </>
+      )}
     </div>
   );
 }

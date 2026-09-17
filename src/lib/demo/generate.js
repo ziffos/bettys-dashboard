@@ -174,6 +174,38 @@ function build() {
     });
   });
 
+  /*
+   * Website traffic, in the same long format the real table uses. The shape is
+   * the real one taken from the first thirty days on record: Instagram and
+   * Google about a third each, the rest direct, four fifths on a phone, three
+   * quarters of visitors in Cyprus, and nearly everybody landing on `/`.
+   */
+  const TRAFFIC_CUTS = [
+    ["referrer", [["l.instagram.com", 0.36], ["google.com", 0.35], ["(direct)", 0.23],
+                  ["m.facebook.com", 0.04], ["chatgpt.com", 0.02]]],
+    ["country", [["CY", 0.76], ["SE", 0.09], ["US", 0.07], ["GB", 0.04], ["GR", 0.04]]],
+    ["device", [["mobile", 0.82], ["desktop", 0.15], ["tablet", 0.03]]],
+    ["route", [["/", 0.93], ["/el", 0.05], ["/contact", 0.02]]],
+  ];
+
+  const site_traffic = [];
+  eachDay((d, i) => {
+    // Only the last stretch, the way a sync that started recently would look.
+    if (i < HISTORY_DAYS - 45) return;
+    const day = iso(d);
+    const visitors = intBetween(2, 14);
+    const views = visitors + intBetween(0, 5);
+    site_traffic.push({ day, dimension: "total", value: "", pageviews: views, visitors });
+    for (const [dimension, split] of TRAFFIC_CUTS) {
+      let left = visitors;
+      split.forEach(([value, share], k) => {
+        const v = k === split.length - 1 ? left : Math.min(left, Math.round(visitors * share));
+        left -= v;
+        if (v > 0) site_traffic.push({ day, dimension, value, pageviews: v, visitors: v });
+      });
+    }
+  });
+
   const public_holidays = [];
   for (const y of [today.getFullYear() - 1, today.getFullYear(), today.getFullYear() + 1]) {
     const e = orthodoxEaster(y);
@@ -701,6 +733,7 @@ function build() {
     panel_items,
     public_holidays,
     weather_daily,
+    site_traffic,
   };
 }
 

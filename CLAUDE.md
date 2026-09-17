@@ -80,8 +80,9 @@ Chicken" built with **Next.js 16 App Router**, **React 19**, **Supabase** and
   extension to tidy a to-do list is a worse trade than a `where` clause. The
   rows stay in the table; a shop writing a few hundred a year will never notice,
   and if it ever matters it is one `delete`
-- `src/lib/features.js` — Pages parked on purpose. Marketing is off until the
-  social import restarts; take its slug out of `PARKED_PAGES` to bring it back
+- `src/lib/features.js` — Pages parked on purpose. Empty now: Marketing came
+  back in September 2026 on website traffic rather than waiting for the social
+  import. Add a slug to park a screen, take it out to re-open it
 - `src/lib/format.js` — Money, dates, sparklines, item parsing, paginated reads
 - `src/lib/salesModel.js` — Per-day revenue and the prorated fee model
 - `src/lib/menuMatch.js` — Order lines → menu items, and effective-dated prices

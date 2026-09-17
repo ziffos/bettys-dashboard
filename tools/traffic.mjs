@@ -24,16 +24,17 @@ const TZ = "Europe/Nicosia";
 /**
  * What to pull, and what to call it in the table.
  *
- * `by=day` alone gives the daily totals; `by=day,<dimension>` gives one row per
- * day per value. Two grouping dimensions is what the API allows, and two is all
- * we want — a third would multiply the rows without answering anything.
+ * `by` is a repeated parameter, not a comma-separated list — `by=day&by=country`
+ * gives one row per day per country, and the value comes back under the
+ * dimension's own key. Two of them is all we want: a third would multiply the
+ * rows without answering anything.
  */
 const CUTS = [
-  { dimension: "total", by: "day", key: null },
-  { dimension: "referrer", by: "day,referrerHostname", key: "referrerHostname" },
-  { dimension: "route", by: "day,route", key: "route" },
-  { dimension: "country", by: "day,country", key: "country" },
-  { dimension: "device", by: "day,deviceType", key: "deviceType" },
+  { dimension: "total", by: ["day"], key: null },
+  { dimension: "referrer", by: ["day", "referrerHostname"], key: "referrerHostname" },
+  { dimension: "route", by: ["day", "route"], key: "route" },
+  { dimension: "country", by: ["day", "country"], key: "country" },
+  { dimension: "device", by: ["day", "deviceType"], key: "deviceType" },
 ];
 
 const todayThere = () =>
@@ -66,13 +67,21 @@ async function sql(query) {
 }
 
 async function vercel(by, since, until) {
-  const params = new URLSearchParams({ projectId: PROJECT, since, until, by, limit: "100" });
-  if (TEAM) params.set("teamId", TEAM);
+  const params = new URLSearchParams([
+    ["projectId", PROJECT],
+    ["since", since],
+    ["until", until],
+    ["limit", "100"],
+    ...by.map((b) => ["by", b]),
+  ]);
+  if (TEAM) params.append("teamId", TEAM);
   const res = await fetch(
     `https://api.vercel.com/v1/query/web-analytics/visits/aggregate?${params}`,
     { headers: { Authorization: `Bearer ${need("VERCEL_TOKEN")}` } }
   );
-  if (!res.ok) throw new Error(`Vercel ${res.status} on by=${by}: ${await res.text()}`);
+  if (!res.ok) {
+    throw new Error(`Vercel ${res.status} on by=${by.join("+")}: ${await res.text()}`);
+  }
   return res.json();
 }
 
@@ -83,7 +92,7 @@ if (args[0] === "--probe") {
   const week = new Date(Date.parse(today) - 6 * 86400000).toISOString().slice(0, 10);
   for (const cut of CUTS) {
     const out = await vercel(cut.by, week, today);
-    console.log(`\n── by=${cut.by}`);
+    console.log(`\n── by=${cut.by.join(" + ")}`);
     console.log(JSON.stringify(out.data?.slice(0, 3) ?? out, null, 2));
   }
   process.exit(0);
@@ -112,10 +121,19 @@ for (const cut of CUTS) {
     // Vercel returns the grouped value under the dimension's own name, and
     // sometimes under a generic key — take whichever is there rather than
     // guessing, and keep an empty string for the daily totals.
+    // A grouped query returns every combination, including the empty ones.
+    // Storing a thousand zeroes a month would tell nobody anything.
+    if (!Number(r.pageviews) && !Number(r.visitors)) continue;
+    const raw = cut.key === null ? "" : String(r[cut.key] ?? "");
+    /*
+     * An empty value means different things per dimension and must not share a
+     * label. An empty referrer is someone who typed the address or came from an
+     * app that strips it — a real and large category, and the biggest single
+     * one here after Instagram and Google. An empty device is just a device
+     * Vercel could not name, which is a gap, not a category.
+     */
     const value =
-      cut.key === null
-        ? ""
-        : String(r[cut.key] ?? r.value ?? r[cut.by.split(",")[1]] ?? "(none)");
+      cut.key === null ? "" : raw || (cut.dimension === "referrer" ? "(direct)" : "(unknown)");
     rows.push(
       `(${esc(day)}, ${esc(cut.dimension)}, ${esc(value)}, ` +
         `${Number(r.pageviews || 0)}, ${Number(r.visitors || 0)})`

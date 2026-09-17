@@ -369,6 +369,19 @@ Agreed with the owner before the rebuild started. Do not "fix" these back.
     genuinely came from those pages; nothing new will write one, and the
     columns stay in the table for those rows' sake.
 
+31. **Marketing is back, on a different source.** It was parked in September
+    2026 because `social_stats` stops on 24 Apr and a page of flat lines is
+    worse than no page. It re-opened the same month leading with **website
+    traffic** from `site_traffic`, which arrives nightly from the Vercel Web
+    Analytics API, and the social half now states what happened to it instead
+    of drawing an empty chart. `PARKED_PAGES` is empty again; the mechanism
+    stays because it earned its keep.
+32. **Website history is stored, not read live.** Vercel's free plan reports
+    thirty days and every screen here compares with a previous period, so a
+    live read could never answer "against last month". `tools/traffic.mjs`
+    syncs daily and the table accumulates. The page says so, and names the
+    first day it has, so nobody reads the start of the record as a collapse.
+
 ## Out of scope — do not touch
 
 `/qr-menu`, `/tv-display-1..4`, `/tv-display-menu-*`, `/tv-display-motion-*`
