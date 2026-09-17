@@ -20,6 +20,7 @@ import {
   LogOut,
   Pin,
   PinOff,
+  Camera,
 } from "lucide-react";
 import logo from "../../public/images/betty_logo.png";
 import { useAuth } from "../lib/AuthContext";
@@ -49,6 +50,20 @@ export const NAV_GROUPS = [
       { slug: "payroll", href: "/payroll", icon: Wallet, label: "Payroll" },
       { slug: "tv-displays", href: "/tv-displays", icon: Tv, label: "TV Displays" },
       { slug: "my-payroll", href: "/my-payroll", icon: Users, label: "My Payroll" },
+      /*
+       * A separate app at ai.bettyscrispychicken.com: staff photograph a dish,
+       * it writes the caption and schedules the post. `external` opens it in a
+       * new tab and skips the permission check — Autopilot has its own login
+       * and its own roles, and gating the doorway here would only mean two
+       * places to grant the same person access.
+       */
+      {
+        slug: "social",
+        href: "https://ai.bettyscrispychicken.com",
+        icon: Camera,
+        label: "Social media",
+        external: true,
+      },
     ],
   },
   {
@@ -90,6 +105,7 @@ export function useVisibleNav() {
 
   const allowed = (item) => {
     if (isParked(item.slug)) return false;
+    if (item.external) return true;
     if (!canAccess(item.slug)) return false;
     if (item.slug === "my-payroll" && (isAdmin || !hasShifts)) return false;
     return true;
@@ -186,10 +202,18 @@ export default function Sidebar() {
             {group.items.map((item) => {
               const active = pathname === item.href;
               const Icon = item.icon;
+              // An external destination is an <a>, not a Link: next/link
+              // prefetches and client-routes, neither of which means anything
+              // for another origin.
+              const Tag = item.external ? "a" : Link;
+              const extra = item.external
+                ? { target: "_blank", rel: "noopener noreferrer" }
+                : {};
               return (
-                <Link
+                <Tag
                   key={item.slug}
                   href={item.href}
+                  {...extra}
                   title={open ? undefined : item.label}
                   className={`flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] whitespace-nowrap ${
                     active
@@ -204,7 +228,7 @@ export default function Sidebar() {
                   >
                     {item.label}
                   </span>
-                </Link>
+                </Tag>
               );
             })}
           </div>
