@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Betty's · telling the website from the social</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --canvas:#fafafa; --surface:#fff;
+    --ink:#000; --ink-strong:#171717; --muted:#666; --subtle:#8f8f8f; --faint:#b3b3b3;
+    --line:#eaeaea; --line-strong:#d4d4d4; --wash:#f2f2f2; --wash-light:#fafafa;
+    --accent:#0070f3; --danger:#ee0000; --warn:#f5a623; --warn-ink:#b26a00;
+    --instagram:#7928ca; --facebook:#0070f3;
+    --shadow-card:0 1px 2px rgba(0,0,0,.03);
+    --shadow-pop:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.08);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#f0f0f0;color:var(--ink);font-family:'Geist',ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+  .mono{font-family:'Geist Mono',ui-monospace,monospace}
+
+  #chrome{position:sticky;top:0;z-index:50;background:#fff;border-bottom:1px solid var(--line);
+    padding:10px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  #chrome .grp{display:flex;gap:4px;padding:4px;background:var(--wash-light);border:1px solid var(--line);border-radius:10px}
+  #chrome .grp button{font-family:'Geist Mono',monospace;font-size:11px;color:var(--muted);padding:7px 11px;border-radius:7px;white-space:nowrap}
+  #chrome .grp button.on{background:var(--ink-strong);color:#fff}
+  #tag{font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.06em;color:var(--subtle);text-transform:uppercase;margin-right:auto}
+  #desc{width:100%;font-size:13px;color:var(--muted);text-wrap:pretty;line-height:1.6;max-width:1150px}
+  #desc b{color:var(--ink);font-weight:500}
+  #stage{padding:26px 16px 70px;display:flex;flex-direction:column;align-items:center;gap:30px}
+  .capt{font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:.06em;color:var(--subtle);text-transform:uppercase;margin-bottom:9px}
+  .one{display:flex;flex-direction:column;align-items:center}
+  .row{display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap;justify-content:center}
+
+  /* ── the page frame ───────────────────────────────────────────── */
+  .page{width:980px;background:var(--canvas);border:1px solid var(--line);border-radius:14px;
+    box-shadow:0 10px 40px rgba(0,0,0,.08);overflow:hidden}
+  .phone{width:390px;background:var(--canvas);border:10px solid #111;border-radius:34px;overflow:hidden;
+    box-shadow:0 14px 44px rgba(0,0,0,.22)}
+  .bar{height:44px;background:var(--surface);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:9px;padding:0 16px}
+  .bar .crumb{font-size:12.5px;color:var(--muted)} .bar .crumb b{color:var(--ink);font-weight:500}
+  .bar .pill{margin-left:auto;height:26px;border:1px solid var(--line);border-radius:8px;padding:0 10px;display:flex;align-items:center;font-size:12px;color:var(--muted)}
+  .body{padding:16px;display:flex;flex-direction:column;gap:14px}
+  .h1{font-size:26px;font-weight:600;letter-spacing:-.03em}
+  .sub{font-size:12.5px;color:var(--subtle);margin-top:2px}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+  .kpis.k3{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:11px 12px;box-shadow:var(--shadow-card);min-width:0}
+  .kpi .lab{font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:.06em;color:var(--subtle)}
+  .kpi .val{font-size:22px;font-weight:600;letter-spacing:-.03em;margin-top:3px}
+  .kpi .sub{font-size:10.5px;color:var(--subtle);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .spark{height:22px;margin-top:6px;background:linear-gradient(transparent 55%,var(--wash) 55%);border-bottom:1.25px solid var(--ink-strong)}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-card);padding:13px 14px}
+  .card .ct{font-size:13.5px;font-weight:600;letter-spacing:-.01em}
+  .card .cs{font-size:11.5px;color:var(--subtle);margin-top:2px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .lrow{display:flex;align-items:center;gap:10px;margin-top:9px}
+  .lrow .n{font-size:12.5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lrow .track{width:34%;height:6px;border-radius:3px;background:var(--wash);overflow:hidden;flex-shrink:0}
+  .lrow .fill{height:100%;border-radius:3px;background:var(--ink-strong)}
+  .lrow .v{font-family:'Geist Mono',monospace;font-size:11.5px;width:58px;text-align:right;flex-shrink:0;color:var(--muted)}
+
+  /* ── the devices that distinguish the four ────────────────────── */
+  .seg{display:inline-flex;gap:3px;padding:3px;background:var(--wash-light);border:1px solid var(--line);border-radius:9px}
+  .seg button{padding:6px 14px;border-radius:6px;font-size:12.5px;color:var(--muted);white-space:nowrap;display:flex;align-items:center;gap:6px}
+  .seg button.on{background:var(--surface);color:var(--ink);font-weight:500;box-shadow:var(--shadow-card)}
+  .seg .dot{width:5px;height:5px;border-radius:50%;background:var(--warn)}
+
+  .sechead{display:flex;align-items:center;gap:10px;padding-bottom:7px;border-bottom:1px solid var(--line-strong)}
+  .sechead .badge{font-family:'Geist Mono',monospace;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
+    padding:3px 7px;border-radius:5px;color:#fff;background:var(--ink-strong)}
+  .sechead .badge.soc{background:var(--instagram)}
+  .sechead .t{font-size:15px;font-weight:600;letter-spacing:-.015em}
+  .sechead .src{font-family:'Geist Mono',monospace;font-size:11px;color:var(--subtle)}
+  .sechead .sum{margin-left:auto;font-family:'Geist Mono',monospace;font-size:11.5px;color:var(--muted)}
+
+  .tint{background:rgba(121,40,202,.035);border:1px solid rgba(121,40,202,.16);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:12px}
+  .tint.web{background:rgba(0,0,0,.02);border-color:var(--line)}
+
+  .paused{background:var(--surface);border:1px dashed var(--line-strong);border-radius:12px;padding:16px}
+  .paused .t{font-size:13.5px;font-weight:600}
+  .paused .p{font-size:12.5px;color:var(--muted);margin-top:5px;line-height:1.55;max-width:62ch;text-wrap:pretty}
+
+  /* funnel */
+  .stage{display:flex;align-items:stretch;gap:12px;background:var(--surface);border:1px solid var(--line);
+    border-radius:12px;padding:13px 14px;box-shadow:var(--shadow-card)}
+  .stage .num{width:26px;height:26px;border-radius:50%;background:var(--wash);color:var(--muted);
+    font-family:'Geist Mono',monospace;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .stage.live .num{background:var(--ink-strong);color:#fff}
+  .stage .who{flex:1;min-width:0}
+  .stage .who .t{font-size:14px;font-weight:600;letter-spacing:-.01em;display:flex;align-items:center;gap:8px}
+  .stage .who .src{font-family:'Geist Mono',monospace;font-size:10.5px;color:var(--subtle);margin-top:2px}
+  .stage .fig{text-align:right;flex-shrink:0}
+  .stage .fig .v{font-size:22px;font-weight:600;letter-spacing:-.03em}
+  .stage .fig .s{font-size:10.5px;color:var(--subtle)}
+  .arrow{display:flex;align-items:center;gap:9px;padding:2px 0 2px 38px;font-size:11.5px;color:var(--subtle)}
+  .arrow .line{width:1px;height:18px;background:var(--line-strong)}
+  .chip{font-family:'Geist Mono',monospace;font-size:9.5px;padding:2px 6px;border-radius:5px;background:var(--wash);color:var(--subtle)}
+  .chip.warn{background:rgba(245,166,35,.13);color:var(--warn-ink)}
+  svg{display:block}
+</style>
+</head>
+<body>
+
+<div id="chrome">
+  <span id="tag">Betty's · website vs social</span>
+  <div class="grp" id="variants"></div>
+  <div id="desc"></div>
+</div>
+<div id="stage"></div>
+
+<script>
+"use strict";
+
+/* Real numbers, from production on 17 Sep 2026. */
+const WEB = {
+  visitors: 187, pageviews: 226, days: 29, from: "18 Aug", to: "16 Sep",
+  referrers: [["l.instagram.com", 68, 36], ["google.com", 66, 35], ["(direct)", 44, 23], ["ziffos.github.io", 7, 4]],
+  countries: [["CY", 142, 76], ["SE", 17, 9], ["US", 14, 7], ["GB", 4, 2]],
+  routes: [["/", 186, 96], ["/el", 5, 3], ["/contact", 1, 1]],
+  devices: [["mobile", 154, 82], ["desktop", 28, 15], ["tablet", 5, 3]],
+};
+const SOCIAL_STOPPED = "24 Apr 2026";
+
+const bar = `<div class="bar"><span class="crumb">Betty's Crispy Chicken</span>
+  <span class="crumb">›</span><span class="crumb"><b>Marketing</b></span>
+  <span class="pill">Last 7 days</span></div>`;
+
+const kpi = (lab, val, sub) =>
+  `<div class="kpi"><div class="lab">${lab}</div><div class="val">${val}</div>
+   <div class="sub">${sub}</div><div class="spark"></div></div>`;
+
+const list = (title, sub, rows) =>
+  `<div class="card"><div class="ct">${title}</div><div class="cs">${sub}</div>` +
+  rows.map(([n, v, pct]) =>
+    `<div class="lrow"><span class="n">${n}</span>
+     <span class="track"><span class="fill" style="width:${Math.max(3, pct)}%"></span></span>
+     <span class="v">${v} · ${pct}%</span></div>`).join("") +
+  `</div>`;
+
+const webKpis = `<div class="kpis">
+  ${kpi("VISITORS", WEB.visitors, `${WEB.pageviews} page views`)}
+  ${kpi("PER DAY", "6.4", `over ${WEB.days} days`)}
+  ${kpi("FROM INSTAGRAM", "36%", "of everyone who arrived")}
+  ${kpi("ON A PHONE", "82%", "of everyone who arrived")}
+</div>`;
+
+const webLists = `<div class="two">
+  ${list("Where they came from", "Direct means no referrer was sent", WEB.referrers)}
+  ${list("Which country", "By visitors in this range", WEB.countries)}
+</div>
+<div class="two">
+  ${list("Which page", "Where they landed", WEB.routes)}
+  ${list("What they used", "Phone, desktop or tablet", WEB.devices)}
+</div>`;
+
+const pausedBlock = `<div class="paused">
+  <div class="t">Nothing since ${SOCIAL_STOPPED}</div>
+  <div class="p">Reach, ad spend and follower movement are imported separately from orders,
+  and that import stopped. They come back on their own once it restarts — nothing above
+  depends on them.</div>
+</div>`;
+
+const socialKpis = `<div class="kpis k3">
+  ${kpi("REACH", "—", `last figure ${SOCIAL_STOPPED}`)}
+  ${kpi("AD SPEND", "—", "boosted posts only")}
+  ${kpi("FOLLOWERS", "—", "no movement on record")}
+</div>`;
+
+/* ── the four ────────────────────────────────────────────────────── */
+const V = {};
+
+V[1] = {
+  name: "Two tabs",
+  desc: "<b>One source at a time, chosen at the top.</b> The page belongs entirely to whichever you picked, so there is never a question about what a number refers to — and the amber dot on Social says it has nothing without you having to go and look. The cost is that you cannot see both at once, and that the dead half is now behind a click, which is either mercy or hiding depending on your view.",
+  frames: [
+    ["Website selected", `<div class="page">${bar}<div class="body">
+      <div><div class="h1">Marketing</div><div class="sub">Fri 11 – Thu 17 Sep 2026 · compared with the 7 days before</div></div>
+      <div class="seg"><button class="on">Website</button><button>Social <span class="dot"></span></button></div>
+      ${webKpis}${webLists}
+    </div></div>`],
+    ["Social selected", `<div class="page">${bar}<div class="body">
+      <div><div class="h1">Marketing</div><div class="sub">Fri 11 – Thu 17 Sep 2026 · compared with the 7 days before</div></div>
+      <div class="seg"><button>Website</button><button class="on">Social <span class="dot"></span></button></div>
+      ${socialKpis}${pausedBlock}
+    </div></div>`],
+  ],
+};
+
+V[2] = {
+  name: "Labelled bands",
+  desc: "<b>One page, but each half announces itself.</b> A badge naming the source, the domain or the two networks spelled out, a rule underneath, and the headline figure for that half on the right. Nothing is hidden and nothing is a click away — you scroll past a line that says the subject has changed. The cheapest of the four to build, and the closest to what is there now.",
+  frames: [
+    ["The whole page", `<div class="page">${bar}<div class="body">
+      <div><div class="h1">Marketing</div><div class="sub">Fri 11 – Thu 17 Sep 2026 · compared with the 7 days before</div></div>
+
+      <div class="sechead"><span class="badge">Website</span>
+        <span class="src">bettyscrispychicken.com</span>
+        <span class="sum">${WEB.visitors} visitors · ${WEB.from}–${WEB.to}</span></div>
+      ${webKpis}${webLists}
+
+      <div class="sechead" style="margin-top:6px"><span class="badge soc">Social</span>
+        <span class="src">facebook · instagram</span>
+        <span class="sum">paused since ${SOCIAL_STOPPED}</span></div>
+      ${pausedBlock}
+    </div></div>`],
+  ],
+};
+
+V[3] = {
+  name: "Side by side",
+  desc: "<b>Two columns, one per source, tinted apart.</b> You can see at a glance that one is alive and the other is not, and the comparison is spatial rather than remembered. It is the clearest of the four about <b>which is which</b> — and the worst for charts, because half the width is half the width. On a phone they stack with the badge sticking to the top of each.",
+  frames: [
+    ["Desktop", `<div class="page">${bar}<div class="body">
+      <div><div class="h1">Marketing</div><div class="sub">Fri 11 – Thu 17 Sep 2026 · compared with the 7 days before</div></div>
+      <div class="two" style="gap:14px;align-items:start">
+        <div class="tint web">
+          <div class="sechead" style="border:0;padding:0"><span class="badge">Website</span>
+            <span class="src">bettyscrispychicken.com</span></div>
+          <div class="kpis" style="grid-template-columns:1fr 1fr">
+            ${kpi("VISITORS", WEB.visitors, `${WEB.pageviews} page views`)}
+            ${kpi("PER DAY", "6.4", `over ${WEB.days} days`)}
+          </div>
+          ${list("Where they came from", "By visitors", WEB.referrers)}
+          ${list("Which country", "By visitors", WEB.countries)}
+        </div>
+        <div class="tint">
+          <div class="sechead" style="border:0;padding:0"><span class="badge soc">Social</span>
+            <span class="src">facebook · instagram</span></div>
+          <div class="kpis" style="grid-template-columns:1fr 1fr">
+            ${kpi("REACH", "—", `last ${SOCIAL_STOPPED}`)}
+            ${kpi("FOLLOWERS", "—", "nothing on record")}
+          </div>
+          ${pausedBlock}
+        </div>
+      </div>
+    </div></div>`],
+    ["Phone", `<div class="phone"><div class="body" style="padding:12px;gap:12px">
+      <div><div class="h1" style="font-size:22px">Marketing</div><div class="sub">Fri 11 – Thu 17 Sep 2026</div></div>
+      <div class="tint web">
+        <div class="sechead" style="border:0;padding:0"><span class="badge">Website</span>
+          <span class="src">bettyscrispychicken.com</span></div>
+        <div class="kpis" style="grid-template-columns:1fr 1fr">
+          ${kpi("VISITORS", WEB.visitors, `${WEB.pageviews} views`)}
+          ${kpi("PER DAY", "6.4", `${WEB.days} days`)}
+        </div>
+        ${list("Where they came from", "By visitors", WEB.referrers.slice(0, 3))}
+      </div>
+      <div class="tint">
+        <div class="sechead" style="border:0;padding:0"><span class="badge soc">Social</span>
+          <span class="src">facebook · instagram</span></div>
+        ${pausedBlock}
+      </div>
+    </div></div>`],
+  ],
+};
+
+V[4] = {
+  name: "The funnel",
+  desc: "<b>Not two dashboards on one page — one path, in the order it happens.</b> Social puts the shop in front of people, the website is where they land, the platforms are where they pay. Each band names its own source, so the question stops being \"which half am I looking at\" and becomes \"where does this break\". It is the only one of the four that says something the others cannot: <b>Instagram is 36% of arrivals while its own numbers are dead</b>. The honest catch is the last arrow — nothing measures the click from the site to Wolt without the paid tier, and the prototype says so rather than drawing a number.",
+  frames: [
+    ["The whole page", `<div class="page">${bar}<div class="body">
+      <div><div class="h1">Marketing</div><div class="sub">How people find Betty's · Fri 11 – Thu 17 Sep 2026</div></div>
+
+      <div class="stage">
+        <div class="num">1</div>
+        <div class="who"><div class="t">Seen <span class="chip warn">paused</span></div>
+          <div class="src">social_stats · facebook · instagram</div></div>
+        <div class="fig"><div class="v" style="color:var(--faint)">—</div><div class="s">nothing since ${SOCIAL_STOPPED}</div></div>
+      </div>
+      <div class="arrow"><span class="line"></span><span>↓</span>
+        <span>Instagram sends <b style="color:var(--ink);font-weight:500">36%</b> of everyone who arrives — measured on the website, not here</span></div>
+
+      <div class="stage live">
+        <div class="num">2</div>
+        <div class="who"><div class="t">Visited</div>
+          <div class="src">site_traffic · bettyscrispychicken.com</div></div>
+        <div class="fig"><div class="v">${WEB.visitors}</div><div class="s">visitors, ${WEB.from}–${WEB.to}</div></div>
+      </div>
+      <div class="arrow"><span class="line"></span><span>↓</span>
+        <span class="chip">not measured</span>
+        <span>clicks from the site to Wolt, Foody and Bolt need event tracking</span></div>
+
+      <div class="stage live">
+        <div class="num">3</div>
+        <div class="who"><div class="t">Ordered</div>
+          <div class="src">delivery_purchases · pos_sales</div></div>
+        <div class="fig"><div class="v">579</div><div class="s">orders this period</div></div>
+      </div>
+
+      <div class="two" style="margin-top:4px">
+        ${list("Where they came from", "Stage 2 · by visitors", WEB.referrers)}
+        ${list("Which country", "Stage 2 · by visitors", WEB.countries)}
+      </div>
+    </div></div>`],
+  ],
+};
+
+/* ── chrome ──────────────────────────────────────────────────────── */
+let cur = 1;
+const stage = document.getElementById("stage");
+const descEl = document.getElementById("desc");
+const varEl = document.getElementById("variants");
+
+function render() {
+  const v = V[cur];
+  descEl.innerHTML = "<b>" + cur + ". " + v.name + ".</b> " + v.desc;
+  stage.innerHTML = v.frames.map(([capt, inner]) =>
+    `<div class="one"><div class="capt">${capt}</div>${inner}</div>`).join("");
+  [...varEl.children].forEach((b, i) => b.classList.toggle("on", i + 1 === cur));
+}
+
+Object.keys(V).forEach((k) => {
+  const b = document.createElement("button");
+  b.textContent = k + " · " + V[k].name;
+  b.onclick = () => { cur = Number(k); render(); location.hash = k; };
+  varEl.appendChild(b);
+});
+if (V[Number(location.hash.slice(1))]) cur = Number(location.hash.slice(1));
+render();
+</script>
+</body>
+</html>

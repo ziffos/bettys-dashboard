@@ -147,6 +147,17 @@ function MarketingParked() {
 function MarketingScreen() {
   const range = useRange();
   const [interval, setInterval] = useState("daily");
+  /*
+   * Which source the page is showing.
+   *
+   * The website and the two social networks answer the same question — did
+   * people who do not know us find us? — but they are different measurements
+   * from different places, and a page that ran them one after another left you
+   * working out which half a number belonged to. One at a time, chosen here.
+   *
+   * It opens on the website because that is the half with data.
+   */
+  const [source, setSource] = useState("web");
   const [platform, setPlatform] = useState("all");
   const rangeKey = `${range.from}|${range.to}`;
   const [store, setStore] = useState({ key: null, raw: null, failure: null });
@@ -284,6 +295,7 @@ function MarketingScreen() {
       device: cut("device", 4),
       route: cut("route", 5),
       first: rows.reduce((a, r) => (a && a < r.day ? a : r.day), null),
+      last: rows.reduce((a, r) => (a && a > r.day ? a : r.day), null),
     };
   }, [raw, range]);
 
@@ -510,24 +522,28 @@ function MarketingScreen() {
   const header = (
     <PageHeader
       title="Marketing"
-      sub={`${rangeTitle(range.from, range.to)} · the website, Facebook and Instagram · compared with ${priorPhrase(range.days)}`}
-      right={
-        model.lastStatDate && (
+      sub={
+        source === "web"
+          ? `${rangeTitle(range.from, range.to)} · bettyscrispychicken.com · compared with ${priorPhrase(range.days)}`
+          : `${rangeTitle(range.from, range.to)} · Facebook and Instagram · compared with ${priorPhrase(range.days)}`
+      }
+      right={(() => {
+        /* Each source has its own freshness, and one badge showing the other
+           one's date is worse than no badge. */
+        const last = source === "web" ? site?.last : model.lastStatDate;
+        if (!last) return null;
+        const behind = Math.round((parseDay(range.to) - parseDay(last)) / 86400000);
+        return (
           <div className="flex items-center gap-[7px] h-[26px] px-2.5 border border-line rounded-full font-mono text-[11px] text-subtle whitespace-nowrap">
             <span
               className="w-1.5 h-1.5 rounded-full shrink-0"
-              style={{
-                background:
-                  model.daysBehind > 2 ? "#ee0000" : model.daysBehind > 0 ? "#f5a623" : "#50e3c2",
-              }}
+              style={{ background: behind > 2 ? "#ee0000" : behind > 0 ? "#f5a623" : "#50e3c2" }}
             />
             SYNCED{" "}
-            {`${parseDay(model.lastStatDate).getDate()} ${MONTHS[
-              parseDay(model.lastStatDate).getMonth()
-            ].toUpperCase()}`}
+            {`${parseDay(last).getDate()} ${MONTHS[parseDay(last).getMonth()].toUpperCase()}`}
           </div>
-        )
-      }
+        );
+      })()}
     />
   );
 
@@ -540,7 +556,42 @@ function MarketingScreen() {
     <div className="flex flex-col gap-4 md:gap-5">
       {header}
 
-      {site && (
+      {/* One source at a time. The dot says the other one has nothing, so you
+          learn it without having to go and look. */}
+      <div className="flex">
+        <Segmented
+          options={[
+            { id: "web", label: "Website" },
+            {
+              id: "social",
+              label: (
+                <span className="inline-flex items-center gap-1.5">
+                  Social
+                  {model.isEmpty && (
+                    <span
+                      className="w-[5px] h-[5px] rounded-full bg-warn"
+                      title="Nothing on record"
+                    />
+                  )}
+                </span>
+              ),
+            },
+          ]}
+          value={source}
+          onChange={setSource}
+        />
+      </div>
+
+      {source === "web" && !site && (
+        <EmptyState
+          title="No website traffic on record yet"
+          body="The nightly sync from Vercel fills this in. Nothing has landed for this range."
+          action="Jump to the last 28 days"
+          onAction={() => range.setRange("28d")}
+        />
+      )}
+
+      {source === "web" && site && (
         <>
           <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
             <KpiCard
@@ -596,7 +647,7 @@ function MarketingScreen() {
         </>
       )}
 
-      {model.isEmpty ? (
+      {source === "social" && (model.isEmpty ? (
         <div className="px-4 py-3.5 border border-line rounded-[10px] bg-surface">
           <h2 className="text-[14px] font-semibold tracking-[-0.01em]">
             Facebook and Instagram
@@ -985,7 +1036,7 @@ function MarketingScreen() {
         ))}
       </Card>
         </>
-      )}
+      ))}
     </div>
   );
 }
